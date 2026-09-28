@@ -236,36 +236,39 @@ public final class AppModel {
     /// Creates the task and returns immediately with status `.working`; setup continues in the background.
     /// `agent` nil means the project default.
     @discardableResult
-    public func createTask(projectID: Project.ID, prompt: String, agent: AgentKind? = nil) -> TaskItem.ID? {
+    public func createTask(projectID: Project.ID, prompt: String, attachments: [String] = [],
+                           agent: AgentKind? = nil) -> TaskItem.ID? {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard services != nil, let project = project(projectID), !prompt.isEmpty else { return nil }
+        guard services != nil, let project = project(projectID), !prompt.isEmpty || !attachments.isEmpty else { return nil }
+        let first = Prompt(text: prompt, attachments: attachments)
         let id = nextTaskID
         nextTaskID += 1
-        let title = Self.title(for: prompt)
+        let title = Self.title(for: prompt.isEmpty ? URL(fileURLWithPath: attachments[0]).lastPathComponent : prompt)
         tasks.append(TaskItem(
             id: id, projectID: projectID, title: title.isEmpty ? "Task \(id)" : title, status: .working,
             agent: agent ?? project.defaultAgent, branch: "shift/\(id)",
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
-            prompts: [Prompt(text: prompt)], workingSince: Date()))
+            prompts: [first], workingSince: Date()))
         changed()
-        startRun(id, prompt: prompt)
+        startRun(id, prompt: first.agentText)
         return id
     }
 
     /// Follow-up instructions, an answer to a question, or instructions for a blocked task.
     /// While the agent works they go into its running session as soon as it can take them, and are
     /// `isPending` until then.
-    public func sendPrompt(taskID: TaskItem.ID, text: String) {
+    public func sendPrompt(taskID: TaskItem.ID, text: String, attachments: [String] = []) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard services != nil, let task = task(taskID), task.status != .merged,
-              !busy.contains(taskID), !text.isEmpty else { return }
+              !busy.contains(taskID), !text.isEmpty || !attachments.isEmpty else { return }
         guard runs[taskID]?.active == true else {
-            update(taskID) { $0.prompts.append(Prompt(text: text)) }
+            let prompt = Prompt(text: text, attachments: attachments)
+            update(taskID) { $0.prompts.append(prompt) }
             beginWorking(taskID)
-            startRun(taskID, prompt: text)
+            startRun(taskID, prompt: prompt.agentText)
             return
         }
-        let prompt = Prompt(text: text, isPending: true)
+        let prompt = Prompt(text: text, isPending: true, attachments: attachments)
         update(taskID) { $0.prompts.append(prompt) }
         // A prompt instead of an answer to an approval request denies it, and goes to the agent
         // with the denial if the agent takes a message.
@@ -273,7 +276,7 @@ public final class AppModel {
            let channel = approvalChannels[taskID] {
             resumeWorking(taskID)
             pending.dropFirst().forEach { channel.answer(id: $0.id, allow: false) }
-            if channel.answer(id: first.id, allow: false, message: text) {
+            if channel.answer(id: first.id, allow: false, message: prompt.agentText) {
                 markDelivered(taskID)
                 return
             }
@@ -666,7 +669,7 @@ public final class AppModel {
             // Without a session there is nothing to resume, so the agent needs the whole story.
             let replay = task.sessionID == nil && !task.isResolvingConflict
             // Prompts sent while it was being set up go in with this turn's prompt.
-            let text = replay ? task.prompts.map(\.text).joined(separator: "\n\n")
+            let text = replay ? task.prompts.map(\.agentText).joined(separator: "\n\n")
                 : [prompt, takePending(id)].filter { !$0.isEmpty }.joined(separator: "\n\n")
             markDelivered(id)
             let channel = ApprovalChannel()
@@ -731,7 +734,7 @@ public final class AppModel {
     private func deliverPending(_ id: TaskItem.ID) {
         guard let channel = approvalChannels[id], let task = task(id) else { return }
         for prompt in task.prompts where prompt.isPending {
-            guard channel.send(prompt.text) else { return }
+            guard channel.send(prompt.agentText) else { return }
             update(id) {
                 if let index = $0.prompts.firstIndex(where: { $0.id == prompt.id }) { $0.prompts[index].isPending = false }
             }
@@ -747,7 +750,7 @@ public final class AppModel {
 
     /// The pending prompts as the next turn's prompt ("" if none), now delivered.
     private func takePending(_ id: TaskItem.ID) -> String {
-        let text = (task(id)?.prompts ?? []).filter(\.isPending).map(\.text).joined(separator: "\n\n")
+        let text = (task(id)?.prompts ?? []).filter(\.isPending).map(\.agentText).joined(separator: "\n\n")
         markDelivered(id)
         return text
     }

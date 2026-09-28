@@ -78,6 +78,15 @@ final class AppModelTests: XCTestCase {
 
     // MARK: Create
 
+    func testAttachmentsGoToTheAgentAsPaths() async {
+        agent.scripts = [[.emit(.sessionStarted(id: "s1")), .emit(.finished(.completed(summary: "Done")))]]
+        let id = model.createTask(projectID: project.id, prompt: "", attachments: ["/tmp/shot.png"])!
+        XCTAssertEqual(model.task(id)?.title, "shot.png")
+        await waitForStatus(id, .completed)
+        XCTAssertEqual(agent.requests[0].prompt, "Attached files:\n- /tmp/shot.png")
+        XCTAssertEqual(Prompt(text: "Fix this", attachments: ["/a", "/b"]).agentText, "Fix this\n\nAttached files:\n- /a\n- /b")
+    }
+
     func testCreateRunsToCompleted() async {
         agent.scripts = [[.emit(.sessionStarted(id: "s1")), .emit(.activity("Editing…")), .emit(.rawOutput("raw")),
                           .emit(.finished(.completed(summary: "Gap is 4px")))]]

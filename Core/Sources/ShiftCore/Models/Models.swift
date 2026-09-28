@@ -122,12 +122,24 @@ public struct Prompt: Codable, Identifiable, Hashable, Sendable {
     public var date: Date
     /// Sent while the agent was working and not yet handed to it. Stop drops pending prompts.
     public var isPending: Bool
+    /// Paths of files and images dropped on the prompt field. The agent gets them as a list of paths
+    /// after the text, and reads them itself.
+    public var attachments: [String]
 
-    public init(id: UUID = UUID(), text: String, date: Date = Date(), isPending: Bool = false) {
+    public init(id: UUID = UUID(), text: String, date: Date = Date(), isPending: Bool = false,
+                attachments: [String] = []) {
         self.id = id
         self.text = text
         self.date = date
         self.isPending = isPending
+        self.attachments = attachments
+    }
+
+    /// What the agent is sent: the text, then the attached paths.
+    public var agentText: String {
+        guard !attachments.isEmpty else { return text }
+        let list = "Attached files:\n" + attachments.map { "- \($0)" }.joined(separator: "\n")
+        return text.isEmpty ? list : text + "\n\n" + list
     }
 
     public init(from decoder: Decoder) throws {
@@ -136,6 +148,7 @@ public struct Prompt: Codable, Identifiable, Hashable, Sendable {
         text = try values.decode(String.self, forKey: .text)
         date = try values.decode(Date.self, forKey: .date)
         isPending = try values.decodeIfPresent(Bool.self, forKey: .isPending) ?? false
+        attachments = try values.decodeIfPresent([String].self, forKey: .attachments) ?? []
     }
 }
 
