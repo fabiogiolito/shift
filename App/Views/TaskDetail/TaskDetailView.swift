@@ -326,7 +326,10 @@ struct TaskDetailView: View {
                         ForEach(apps.installedEditors()) { app in
                             Button(app.displayName) { apps.open(task.worktreeURL, in: app) }
                         }
-                        Button(apps.terminalName()) { apps.open(task.worktreeURL, in: .terminal) }
+                        Divider()
+                        ForEach(apps.installedTerminals(), id: \.self) { terminal in
+                            Button(apps.name(of: terminal)) { apps.open(task.worktreeURL, withApp: terminal) }
+                        }
                     }
                 }
                 .disabled(!folderExists)
