@@ -2,7 +2,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 public enum ExternalApp: String, CaseIterable, Identifiable, Sendable {
-    case vscode, cursor, zed, finder, terminal
+    case vscode, cursor, zed, finder
 
     public var id: String { rawValue }
 
@@ -12,17 +12,15 @@ public enum ExternalApp: String, CaseIterable, Identifiable, Sendable {
         case .cursor: "Cursor"
         case .zed: "Zed"
         case .finder: "Finder"
-        case .terminal: "Terminal"
         }
     }
 
-    var bundleIdentifier: String? {
+    var bundleIdentifier: String {
         switch self {
         case .vscode: "com.microsoft.VSCode"
         case .cursor: "com.todesktop.230313mzl4w4u92"
         case .zed: "dev.zed.Zed"
         case .finder: "com.apple.finder"
-        case .terminal: nil
         }
     }
 }
@@ -42,13 +40,17 @@ public struct ExternalApps: Sendable {
     /// Opens the directory in the app.
     public func open(_ directory: URL, in app: ExternalApp) {
         guard let appURL = appURL(app) else { return }
+        open(directory, withApp: appURL)
+    }
+
+    /// Opens the directory in the app at `appURL`, such as one of `installedTerminals()`.
+    public func open(_ directory: URL, withApp appURL: URL) {
         NSWorkspace.shared.open([directory], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration())
     }
 
-    /// Name of the terminal that `.terminal` will use, e.g. "Ghostty".
-    public func terminalName() -> String {
-        terminalURL().map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
-            ?? "Terminal"
+    /// App name without ".app", e.g. "Ghostty".
+    public func name(of appURL: URL) -> String {
+        FileManager.default.displayName(atPath: appURL.path).replacingOccurrences(of: ".app", with: "")
     }
 
     public func openInBrowser(_ url: URL) {
@@ -74,22 +76,23 @@ public struct ExternalApps: Sendable {
     }
 
     func appURL(_ app: ExternalApp) -> URL? {
-        guard let id = app.bundleIdentifier else { return terminalURL() }
-        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier)
     }
 
-    func terminalURL() -> URL? {
+    /// Every installed terminal. Terminal.app always, since it ships with macOS.
+    public func installedTerminals() -> [URL] {
         let workspace = NSWorkspace.shared
         let handler = UTType(filenameExtension: "command").flatMap { workspace.urlForApplication(toOpen: $0) }
-        return Self.pickTerminal(commandHandler: handler.map { ($0, Bundle(url: $0)?.bundleIdentifier) },
-                                 installed: { workspace.urlForApplication(withBundleIdentifier: $0) })
+        return Self.terminals(commandHandler: handler.map { ($0, Bundle(url: $0)?.bundleIdentifier) },
+                              installed: { workspace.urlForApplication(withBundleIdentifier: $0) })
     }
 
-    /// Terminal.app handles `.command` by default, so that says nothing about preference.
-    /// Any other handler is a deliberate choice by the user and wins; otherwise first installed known terminal.
+    /// Installed known terminals, plus the `.command` handler when it is one we don't know (e.g. kitty).
+    /// Terminal.app handles `.command` by default, so a different handler is a deliberate choice and goes first.
     // ponytail: trusts that a non-default .command handler is a terminal; add an allow-list if someone maps it to an editor.
-    static func pickTerminal(commandHandler: (url: URL, bundleID: String?)?, installed: (String) -> URL?) -> URL? {
-        if let commandHandler, commandHandler.bundleID != appleTerminal { return commandHandler.url }
-        return knownTerminals.lazy.compactMap(installed).first
+    static func terminals(commandHandler: (url: URL, bundleID: String?)?, installed: (String) -> URL?) -> [URL] {
+        let known = knownTerminals.compactMap(installed)
+        guard let commandHandler, commandHandler.bundleID != appleTerminal, !known.contains(commandHandler.url) else { return known }
+        return [commandHandler.url] + known
     }
 }

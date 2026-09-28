@@ -34,7 +34,10 @@ struct ProjectsSidebar: View {
                         ForEach(apps.installedEditors()) { app in
                             Button(app.displayName) { apps.open(project.repoURL, in: app) }
                         }
-                        Button(apps.terminalName()) { apps.open(project.repoURL, in: .terminal) }
+                        Divider()
+                        ForEach(apps.installedTerminals(), id: \.self) { terminal in
+                            Button(apps.name(of: terminal)) { apps.open(project.repoURL, withApp: terminal) }
+                        }
                     }
                     Button("Settings…") { settingsProject = project }
                     Button("Remove", role: .destructive) { removingProject = project }
