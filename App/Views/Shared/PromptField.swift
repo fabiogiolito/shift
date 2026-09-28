@@ -62,9 +62,16 @@ struct PromptField: View {
         .overlay(alignment: .bottomTrailing) {
             if externalText == nil { sendButton }
         }
-        .onDrop(of: [.fileURL, .image], isTargeted: $dropTargeted) { providers in
+        .onDrop(of: [.fileURL, .image, .plainText], isTargeted: $dropTargeted) { providers in
             for provider in providers {
-                Task { if let url = await Self.attachment(from: provider), !attachments.contains(url) { attachments.append(url) } }
+                Task {
+                    if let url = await Self.attachment(from: provider) {
+                        if !attachments.contains(url) { attachments.append(url) }
+                    } else if let string = try? await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) {
+                        let dropped = string as? String ?? (string as? Data).flatMap { String(data: $0, encoding: .utf8) }
+                        if let dropped { text += dropped }
+                    }
+                }
             }
             return true
         }
@@ -85,7 +92,7 @@ struct PromptField: View {
                 TextEditor(text: Binding(get: { text }, set: { text = $0 }))
                     .scrollContentBackground(.hidden)
                     .focused($focused)
-                    .background(PlainTextDrops())
+                    .background(NoTextViewDrops())
             }
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
@@ -100,7 +107,8 @@ struct PromptField: View {
             let item = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier)
             return item as? URL ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
         }
-        guard let data = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? Data,
+        guard provider.hasItemConformingToTypeIdentifier(UTType.image.identifier),
+              let data = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? Data,
               let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) else { return nil }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Shift Attachments")
         let url = folder.appendingPathComponent("Image \(UUID().uuidString.prefix(8)).png")
@@ -166,9 +174,10 @@ struct AttachmentChip: View {
     }
 }
 
-/// TextEditor's text view takes file and image drops itself and types their paths. Limited to plain text,
-/// it lets them through to the field's drop handler. Sits behind the editor to find the text view there.
-private struct PlainTextDrops: NSViewRepresentable {
+/// TextEditor's text view sits in front of the field's drop handler and would take every drop itself: file drags
+/// carry plain text too, so accepting only text still caught them. Accepting no drags lets them all through.
+/// Sits behind the editor to find the text view there.
+private struct NoTextViewDrops: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { Finder() }
     func updateNSView(_ view: NSView, context: Context) {}
 
@@ -191,17 +200,17 @@ private struct PlainTextDrops: NSViewRepresentable {
             }
         }
 
-        /// Gives the text view a subclass whose only drag type is plain text. It re-registers its drag types
+        /// Gives the text view a subclass with no drag types. It re-registers its drag types
         /// now and then, so unregistering them once doesn't last.
         private static func restrictDrops(_ textView: NSTextView) {
             guard let base = object_getClass(textView) else { return }
-            let prefix = "ShiftPlainTextDrops_"
+            let prefix = "ShiftNoDrops_"
             guard !NSStringFromClass(base).hasPrefix(prefix) else { return }
             let name = prefix + NSStringFromClass(base)
             let subclass: AnyClass? = NSClassFromString(name) ?? {
                 guard let subclass = objc_allocateClassPair(base, name, 0),
                       let method = class_getInstanceMethod(base, #selector(getter: NSTextView.acceptableDragTypes)) else { return nil }
-                let types: @convention(block) (NSTextView) -> [NSPasteboard.PasteboardType] = { _ in [.string] }
+                let types: @convention(block) (NSTextView) -> [NSPasteboard.PasteboardType] = { _ in [] }
                 class_addMethod(subclass, #selector(getter: NSTextView.acceptableDragTypes),
                                 imp_implementationWithBlock(types), method_getTypeEncoding(method))
                 objc_registerClassPair(subclass)
