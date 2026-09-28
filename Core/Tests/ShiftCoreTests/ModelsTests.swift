@@ -23,6 +23,22 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(project.defaultAgent, .codex)
     }
 
+    func testDefaultBuildCommandComesFromTheRepo() throws {
+        let repo = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let project = Project(name: "App", repoPath: repo.path, baseBranch: "main")
+        XCTAssertEqual(project.defaultBuildCommand, "")
+        try FileManager.default.createDirectory(at: repo.appendingPathComponent("App.xcodeproj"), withIntermediateDirectories: true)
+        XCTAssertTrue(project.defaultBuildCommand.hasPrefix("xcodebuild "))
+        try Data().write(to: repo.appendingPathComponent("project.yml"))
+        XCTAssertTrue(project.defaultBuildCommand.hasPrefix("xcodegen -q && xcodebuild "))
+        let script = repo.appendingPathComponent("scripts/build.sh")
+        try FileManager.default.createDirectory(at: script.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: script.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        XCTAssertEqual(project.defaultBuildCommand, "scripts/build.sh")
+    }
+
     func testWorktreePathHasNoSpaces() {
         let project = Project(name: "UI Zen Garden", repoPath: "/tmp/x", baseBranch: "main")
         XCTAssertFalse(ShiftPaths.worktree(project: project, taskID: 3001).path.contains(" "))

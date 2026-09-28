@@ -122,6 +122,18 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }
     /// An app is tested by building it, not on a dev server: its tasks get no server and no port.
     public var isApp: Bool { !buildCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// A build command guessed from the repo: its build script, else a Debug `xcodebuild` of its Xcode project
+    /// (generated first when it comes from XcodeGen) that prints the .app it built. Empty when there is nothing to guess.
+    /// ponytail: builds the project's default scheme, not a workspace; a CocoaPods app needs its own command.
+    public var defaultBuildCommand: String {
+        let files = FileManager.default
+        if files.isExecutableFile(atPath: repoURL.appendingPathComponent("scripts/build.sh").path) { return "scripts/build.sh" }
+        let xcodebuild = #"xcodebuild -configuration Debug SYMROOT="$PWD/build" -quiet && ls -d "$PWD"/build/Debug/*.app | head -1"#
+        if files.fileExists(atPath: repoURL.appendingPathComponent("project.yml").path) { return "xcodegen -q && " + xcodebuild }
+        let entries = (try? files.contentsOfDirectory(atPath: repoPath)) ?? []
+        return entries.contains { $0.hasSuffix(".xcodeproj") } ? xcodebuild : ""
+    }
 }
 
 public struct Prompt: Codable, Identifiable, Hashable, Sendable {
