@@ -64,10 +64,8 @@ struct TaskListView: View {
 
     @ViewBuilder private func section(_ title: String, _ tasks: [TaskItem]) -> some View {
         if !tasks.isEmpty {
-            // The list doesn't re-measure a row whose content changes in place, so a description that arrives
-            // later gives the row a new identity (a fresh, correctly sized row). The tag keeps selection by task.
             Section {
-                ForEach(tasks, id: \.rowIdentity) { TaskRow(task: $0).tag($0.id) }
+                ForEach(tasks) { TaskRow(task: $0) }
             } header: {
                 // Extra room above each header so the groups read apart.
                 Text(title).padding(.top, 10)
@@ -95,14 +93,10 @@ struct TaskRow: View {
                 Spacer()
                 TaskNumber(task: task)
             }
-            if let description = task.description {
-                Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            }
+            // Always two lines tall, even before the description arrives: the list doesn't re-measure a row
+            // whose content changes in place, so a fixed height keeps every row sized right.
+            Text(task.description ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
         }
         .padding(.vertical, 2)
     }
-}
-
-private extension TaskItem {
-    var rowIdentity: String { "\(id)|\(description ?? "")" }
 }
