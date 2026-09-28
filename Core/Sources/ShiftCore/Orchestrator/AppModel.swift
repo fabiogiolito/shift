@@ -28,6 +28,16 @@ public final class AppModel {
         }
     }
 
+    /// App projects: each task's latest build since launch. No entry: not built yet.
+    public private(set) var builds: [TaskItem.ID: BuildState] = [:]
+
+    public enum BuildState: Equatable, Sendable {
+        case building
+        /// `app`: the .app it built, if the build command printed one.
+        case succeeded(app: URL?)
+        case failed(String)
+    }
+
     private let services: Services?
 
     /// One agent run (setup + turns) for a task. A run may only write to its task while it is
@@ -65,6 +75,8 @@ public final class AppModel {
     @ObservationIgnored private var settingUp: Set<TaskItem.ID> = []
     /// Why the task's dev server last failed to start, until it starts. Shown with its log.
     @ObservationIgnored private var serverFailures: [TaskItem.ID: String] = [:]
+    @ObservationIgnored private var buildRuns: [TaskItem.ID: Task<CommandResult, Error>] = [:]
+    @ObservationIgnored private var buildLogs: [TaskItem.ID: String] = [:]
     /// Tasks with a merge or delete in progress.
     @ObservationIgnored private var busy: Set<TaskItem.ID> = []
     /// Manual permissions: how to answer the running agent, and its unanswered requests, oldest first.
@@ -198,8 +210,15 @@ public final class AppModel {
     }
 
     public func updateProject(_ project: Project) {
-        guard services != nil, let index = projects.firstIndex(where: { $0.id == project.id }) else { return }
+        guard let services, let index = projects.firstIndex(where: { $0.id == project.id }) else { return }
         projects[index] = project
+        // Now an app: its tasks are tested by building, so their dev servers go.
+        if project.isApp {
+            for task in tasks(in: project.id) where task.serverPID != nil {
+                update(task.id) { $0.serverPID = nil }
+                Task { await services.servers.stop(taskID: task.id) }
+            }
+        }
         changed()
     }
 
@@ -455,6 +474,50 @@ public final class AppModel {
         return log.isEmpty ? failure : log + "\n" + failure
     }
 
+    /// App projects: runs the build command in the task's worktree. Returns the .app it built, to open:
+    /// the last line of the output, if that is the path of one. Does nothing while a build is running.
+    public func build(taskID: TaskItem.ID) async -> URL? {
+        guard let services, let task = task(taskID), task.status != .merged, let project = project(task.projectID),
+              project.isApp, builds[taskID] != .building else { return nil }
+        guard FileManager.default.fileExists(atPath: task.worktreePath) else {
+            builds[taskID] = .failed("The task's folder is recreated the next time the agent runs.")
+            return nil
+        }
+        builds[taskID] = .building
+        let command = project.buildCommand
+        let run = Task {
+            try await services.servers.run(command: command, directory: task.worktreeURL, environment: [
+                "SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath, "SHIFT_TASK": String(taskID)])
+        }
+        buildRuns[taskID] = run
+        let result = await run.result
+        // Deleted or merged meanwhile: nothing left to report on.
+        guard buildRuns[taskID] == run else { return nil }
+        buildRuns[taskID] = nil
+        switch result {
+        case .success(let result):
+            buildLogs[taskID] = "$ \(command)\n" + result.output
+            guard result.exitCode == 0 else {
+                builds[taskID] = .failed("Build failed (exit code \(result.exitCode)).")
+                return nil
+            }
+            let last = result.output.split(whereSeparator: \.isNewline).last
+                .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+            let app = last.hasSuffix(".app") && FileManager.default.fileExists(atPath: last)
+                ? URL(fileURLWithPath: last) : nil
+            builds[taskID] = .succeeded(app: app)
+            return app
+        case .failure(let error):
+            builds[taskID] = .failed("Build could not start: \(Self.describe(error))")
+            return nil
+        }
+    }
+
+    /// The output of the task's last build.
+    public func buildLog(taskID: TaskItem.ID) -> String {
+        buildLogs[taskID] ?? (builds[taskID] == .building ? "Building…" : "")
+    }
+
     /// nil if they could not be read; `loadChanges` says why.
     public func changes(taskID: TaskItem.ID) async -> DiffSummary? {
         try? await loadChanges(taskID: taskID).get()
@@ -602,13 +665,13 @@ public final class AppModel {
             // A branch made from base has none of the old work: nothing to resume, the prompts replay.
             if createdBranch && task.sessionID != nil { update(id) { $0.sessionID = nil } }
             var port = task.port
-            if port == nil {
+            if port == nil && !project.isApp {
                 let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port))
                 port = await services.ports.allocate(preferred: id, reserved: reserved)
                 try check(id, token)
                 update(id) { $0.port = port }
             }
-            try await prepare(id, project: project, port: port ?? id)
+            try await prepare(id, project: project, port: port)
             try check(id, token)
             update(id) { $0.activity = nil }
             await startServer(id)
@@ -626,13 +689,15 @@ public final class AppModel {
     }
 
     /// Runs the project's setup command in the fresh worktree. Throws if it fails.
-    private func prepare(_ id: TaskItem.ID, project: Project, port: Int) async throws {
+    private func prepare(_ id: TaskItem.ID, project: Project, port: Int?) async throws {
         let command = project.setupCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let services, let task = task(id), !command.isEmpty else { return }
         update(id) { $0.activity = "Setting up…" }
         await services.store.appendLog(taskID: id, text: "$ \(command)\n")
-        let result = try await services.servers.run(command: command, directory: task.worktreeURL, environment: [
-            "SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath, "PORT": String(port)])
+        var environment = ["SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath]
+        environment["PORT"] = port.map(String.init)
+        let result = try await services.servers.run(command: command, directory: task.worktreeURL,
+                                                    environment: environment)
         await services.store.appendLog(taskID: id, text: result.output)
         guard result.exitCode == 0 else { throw Failure(ProjectSetup.failure(result)) }
         // What setup created (dependencies, a copied .env) is not the task's work. If this fails the
@@ -826,6 +891,9 @@ public final class AppModel {
         guard let services, let task = task(id) else { return }
         await cancelRun(id)
         serverFailures[id] = nil
+        buildRuns.removeValue(forKey: id)?.cancel()
+        builds[id] = nil
+        buildLogs[id] = nil
         await services.servers.stop(taskID: id)
         if let pid = task.serverPID, !(await services.servers.isRunning(taskID: id)) {
             // Not one of ours from this launch; harmless if it is already gone.
@@ -852,7 +920,7 @@ public final class AppModel {
     /// Starts (or replaces) the task's dev server. Returns a message if it could not be started.
     @discardableResult
     private func startServer(_ id: TaskItem.ID) async -> String? {
-        guard let services, let task = task(id), let project = project(task.projectID) else { return nil }
+        guard let services, let task = task(id), let project = project(task.projectID), !project.isApp else { return nil }
         var port = task.port
         if port == nil {
             // A task from before every task had a server.

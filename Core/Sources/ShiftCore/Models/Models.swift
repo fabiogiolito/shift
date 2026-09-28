@@ -85,11 +85,15 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// e.g. `pnpm install && cp "$SHIFT_REPO/.env" .`. Empty = nothing to prepare.
     /// Run with `SHIFT_REPO`, `SHIFT_WORKTREE` and `PORT` in the environment.
     public var setupCommand: String
+    /// Shell command that builds the app, for app projects (they have no dev server). Empty = a web project.
+    /// If the last line of its output is the path of a `.app`, Shift opens it. Run with `SHIFT_REPO`,
+    /// `SHIFT_WORKTREE` and `SHIFT_TASK` in the environment.
+    public var buildCommand: String
     public var permissions: AgentPermissions
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
-                permissions: AgentPermissions = .bypass) {
+                buildCommand: String = "", permissions: AgentPermissions = .bypass) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -97,6 +101,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.defaultAgent = defaultAgent
         self.serverCommand = serverCommand
         self.setupCommand = setupCommand
+        self.buildCommand = buildCommand
         self.permissions = permissions
     }
 
@@ -110,10 +115,13 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         serverCommand = try values.decode(String.self, forKey: .serverCommand)
         // Absent in state saved before these existed.
         setupCommand = try values.decodeIfPresent(String.self, forKey: .setupCommand) ?? ""
+        buildCommand = try values.decodeIfPresent(String.self, forKey: .buildCommand) ?? ""
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
     }
 
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }
+    /// An app is tested by building it, not on a dev server: its tasks get no server and no port.
+    public var isApp: Bool { !buildCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
 
 public struct Prompt: Codable, Identifiable, Hashable, Sendable {

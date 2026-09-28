@@ -836,6 +836,29 @@ final class AppModelTests: XCTestCase {
         model.updateProject(project)
     }
 
+    func testAppProjectBuildsInsteadOfRunningAServer() async {
+        project.buildCommand = "scripts/build.sh"
+        model.updateProject(project)
+        let id = await createCompletedTask()
+        XCTAssertTrue(servers.starts.isEmpty)
+        XCTAssertNil(model.task(id)?.port)
+
+        let app = temp.appendingPathComponent("Spot.app")
+        try? FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        servers.runResult = CommandResult(exitCode: 0, output: "Compiling…\n\(app.path)\n")
+        let built = await model.build(taskID: id)
+        XCTAssertEqual(built?.path, app.path)
+        XCTAssertEqual(model.builds[id], .succeeded(app: built))
+        XCTAssertEqual(servers.runs.last?.command, "scripts/build.sh")
+        XCTAssertEqual(servers.runs.last?.environment["SHIFT_TASK"], String(id))
+
+        servers.runResult = CommandResult(exitCode: 65, output: "error: nope\n")
+        let failed = await model.build(taskID: id)
+        XCTAssertNil(failed)
+        XCTAssertEqual(model.builds[id], .failed("Build failed (exit code 65)."))
+        XCTAssertTrue(model.buildLog(taskID: id).hasSuffix("error: nope\n"))
+    }
+
     func testProjectWithoutServerCommandStillGetsAServer() async {
         useNoServerCommand()
         let id = await createCompletedTask()
