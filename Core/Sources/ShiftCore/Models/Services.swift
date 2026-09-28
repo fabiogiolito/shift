@@ -241,7 +241,15 @@ public struct Services: Sendable {
 
 public enum ShiftPaths {
     /// No spaces in this path on purpose: dev tooling breaks on "Application Support".
-    public static let root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".shift")
+    /// Development builds ("Shift Dev") keep their own data in ~/.shift-dev so they can never touch the
+    /// tasks of the Shift you use; SHIFT_HOME overrides both (e.g. a task's build of Shift, being tested).
+    public static let root: URL = {
+        if let home = ProcessInfo.processInfo.environment["SHIFT_HOME"], !home.isEmpty {
+            return URL(fileURLWithPath: (home as NSString).expandingTildeInPath)
+        }
+        let dev = Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(dev ? ".shift-dev" : ".shift")
+    }()
     public static let state = root.appendingPathComponent("state.json")
     public static let logs = root.appendingPathComponent("logs")
     public static let worktrees = root.appendingPathComponent("worktrees")

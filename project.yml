@@ -47,6 +47,11 @@ targets:
         # scripts/release.sh overrides it only to test against a local feed.
         SHIFT_FEED_URL: https://raw.githubusercontent.com/fabiogiolito/shift/main/appcast.xml
       configs:
+        # Development builds are a separate app, "Shift Dev", with their own settings and data (~/.shift-dev),
+        # so they never touch the tasks of the installed Shift.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.fabiogiolito.shift.dev
+          INFOPLIST_KEY_CFBundleDisplayName: Shift Dev
         # Only Release builds check for updates, so development copies never do.
         Release:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: UPDATER
