@@ -46,6 +46,12 @@ struct ContentView: View {
                     TaskDetailView(taskID: selectedTask).id(selectedTask)
                 } else {
                     ContentUnavailableView("No Task Selected", systemImage: "checklist")
+                        // An empty detail column gives the toolbar nothing to anchor, and the task list's
+                        // toolbar items (the push button) spread to the window's edge. Hold its place.
+                        .toolbar {
+                            ToolbarItem(placement: .navigation) { Color.clear.frame(width: 1, height: 1) }
+                                .sharedBackgroundVisibility(.hidden)
+                        }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
