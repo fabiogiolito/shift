@@ -150,6 +150,12 @@ public protocol AgentAdapter: Sendable {
     /// Runs one agent turn. The stream always ends with `.finished`.
     /// Cancelling the consuming Swift task must terminate the agent process.
     func run(_ request: AgentRequest) -> AsyncStream<AgentEvent>
+    /// The user's current subscription limits. nil if unknown (not signed in, offline, API key).
+    func usage() async -> AgentUsage?
+}
+
+extension AgentAdapter {
+    public func usage() async -> AgentUsage? { nil }
 }
 
 // MARK: - Dev server and setup

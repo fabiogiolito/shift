@@ -4,6 +4,26 @@ import XCTest
 /// Fixtures are real output captured from claude 2.1.283 and codex-cli 0.156.1, shortened.
 final class AgentAdapterTests: XCTestCase {
 
+    // MARK: Usage
+
+    func testUsageParsing() {
+        let claude = #"{"five_hour":{"utilization":6.0,"resets_at":"2099-09-28T18:10:00.229627+00:00"},"seven_day":{"utilization":10.0,"resets_at":"2099-09-30T13:00:00.229645+00:00"},"seven_day_opus":null}"#
+        let claudeUsage = ClaudeCodeAdapter.usage(from: Data(claude.utf8))
+        XCTAssertEqual(claudeUsage?.windows.map(\.name), ["5-hour", "Weekly"])
+        XCTAssertEqual(claudeUsage?.tightest?.name, "Weekly")
+        XCTAssertNotNil(claudeUsage?.windows[0].resetsAt)
+
+        let codex = """
+        {"type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","primary":{"used_percent":42.0,"window_minutes":300,"resets_at":4102444800},"secondary":{"used_percent":16.0,"window_minutes":10080,"resets_at":4102444800},"credits":null}}}
+        {"type":"event_msg","payload":{"type":"agent_message","message":"done"}}
+        """
+        let codexUsage = CodexAdapter.usage(fromLog: codex)
+        XCTAssertEqual(codexUsage?.tightest, .init(name: "5-hour", usedPercent: 42, resetsAt: Date(timeIntervalSince1970: 4102444800)))
+        XCTAssertEqual(codexUsage?.tightest?.percentLeft(), 58)
+        // A window past its reset time has started over.
+        XCTAssertEqual(AgentUsage.Window(name: "5-hour", usedPercent: 90, resetsAt: .distantPast).percentLeft(), 100)
+    }
+
     // MARK: Outcome parser
 
     func testMarkerCompleted() {

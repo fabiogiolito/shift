@@ -215,3 +215,53 @@ public struct CodexAdapter: AgentAdapter {
         return (object["error"] as? [String: Any])?["message"] as? String ?? object["message"] as? String ?? message
     }
 }
+
+// MARK: - Usage
+
+extension CodexAdapter {
+    /// Codex logs its rate limits into the session file after every turn; the latest one is current,
+    /// since only Codex spends them.
+    public func usage() async -> AgentUsage? {
+        let home = AgentEnvironment.loginShell["CODEX_HOME"]
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        let sessions = URL(fileURLWithPath: home).appendingPathComponent("sessions")
+        guard let files = FileManager.default.enumerator(at: sessions, includingPropertiesForKeys: [.contentModificationDateKey])?
+            .compactMap({ $0 as? URL }).filter({ $0.pathExtension == "jsonl" }) else { return nil }
+        func modified(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+        }
+        // A session that just started has no turn logged yet.
+        for file in files.sorted(by: { modified($0) > modified($1) }).prefix(5) {
+            if let usage = Self.usage(fromLog: Self.tail(of: file)) { return usage }
+        }
+        return nil
+    }
+
+    /// `{"payload": {"type": "token_count", "rate_limits": {"primary": {"used_percent": 42.0,
+    /// "window_minutes": 300, "resets_at": 1790553456}, "secondary": …}}}`, the last one in the log.
+    static func usage(fromLog log: String) -> AgentUsage? {
+        for line in log.split(separator: "\n").reversed() where line.contains("\"rate_limits\"") {
+            guard let limits = (jsonObject(String(line))?["payload"] as? [String: Any])?["rate_limits"] as? [String: Any]
+            else { continue }
+            let windows = ["primary", "secondary"].compactMap { key -> AgentUsage.Window? in
+                guard let window = limits[key] as? [String: Any],
+                      let used = (window["used_percent"] as? NSNumber)?.doubleValue else { return nil }
+                let minutes = (window["window_minutes"] as? NSNumber)?.intValue ?? 0
+                let name = minutes == 10080 ? "Weekly" : minutes > 0 && minutes % 60 == 0 ? "\(minutes / 60)-hour" : "Current"
+                let resetsAt = (window["resets_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+                return .init(name: name, usedPercent: used, resetsAt: resetsAt)
+            }
+            if !windows.isEmpty { return AgentUsage(windows: windows) }
+        }
+        return nil
+    }
+
+    /// The end of a session log, which can grow large.
+    private static func tail(of file: URL, bytes: UInt64 = 256 * 1024) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return "" }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > bytes ? size - bytes : 0)
+        return String(decoding: handle.readDataToEndOfFile(), as: UTF8.self)
+    }
+}
