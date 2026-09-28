@@ -1,0 +1,10 @@
+.DS_Store
+.build*/
+build*/
+DerivedData/
+Shift.xcodeproj/
+xcuserdata/
+.claude/worktrees/
+dist/
+App/Info.plist
+docs/

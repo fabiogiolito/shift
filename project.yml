@@ -1,0 +1,52 @@
+name: Shift
+options:
+  bundleIdPrefix: com.fabiogiolito
+  deploymentTarget:
+    macOS: "26.0"
+  # Icon Composer documents are folders that Xcode compiles as one file.
+  fileTypes:
+    icon:
+      file: true
+      buildPhase: resources
+packages:
+  ShiftCore:
+    path: Core
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
+targets:
+  Shift:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - package: ShiftCore
+      - package: Sparkle
+    # Merged with the generated Info.plist. xcodegen writes this file on every generate.
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        SUFeedURL: $(SHIFT_FEED_URL)
+        SUPublicEDKey: qJaiI+TqlGhpnbTJmAnkUuB5E5NLM/exMMkEyjxGf90=
+        SUEnableAutomaticChecks: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fabiogiolito.shift
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # scripts/release.sh overrides it only to test against a local feed.
+        SHIFT_FEED_URL: https://raw.githubusercontent.com/fabiogiolito/shift/main/appcast.xml
+      configs:
+        # Only Release builds check for updates, so development copies never do.
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: UPDATER
