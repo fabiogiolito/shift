@@ -883,6 +883,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.basePorts[project.id])
     }
 
+    func testBecomingAnAppReleasesTaskPorts() async {
+        let id = await createCompletedTask()
+        XCTAssertNotNil(model.task(id)?.port)
+        project.buildCommand = "scripts/build.sh"
+        model.updateProject(project)
+        XCTAssertNil(model.task(id)?.port)
+
+        await relaunch(with: savedTask(7, status: .completed))
+        XCTAssertNil(model.task(7)?.port)
+    }
+
     func testProjectWithoutServerCommandStillGetsAServer() async {
         useNoServerCommand()
         let id = await createCompletedTask()

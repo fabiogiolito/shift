@@ -231,10 +231,10 @@ public final class AppModel {
         if (old.serverCommand, old.buildCommand) != (project.serverCommand, project.buildCommand) {
             Task { await startBaseServer(project.id, restart: true) }
         }
-        // Now an app: its tasks are tested by building, so their dev servers go.
+        // Now an app: its tasks are tested by building, so their dev servers and ports go.
         if project.isApp {
-            for task in tasks(in: project.id) where task.serverPID != nil {
-                update(task.id) { $0.serverPID = nil }
+            for task in tasks(in: project.id) where task.serverPID != nil || task.port != nil {
+                update(task.id) { $0.serverPID = nil; $0.port = nil }
                 Task { await services.servers.stop(taskID: task.id) }
             }
         }
@@ -1028,6 +1028,8 @@ public final class AppModel {
             update(id) { Self.apply(Settled(status: .blocked, blockedReason: "The project no longer exists."), to: &$0) }
             return
         }
+        // A port kept from before the project was an app.
+        if project.isApp && task.port != nil { update(id) { $0.port = nil } }
         let hasBranch = await services.git.branchExists(repo: project.repoURL, branch: task.branch)
         let hasWorktree = FileManager.default.fileExists(atPath: task.worktreePath)
 
