@@ -868,6 +868,21 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.buildLog(taskID: id).hasSuffix("error: nope\n"))
     }
 
+    func testBaseServerRunsOnTheRepoAndComesBackWhenOpened() async {
+        XCTAssertEqual(servers.baseStarts, [.init(taskID: -1, command: "pnpm dev", port: 3000)])
+        XCTAssertEqual(model.basePorts[project.id], 3000)
+        servers.crash(taskID: -1)
+        let url = await model.baseServerURL(projectID: project.id)
+        XCTAssertEqual(url, URL(string: "http://localhost:3000"))
+        XCTAssertEqual(servers.baseStarts.count, 2)
+
+        var app = project!
+        app.buildCommand = "scripts/build.sh"
+        model.updateProject(app)
+        await waitFor("the base server to stop") { self.servers.baseRunning.isEmpty }
+        XCTAssertNil(model.basePorts[project.id])
+    }
+
     func testBecomingAnAppReleasesTaskPorts() async {
         let id = await createCompletedTask()
         XCTAssertNotNil(model.task(id)?.port)
