@@ -32,7 +32,9 @@ struct ProjectSettingsView: View {
                     if let draft { model.updateProject(draft) }
                     dismiss()
                 }
-                .disabled(draft?.name.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+                // An app is a project with a build command: without one, App build would not stick.
+                .disabled(draft?.name.trimmingCharacters(in: .whitespaces).isEmpty ?? true
+                          || (isApp == true && draft?.isApp == false))
             }
         }
         .task {
@@ -107,7 +109,7 @@ struct ProjectSettingsView: View {
                     Text("App build").tag(true)
                 }
                 if isApp ?? current.isApp {
-                    TextField("Build", text: project.buildCommand, prompt: Text("scripts/build.sh"))
+                    TextField("Build", text: project.buildCommand, prompt: Text("Required, e.g. scripts/build.sh"))
                         .autocorrectionDisabled()
                 } else {
                     TextField("Start server", text: project.serverCommand, prompt: Text("pnpm dev --port $PORT"))
