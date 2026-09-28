@@ -323,11 +323,11 @@ struct TaskDetailView: View {
                 let folderExists = FileManager.default.fileExists(atPath: task.worktreePath)
                 Group {
                     Menu("Open in") {
-                        ForEach(apps.installedEditors() + [.finder]) { app in
+                        ForEach(apps.installedEditors()) { app in
                             Button(app.displayName) { apps.open(task.worktreeURL, in: app) }
                         }
+                        Button(apps.terminalName()) { apps.open(task.worktreeURL, in: .terminal) }
                     }
-                    Button("Open in \(apps.terminalName())") { apps.open(task.worktreeURL, in: .terminal) }
                 }
                 .disabled(!folderExists)
                 .help(folderExists ? "" : "The task's folder is recreated the next time the agent runs.")

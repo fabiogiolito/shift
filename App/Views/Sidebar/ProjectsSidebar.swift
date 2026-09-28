@@ -31,9 +31,10 @@ struct ProjectsSidebar: View {
                 .badge(model.tasks(in: project.id).filter { [.needsInput, .blocked, .conflict, .completed].contains($0.status) }.count)
                 .contextMenu {
                     Menu("Open in") {
-                        ForEach(apps.installedEditors() + [.finder]) { app in
+                        ForEach(apps.installedEditors()) { app in
                             Button(app.displayName) { apps.open(project.repoURL, in: app) }
                         }
+                        Button(apps.terminalName()) { apps.open(project.repoURL, in: .terminal) }
                     }
                     Button("Settings…") { settingsProject = project }
                     Button("Remove", role: .destructive) { removingProject = project }
