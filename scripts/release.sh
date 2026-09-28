@@ -4,11 +4,20 @@
 # Without --publish nothing touches the network (except notarization when NOTARY_PROFILE is set);
 # the publish commands are printed instead.
 # Env: DEVELOPER_ID   "Developer ID Application: …" signs with it (hardened runtime); ad-hoc otherwise.
-#      NOTARY_PROFILE notarytool keychain profile; notarizes and staples when set.
+#                     Defaults to the Developer ID Application certificate in the keychain, if there is one.
+#      NOTARY_PROFILE notarytool keychain profile; notarizes and staples when set. Defaults to
+#                     "shift-notary" when that profile exists.
 #      SHIFT_FEED_URL testing only: builds against this feed and puts the archive's URL next to it.
 set -e
 cd "$(dirname "$0")/.."
 die() { echo "release: $*" >&2; exit 1; }
+
+# Sign and notarize whenever this Mac can, so a release is never unsigned by accident.
+: "${DEVELOPER_ID:=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)}"
+: "${NOTARY_PROFILE:=$(xcrun notarytool history --keychain-profile shift-notary >/dev/null 2>&1 && echo shift-notary)}"
+# Apple only notarizes apps signed with a Developer ID.
+[ -n "$DEVELOPER_ID" ] || NOTARY_PROFILE=
+echo "release: signing with ${DEVELOPER_ID:-ad-hoc}; notarizing with ${NOTARY_PROFILE:-nothing}" >&2
 
 PUBLISH=0 VERSION= NOTES=
 for a do
