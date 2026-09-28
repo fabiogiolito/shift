@@ -43,7 +43,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "2"
         # scripts/release.sh overrides it only to test against a local feed.
         SHIFT_FEED_URL: https://raw.githubusercontent.com/fabiogiolito/shift/main/appcast.xml
       configs:
