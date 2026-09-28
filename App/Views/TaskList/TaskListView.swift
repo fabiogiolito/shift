@@ -50,11 +50,11 @@ struct TaskListView: View {
         } label: {
             HStack(spacing: 4) {
                 if state.isPushing {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: "arrow.up")
+                    Image(systemName: "arrow.up").imageScale(.small).fontWeight(.medium)
                 }
-                if state.unpushed > 0 { Text("\(state.unpushed)").monospacedDigit() }
+                if state.unpushed > 0 { Text("\(state.unpushed)").font(.callout).monospacedDigit() }
             }
         }
         .disabled(state.unpushed == 0 || state.isPushing)
