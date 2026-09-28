@@ -125,19 +125,22 @@ public struct AgentRequest: Sendable {
     public var environment: [String: String]
     /// The project's setting at the time of this run.
     public var permissions: AgentPermissions
+    /// The project's model for this agent. nil: the agent's own default.
+    public var model: String?
     /// The task has no agent-written title and description yet, so the agent must provide them.
     public var needsDescription: Bool
     /// Manual permissions: where the answers to `.approvalRequested` come from.
     public var approvals: ApprovalChannel
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
-                permissions: AgentPermissions = .bypass, needsDescription: Bool? = nil,
+                permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
                 approvals: ApprovalChannel = ApprovalChannel()) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
         self.environment = environment
         self.permissions = permissions
+        self.model = model
         self.needsDescription = needsDescription ?? (sessionID == nil)
         self.approvals = approvals
     }
@@ -152,10 +155,13 @@ public protocol AgentAdapter: Sendable {
     func run(_ request: AgentRequest) -> AsyncStream<AgentEvent>
     /// The user's current subscription limits. nil if unknown (not signed in, offline, API key).
     func usage() async -> AgentUsage?
+    /// The models the user can pick from, besides the agent's own default.
+    func models() async -> [AgentModel]
 }
 
 extension AgentAdapter {
     public func usage() async -> AgentUsage? { nil }
+    public func models() async -> [AgentModel] { [] }
 }
 
 // MARK: - Dev server and setup

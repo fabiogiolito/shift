@@ -34,6 +34,7 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         // the turn's result as a new turn before it exits.
         var arguments = ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
         arguments += autonomyArguments(request.permissions)
+        if let model = request.model { arguments += ["--model", model] }
         arguments += ["--append-system-prompt", OutcomeProtocol.instructions(firstTurn: request.needsDescription)]
         if let sessionID = request.sessionID { arguments += ["--resume", sessionID] }
         return arguments
@@ -42,6 +43,12 @@ public struct ClaudeCodeAdapter: AgentAdapter {
     public func detect() async -> AgentInstallation? {
         await Task.detached { AgentEnvironment.detect(.claudeCode) }.value
     }
+
+    /// Claude Code's aliases, which always point at the latest of each model.
+    static let models = [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")]
+        .map { AgentModel(id: $0, name: $1) }
+
+    public func models() async -> [AgentModel] { Self.models }
 
     public func run(_ request: AgentRequest) -> AsyncStream<AgentEvent> {
         runAgentProcess(kind: kind, request: request, arguments: { Self.arguments(for: $0) },
