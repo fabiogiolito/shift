@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -155,10 +156,11 @@ extension FocusedValues {
     @Entry var editingNewTask: Bool?
 }
 
-/// A dropped file: its thumbnail or icon, name, and a remove button when `onRemove` is given.
+/// A dropped file: its thumbnail or icon, name, and a remove button when `onRemove` is given. Clicking it opens Quick Look.
 struct AttachmentChip: View {
     let url: URL
     var onRemove: (() -> Void)?
+    @State private var preview: URL?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -181,6 +183,9 @@ struct AttachmentChip: View {
         .padding(4)
         .padding(.trailing, 4)
         .background(.quaternary, in: .rect(cornerRadius: 8))
+        .contentShape(.rect(cornerRadius: 8))
+        .onTapGesture { preview = url }
+        .quickLookPreview($preview)
         .help(url.path)
     }
 
