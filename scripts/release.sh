@@ -1,6 +1,8 @@
 #!/bin/sh
 # Builds, signs and packages a Shift release and adds it to appcast.xml. See docs/RELEASING.md.
-# Usage: scripts/release.sh <version> [release-notes.md|.html] [--publish]
+# Usage: scripts/release.sh [version] [release-notes.md|.html] [--publish]
+# Without a version, the patch number after the last release tag (0.1.1 -> 0.1.2).
+# Without notes, scripts/release-notes.sh writes them from the commits since the last release.
 # Without --publish nothing touches the network (except notarization when NOTARY_PROFILE is set);
 # the publish commands are printed instead.
 # Env: DEVELOPER_ID   "Developer ID Application: …" signs with it (hardened runtime); ad-hoc otherwise.
@@ -26,10 +28,19 @@ for a do
     *) if [ -z "$VERSION" ]; then VERSION=$a; else NOTES=$a; fi ;;
   esac
 done
-[ -n "$VERSION" ] || die "usage: scripts/release.sh <version> [release-notes file] [--publish]"
 [ -z "$NOTES" ] || [ -f "$NOTES" ] || die "no such file: $NOTES"
 [ -z "$(git status --porcelain)" ] || die "uncommitted changes; commit or stash them first"
 [ "$(git branch --show-current)" = main ] || die "not on main"
+if [ -z "$VERSION" ]; then
+  LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null) || die "no release tag yet; give a version"
+  VERSION=$(echo "${LAST#v}" | awk -F. '{ printf "%d.%d.%d", $1, $2, $3 + 1 }')
+fi
+if [ -z "$NOTES" ]; then
+  mkdir -p dist
+  NOTES=dist/notes-$VERSION.md
+  scripts/release-notes.sh > "$NOTES" || die "couldn't write release notes"
+  printf 'release: %s notes:\n%s\n' "$VERSION" "$(cat "$NOTES")" >&2
+fi
 ! git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null || die "tag v$VERSION already exists"
 ! grep -qs "<sparkle:shortVersionString>$VERSION<" appcast.xml || die "appcast.xml already has $VERSION"
 

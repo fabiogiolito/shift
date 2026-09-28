@@ -12,7 +12,8 @@ cd Core && swift test --filter GitServiceTests # one test class
 scripts/build.sh                               # generates Shift.xcodeproj (xcodegen) and builds; prints the .app path
 open build/Build/Products/Debug/Shift.app
 scripts/build.sh --release build-release       # Release build (the only one that checks for updates)
-scripts/release.sh 0.2.0 notes.md              # on main, clean tree: bump, build, sign, zip to dist/, update appcast.xml; prints publish commands (--publish runs them)
+scripts/release.sh --publish                   # on main, clean tree: next patch version, AI-written notes, build, sign, notarize, publish
+scripts/release.sh 0.2.0 notes.md              # explicit version and notes; without --publish, stops before going online
 ```
 
 Releasing, signing and the Sparkle key: `docs/RELEASING.md`.
