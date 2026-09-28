@@ -8,6 +8,7 @@ struct ProjectsSidebar: View {
     @State private var search = ""
     @State private var settingsProject: Project?
     @State private var removingProject: Project?
+    private let apps = ExternalApps()
 
     private var projects: [Project] {
         search.isEmpty ? model.projects : model.projects.filter { $0.name.localizedCaseInsensitiveContains(search) }
@@ -29,6 +30,11 @@ struct ProjectsSidebar: View {
                 // Tasks waiting on the user; a zero badge is hidden.
                 .badge(model.tasks(in: project.id).filter { [.needsInput, .blocked, .conflict, .completed].contains($0.status) }.count)
                 .contextMenu {
+                    Menu("Open in") {
+                        ForEach(apps.installedEditors() + [.finder]) { app in
+                            Button(app.displayName) { apps.open(project.repoURL, in: app) }
+                        }
+                    }
                     Button("Settings…") { settingsProject = project }
                     Button("Remove", role: .destructive) { removingProject = project }
                 }
