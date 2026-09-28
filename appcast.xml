@@ -16,5 +16,15 @@
 - Push merged work to your remote.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.0/Shift-0.1.0.zip" sparkle:edSignature="qn+tWpFt9uZWa3+WfFmPkL+uOfYE9kzjh9T8bOwY6eEOrORcqjpk2SznEzfkwhCRZ4PlnJNOjrYfZZbVUc57DA==" length="3258379" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.1</title>
+      <pubDate>Mon, 28 Sep 2026 11:20:30 +0000</pubDate>
+      <sparkle:version>3</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Signed and notarized by Apple: Shift now opens without a security warning.
+- The push button stays next to the task list when no task is selected.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.1/Shift-0.1.1.zip" sparkle:edSignature="AppgwZviQnBMX6B6Kg4gQnbg1KZVfUrNvEbTKastq/3XOVUdDsjvZjpbw5XWa/cnCvGSiFuVvX0mP1aSCKPOAw==" length="3319204" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
