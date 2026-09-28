@@ -125,7 +125,7 @@ struct DiffView: View {
                 Text(verbatim: "−\(change.deletions)").foregroundStyle(.red)
             }
         }
-        .font(.callout.monospacedDigit())
+        .font(.caption.monospaced())
     }
 
     private func fileHeader(_ change: FileChange) -> some View {
