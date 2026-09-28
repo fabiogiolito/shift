@@ -253,6 +253,9 @@ public enum ShiftPaths {
     public static let state = root.appendingPathComponent("state.json")
     public static let logs = root.appendingPathComponent("logs")
     public static let worktrees = root.appendingPathComponent("worktrees")
+    /// SHIFT_HOME of a task's build when Shift opens it, so a build of Shift keeps its own data.
+    // ponytail: never cleaned up; delete it with the task if builds of Shift pile up.
+    public static func build(taskID: Int) -> URL { root.appendingPathComponent("builds/\(taskID)") }
 
     public static func worktree(project: Project, taskID: Int, root: URL = worktrees) -> URL {
         let slug = project.name.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }

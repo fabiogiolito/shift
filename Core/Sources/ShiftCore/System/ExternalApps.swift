@@ -55,6 +55,24 @@ public struct ExternalApps: Sendable {
         NSWorkspace.shared.open(url)
     }
 
+    /// Opens a freshly built app, first quitting the copy already running from the same place.
+    /// A new instance even if another copy with the same bundle identifier (such as an installed one) runs.
+    @MainActor
+    public func relaunch(_ app: URL, environment: [String: String] = [:]) async {
+        let running = NSWorkspace.shared.runningApplications
+            .filter { $0.bundleURL?.standardizedFileURL == app.standardizedFileURL }
+        running.forEach { $0.terminate() }
+        var waited = 0
+        while running.contains(where: { !$0.isTerminated }), waited < 50 {
+            try? await Task.sleep(for: .milliseconds(100))
+            waited += 1
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.environment = environment
+        _ = try? await NSWorkspace.shared.openApplication(at: app, configuration: configuration)
+    }
+
     func appURL(_ app: ExternalApp) -> URL? {
         guard let id = app.bundleIdentifier else { return terminalURL() }
         return NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)

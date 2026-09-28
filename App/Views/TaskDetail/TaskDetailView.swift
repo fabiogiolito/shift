@@ -61,7 +61,11 @@ struct TaskDetailView: View {
             .toolbar { toolbar(task, project) }
             .sheet(item: $output) { output in
                 OutputSheet(title: output.rawValue) {
-                    output == .serverLog ? await model.serverLog(taskID: taskID) : await model.rawOutput(taskID: taskID)
+                    switch output {
+                    case .serverLog: await model.serverLog(taskID: taskID)
+                    case .buildLog: model.buildLog(taskID: taskID)
+                    case .agentOutput: await model.rawOutput(taskID: taskID)
+                    }
                 }
             }
             .task(id: task.status) { changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil }
@@ -114,7 +118,7 @@ struct TaskDetailView: View {
                 Text(headline).font(.title3).textSelection(.enabled)
             }
             statusLine(task, project)
-            actions(task)
+            actions(task, project)
             if task.status == .working {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -136,14 +140,17 @@ struct TaskDetailView: View {
         }
     }
 
-    /// The status's main action first, then the server button. Hidden when there is neither.
+    /// The status's main action first, then the server button (the Build button for an app). Hidden when there is neither.
     /// Every task with a port has a preview server, whether or not the project has a server command.
-    @ViewBuilder private func actions(_ task: TaskItem) -> some View {
+    @ViewBuilder private func actions(_ task: TaskItem, _ project: Project) -> some View {
         let hasPrimary = task.status == .completed || task.status == .conflict
-        if task.serverURL != nil || hasPrimary {
+        let canBuild = project.isApp && task.status != .merged
+        if task.serverURL != nil || hasPrimary || canBuild {
             HStack {
                 primaryAction(task)
-                if let server = task.serverURL, let port = task.port {
+                if canBuild {
+                    buildButton
+                } else if let server = task.serverURL, let port = task.port {
                     Button { apps.openInBrowser(server) } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "circle.fill").imageScale(.small)
@@ -169,6 +176,34 @@ struct TaskDetailView: View {
                 }
                 Spacer()
             }
+        }
+    }
+
+    /// Builds the task's worktree and opens the app it built, replacing the one opened by the last build.
+    @ViewBuilder private var buildButton: some View {
+        let state = model.builds[taskID]
+        Button {
+            Task {
+                if let app = await model.build(taskID: taskID) {
+                    await apps.relaunch(app, environment: ["SHIFT_HOME": ShiftPaths.build(taskID: taskID).path])
+                }
+            }
+        } label: {
+            if state == .building {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Building…")
+                }
+            } else {
+                Label("Build", systemImage: "hammer")
+            }
+        }
+        .buttonStyle(.glass)
+        .disabled(state == .building)
+        .help("Build this task's version of the app and open it")
+        if case .failed(let reason) = state {
+            Text(reason).foregroundStyle(.secondary).lineLimit(1)
+            Button("Log") { output = .buildLog }.buttonStyle(.glass).controlSize(.small)
         }
     }
 
@@ -287,7 +322,9 @@ struct TaskDetailView: View {
                 }
                 .disabled(!folderExists)
                 .help(folderExists ? "" : "The task's folder is recreated the next time the agent runs.")
-                if task.port != nil {
+                if project.isApp {
+                    Button("Build Log") { output = .buildLog }
+                } else if task.port != nil {
                     Button("Restart Server") { Task { await model.restartServer(taskID: taskID) } }
                     Button("Server Log") { output = .serverLog }
                 }
@@ -335,7 +372,7 @@ struct TaskDetailView: View {
 
 /// Debugging text, from the ••• menu.
 private enum Output: String, Identifiable {
-    case serverLog = "Server Log", agentOutput = "Agent Output"
+    case serverLog = "Server Log", buildLog = "Build Log", agentOutput = "Agent Output"
     var id: Self { self }
 }
 

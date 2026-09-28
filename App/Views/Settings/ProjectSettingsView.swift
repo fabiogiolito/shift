@@ -7,6 +7,8 @@ struct ProjectSettingsView: View {
     private let projectID: Project.ID
     @State private var draft: Project?
     @State private var branches: [String] = []
+    /// Chosen in the picker; nil follows the project (an app has a build command).
+    @State private var isApp: Bool?
 
     init(projectID: Project.ID) {
         self.projectID = projectID
@@ -98,13 +100,27 @@ struct ProjectSettingsView: View {
                 TextField("Setup", text: project.setupCommand,
                           prompt: Text(verbatim: "pnpm install && cp \"$SHIFT_REPO/.env\" ."))
                     .autocorrectionDisabled()
-                TextField("Start server", text: project.serverCommand, prompt: Text("pnpm dev --port $PORT"))
-                    .autocorrectionDisabled()
-                LabeledContent("Port", value: "Automatic")
+                Picker("Test with", selection: Binding(
+                    get: { isApp ?? current.isApp },
+                    set: { isApp = $0; if !$0 { project.wrappedValue.buildCommand = "" } })) {
+                    Text("Dev server").tag(false)
+                    Text("App build").tag(true)
+                }
+                if isApp ?? current.isApp {
+                    TextField("Build", text: project.buildCommand, prompt: Text("scripts/build.sh"))
+                        .autocorrectionDisabled()
+                } else {
+                    TextField("Start server", text: project.serverCommand, prompt: Text("pnpm dev --port $PORT"))
+                        .autocorrectionDisabled()
+                    LabeledContent("Port", value: "Automatic")
+                }
             } header: {
                 Text("Development")
             } footer: {
-                Text("""
+                Text(isApp ?? current.isApp ? """
+                    Setup runs once in each new task's worktree before the agent starts. \
+                    Build runs in the task's worktree when you click Build; if the last line it prints is the path of a .app, Shift opens it.
+                    """ : """
                     Setup runs once in each new task's worktree before the agent starts. \
                     The server runs in each task's worktree with PORT set; leave it empty if the project has no dev server.
                     """)
