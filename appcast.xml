@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Shift</title>
+    <item>
+      <title>0.1.0</title>
+      <pubDate>Mon, 28 Sep 2026 10:37:50 +0000</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[First release of Shift.
+
+- Run several coding tasks in parallel with Claude Code or Codex, each in its own Git worktree, branch and dev server.
+- Test each task in your browser, look at the diff, and merge into your base branch.
+- Answer agent questions and approvals from the app; get notified when a task is ready.
+- Push merged work to your remote.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.0/Shift-0.1.0.zip" sparkle:edSignature="qn+tWpFt9uZWa3+WfFmPkL+uOfYE9kzjh9T8bOwY6eEOrORcqjpk2SznEzfkwhCRZ4PlnJNOjrYfZZbVUc57DA==" length="3258379" type="application/octet-stream"/>
+    </item>
+  </channel>
+</rss>
