@@ -8,6 +8,35 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
     public var executableName: String { self == .claudeCode ? "claude" : "codex" }
 }
 
+/// How much of the user's agent subscription is used, per limit window (5 hours, a week…).
+public struct AgentUsage: Equatable, Sendable {
+    public struct Window: Equatable, Sendable {
+        /// "5-hour", "Weekly".
+        public var name: String
+        public var usedPercent: Double
+        public var resetsAt: Date?
+
+        public init(name: String, usedPercent: Double, resetsAt: Date?) {
+            self.name = name
+            self.usedPercent = usedPercent
+            self.resetsAt = resetsAt
+        }
+
+        /// 0...100. A window past its reset time has started over.
+        public func percentLeft(at date: Date = .now) -> Double {
+            if let resetsAt, resetsAt <= date { return 100 }
+            return min(100, max(0, 100 - usedPercent))
+        }
+    }
+
+    public var windows: [Window]
+
+    public init(windows: [Window]) { self.windows = windows }
+
+    /// The window closest to its limit: the one that will pause the agent first.
+    public var tightest: Window? { windows.min { $0.percentLeft() < $1.percentLeft() } }
+}
+
 public struct AgentInstallation: Codable, Hashable, Sendable {
     public var path: String
     public var version: String?

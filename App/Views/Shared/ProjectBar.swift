@@ -60,6 +60,16 @@ struct ProjectBar: View {
             .help("Agent permissions")
 
             Spacer()
+
+            if let usage = model.usage[project.defaultAgent], let window = usage.tightest {
+                Text(Self.describe(window))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .help(usage.windows.map { "\($0.name) limit: \(Self.describe($0, named: false))" }
+                        .joined(separator: "\n"))
+            }
         }
         .menuStyle(.borderlessButton)
         .labelStyle(.titleAndIcon)
@@ -69,7 +79,26 @@ struct ProjectBar: View {
         .padding(.vertical, 8)
         .background(.bar)
         .task(id: project.id) { branches = await model.branches(for: project.id) }
+        .task(id: project.defaultAgent) {
+            // ponytail: polled; the Claude endpoint rate-limits, so not much more often than this.
+            while !Task.isCancelled {
+                await model.refreshUsage(project.defaultAgent)
+                try? await Task.sleep(for: .seconds(300))
+            }
+        }
         .sheet(isPresented: $showingSettings) { ProjectSettingsView(projectID: project.id) }
+    }
+
+    /// "5-hour limit 58% left · resets 3:40 PM"
+    private static func describe(_ window: AgentUsage.Window, named: Bool = true) -> String {
+        var text = (named ? "\(window.name) limit " : "") + "\(Int(window.percentLeft().rounded()))% left"
+        if let resetsAt = window.resetsAt, resetsAt > .now {
+            let time = Calendar.current.isDateInToday(resetsAt)
+                ? resetsAt.formatted(date: .omitted, time: .shortened)
+                : resetsAt.formatted(.dateTime.weekday().hour().minute())
+            text += " · resets \(time)"
+        }
+        return text
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<Project, Value>) -> Binding<Value> {

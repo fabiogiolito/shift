@@ -9,6 +9,8 @@ public final class AppModel {
     public private(set) var projects: [Project] = []
     public private(set) var tasks: [TaskItem] = []
     public private(set) var installedAgents: [AgentKind: AgentInstallation] = [:]
+    /// Subscription limits per agent, as of the last `refreshUsage`.
+    public private(set) var usage: [AgentKind: AgentUsage] = [:]
     /// Set when an operation fails outside of any task (e.g. adding a project). UI shows it as an alert.
     public var lastError: String?
     /// Whether each project's base branch has commits to push. No entry: the repo has no remote (or
@@ -127,6 +129,11 @@ public final class AppModel {
     /// Number of tasks waiting on the user (needs input, blocked, conflict, completed). Drives the Dock badge.
     public var attentionCount: Int {
         tasks.filter { $0.status.needsAttention || $0.status == .completed }.count
+    }
+
+    /// Keeps the last known usage if it can't be read now (offline, rate limited).
+    public func refreshUsage(_ kind: AgentKind) async {
+        if let usage = await services?.agents[kind]?.usage() { self.usage[kind] = usage }
     }
 
     // MARK: Lifecycle

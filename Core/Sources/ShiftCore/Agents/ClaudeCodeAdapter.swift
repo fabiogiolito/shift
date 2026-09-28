@@ -153,3 +153,40 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         }
     }
 }
+
+// MARK: - Usage
+
+extension ClaudeCodeAdapter {
+    /// What `/usage` shows: Claude Code's OAuth token, from the Keychain item it keeps it in, read
+    /// through `security` (the item trusts it, so there is no prompt), sent to the usage endpoint.
+    /// An expired token is left for Claude Code to refresh.
+    public func usage() async -> AgentUsage? {
+        guard let credentials = AgentEnvironment.capture(
+                  "/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+                  environment: [:], timeout: 5),
+              let oauth = jsonObject(credentials)?["claudeAiOauth"] as? [String: Any],
+              let token = oauth["accessToken"] as? String else { return nil }
+        var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return Self.usage(from: data)
+    }
+
+    /// `{"five_hour": {"utilization": 6.0, "resets_at": "2026-09-28T18:10:00.229627+00:00"}, "seven_day": …}`
+    static func usage(from data: Data) -> AgentUsage? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let windows = [("five_hour", "5-hour"), ("seven_day", "Weekly")].compactMap { key, name -> AgentUsage.Window? in
+            guard let window = object[key] as? [String: Any],
+                  let used = window["utilization"] as? Double else { return nil }
+            return .init(name: name, usedPercent: used, resetsAt: (window["resets_at"] as? String).flatMap(isoDate))
+        }
+        return windows.isEmpty ? nil : AgentUsage(windows: windows)
+    }
+
+    private static func isoDate(_ string: String) -> Date? {
+        (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(string))
+            ?? (try? Date.ISO8601FormatStyle().parse(string))
+    }
+}
