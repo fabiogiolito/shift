@@ -226,7 +226,7 @@ private struct TextViewDropsAndPaste: NSViewRepresentable {
             }
         }
 
-        /// Gives the text view a subclass with no drag types, whose paste asks the view's `PasteHandler` first.
+        /// Gives the text view a subclass with no drag types, whose paste (enabled for images and files too) asks the view's `PasteHandler` first.
         /// It re-registers its drag types now and then, so unregistering them once doesn't last.
         private static func subclass(_ textView: NSTextView) {
             guard let base = object_getClass(textView) else { return }
@@ -247,6 +247,16 @@ private struct TextViewDropsAndPaste: NSViewRepresentable {
                     if handler?.handle(.general) != true { superPaste(textView, paste, sender) }
                 }
                 class_addMethod(subclass, paste, imp_implementationWithBlock(pasteBlock), method_getTypeEncoding(pasteMethod))
+                // Paste is only enabled for what the text view can read, plain text; images and files must enable it too.
+                let readable = #selector(getter: NSTextView.readablePasteboardTypes)
+                if let readableMethod = class_getInstanceMethod(base, readable) {
+                    typealias Types = @convention(c) (NSTextView, Selector) -> [NSPasteboard.PasteboardType]
+                    let superReadable = unsafeBitCast(method_getImplementation(readableMethod), to: Types.self)
+                    let readableBlock: @convention(block) (NSTextView) -> [NSPasteboard.PasteboardType] = {
+                        superReadable($0, readable) + [.fileURL] + NSImage.imageTypes.map { NSPasteboard.PasteboardType($0) }
+                    }
+                    class_addMethod(subclass, readable, imp_implementationWithBlock(readableBlock), method_getTypeEncoding(readableMethod))
+                }
                 objc_registerClassPair(subclass)
                 return subclass
             }()
