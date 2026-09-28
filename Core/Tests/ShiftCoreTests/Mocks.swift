@@ -235,7 +235,16 @@ final class MockServers: ServerManaging {
     private(set) var stoppedAll = false
     private var nextPID: Int32 = 500
 
+    /// Projects' base servers (negative IDs), kept apart so the task assertions above stay exact.
+    private(set) var baseStarts: [Start] = []
+    private(set) var baseRunning: Set<Int> = []
+
     func start(taskID: Int, command: String, directory: URL, port: Int) async throws -> Int32 {
+        if taskID < 0 {
+            baseStarts.append(Start(taskID: taskID, command: command, port: port))
+            baseRunning.insert(taskID)
+            return 1
+        }
         if let startError { throw startError }
         nextPID += 1
         starts.append(Start(taskID: taskID, command: command, port: port))
@@ -252,13 +261,14 @@ final class MockServers: ServerManaging {
     var logs: [Int: String] = [:]
 
     func log(taskID: Int, lines: Int) async -> String { logs[taskID] ?? "" }
-    func stop(taskID: Int) async { running[taskID] = nil }
+    func stop(taskID: Int) async { running[taskID] = nil; baseRunning.remove(taskID) }
     /// A server that died on its own.
-    func crash(taskID: Int) { running[taskID] = nil }
+    func crash(taskID: Int) { running[taskID] = nil; baseRunning.remove(taskID) }
     func stopOrphan(pid: Int32) async { stoppedOrphans.append(pid) }
-    func isRunning(taskID: Int) async -> Bool { running[taskID] != nil }
+    func isRunning(taskID: Int) async -> Bool { running[taskID] != nil || baseRunning.contains(taskID) }
     func stopAll() async {
         running = [:]
+        baseRunning = []
         stoppedAll = true
     }
 }

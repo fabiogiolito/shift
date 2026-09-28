@@ -35,10 +35,23 @@ struct TaskListView: View {
         .safeAreaBar(edge: .bottom) { footer }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .toolbar {
-            if let state = model.pushStates[project.id] {
-                // Pushes the button to the column's trailing end, away from the project name.
+            let pushState = model.pushStates[project.id]
+            if !project.isApp || pushState != nil {
+                // Pushes the buttons to the column's trailing end, away from the project name.
                 ToolbarSpacer(.flexible)
-                ToolbarItem { pushButton(state) }
+            }
+            if !project.isApp {
+                ToolbarItem {
+                    Button {
+                        Task { if let url = await model.baseServerURL(projectID: project.id) { ExternalApps().openInBrowser(url) } }
+                    } label: {
+                        Image(systemName: "globe")
+                    }
+                    .help("Open \(project.baseBranch) in browser")
+                }
+            }
+            if let pushState {
+                ToolbarItem { pushButton(pushState) }
             }
         }
         // Commits may have been made or pushed outside Shift while the user was away.

@@ -30,6 +30,10 @@ public final class AppModel {
         }
     }
 
+    /// Web projects: the port of the dev server running on the project's own checkout, its base branch.
+    /// No entry: not started yet.
+    public private(set) var basePorts: [Project.ID: Int] = [:]
+
     /// App projects: each task's latest build since launch. No entry: not built yet.
     public private(set) var builds: [TaskItem.ID: BuildState] = [:]
 
@@ -89,6 +93,8 @@ public final class AppModel {
     @ObservationIgnored private var io: Task<Void, Never>?
     @ObservationIgnored private var savePending = false
     @ObservationIgnored private var lastBadge: Int?
+    /// Base servers share the servers' task ID space; they get negative IDs so no task has theirs.
+    @ObservationIgnored private var baseServerIDs: [Project.ID: Int] = [:]
     /// `start()` runs once per launch; the window calls it again whenever it is reopened.
     @ObservationIgnored private var started = false
 
@@ -164,6 +170,7 @@ public final class AppModel {
             await reconcile(task.id)
         }
         changed()
+        for project in projects { await startBaseServer(project.id) }
     }
 
     /// Called on app termination: stop servers and agents, persist.
@@ -213,12 +220,17 @@ public final class AppModel {
                               serverCommand: suggested.server, setupCommand: suggested.setup)
         projects.append(project)
         changed()
+        Task { await startBaseServer(project.id) }
         return project
     }
 
     public func updateProject(_ project: Project) {
         guard let services, let index = projects.firstIndex(where: { $0.id == project.id }) else { return }
+        let old = projects[index]
         projects[index] = project
+        if (old.serverCommand, old.buildCommand) != (project.serverCommand, project.buildCommand) {
+            Task { await startBaseServer(project.id, restart: true) }
+        }
         // Now an app: its tasks are tested by building, so their dev servers go.
         if project.isApp {
             for task in tasks(in: project.id) where task.serverPID != nil {
@@ -250,6 +262,7 @@ public final class AppModel {
         }
         projects.removeAll { $0.id == id }
         pushStates[id] = nil
+        await startBaseServer(id)
         changed()
     }
 
@@ -388,6 +401,40 @@ public final class AppModel {
         }
         pushStates[projectID]?.isPushing = false
         await refreshPushState(projectID: projectID)
+    }
+
+    /// The project's base branch in the browser: its base server, started again first if it stopped.
+    public func baseServerURL(projectID: Project.ID) async -> URL? {
+        await startBaseServer(projectID)
+        return basePorts[projectID].flatMap { URL(string: "http://localhost:\($0)") }
+    }
+
+    /// Keeps a web project's base server running (starting it if it is not), and stops it once the project
+    /// is gone or became an app. `restart`: start it again even if it runs, for a changed command.
+    /// ponytail: serves the repo folder, which shows base only while base is checked out there.
+    private func startBaseServer(_ projectID: Project.ID, restart: Bool = false) async {
+        guard let services else { return }
+        let id = baseServerIDs[projectID] ?? -(baseServerIDs.count + 1)
+        baseServerIDs[projectID] = id
+        guard let project = project(projectID), !project.isApp else {
+            basePorts[projectID] = nil
+            await services.servers.stop(taskID: id)
+            return
+        }
+        if !restart, basePorts[projectID] != nil, await services.servers.isRunning(taskID: id) { return }
+        let reserved = Set(tasks.filter { $0.status != .merged }.compactMap(\.port))
+            .union(basePorts.filter { $0.key != projectID }.values)
+        let port = await services.ports.allocate(preferred: basePorts[projectID] ?? 3000, reserved: reserved)
+        do {
+            _ = try await services.servers.start(taskID: id, command: ProjectSetup.serverCommand(for: project),
+                                                 directory: project.repoURL, port: port)
+            basePorts[projectID] = port
+        } catch {
+            basePorts[projectID] = nil
+            lastError = "Could not start the server for \(project.name): \(Self.firstLine(Self.describe(error)))"
+        }
+        // Removed or made an app while starting: the server must not outlive it.
+        if self.project(projectID)?.isApp != false { await startBaseServer(projectID) }
     }
 
     /// Checks every completed or conflicting task against its base again, which may have moved since,
@@ -685,7 +732,7 @@ public final class AppModel {
             if createdBranch && task.sessionID != nil { update(id) { $0.sessionID = nil } }
             var port = task.port
             if port == nil && !project.isApp {
-                let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port))
+                let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port)).union(basePorts.values)
                 port = await services.ports.allocate(preferred: id, reserved: reserved)
                 try check(id, token)
                 update(id) { $0.port = port }
@@ -943,7 +990,7 @@ public final class AppModel {
         var port = task.port
         if port == nil {
             // A task from before every task had a server.
-            let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port))
+            let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port)).union(basePorts.values)
             port = await services.ports.allocate(preferred: id, reserved: reserved)
             guard let now = self.task(id), now.status != .merged else { return nil }
             update(id) { $0.port = port }
