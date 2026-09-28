@@ -70,6 +70,7 @@ struct ProjectBar: View {
         .background(.bar)
         .task(id: project.id) { branches = await model.branches(for: project.id) }
         .sheet(isPresented: $showingSettings) { ProjectSettingsView(projectID: project.id) }
+        .focusedSceneValue(\.openProjectSettings) { showingSettings = true }
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<Project, Value>) -> Binding<Value> {

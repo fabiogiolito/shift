@@ -28,6 +28,7 @@ struct ShiftApp: App {
         }
         .commands {
             NewTaskCommand()
+            ProjectSettingsCommand()
             #if UPDATER
             if let updater = delegate.updater {
                 CommandGroup(after: .appInfo) {
@@ -64,9 +65,24 @@ private struct NewTaskCommand: Commands {
     }
 }
 
+/// ⌘, opens the current project's settings; Shift has no app-wide settings. Its own `Commands` for the reason above.
+private struct ProjectSettingsCommand: Commands {
+    @FocusedValue(\.openProjectSettings) private var openProjectSettings
+
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Project Settings…") { openProjectSettings?() }
+                .keyboardShortcut(",")
+                .disabled(openProjectSettings == nil)
+        }
+    }
+}
+
 extension FocusedValues {
     /// Moves focus to the New task field. Published by the task list.
     @Entry var focusNewTask: (() -> Void)?
+    /// Opens the current project's settings. Published by the project bar.
+    @Entry var openProjectSettings: (() -> Void)?
 }
 
 @MainActor
