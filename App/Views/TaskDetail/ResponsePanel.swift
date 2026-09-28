@@ -11,6 +11,7 @@ struct ResponsePanel: View {
     /// Index into the options; `options.count` is "Something else". Nothing is chosen at first.
     @State private var choice: Int?
     @State private var text = ""
+    @State private var attachments: [URL] = []
     @State private var contentHeight: CGFloat = 0
     @FocusState private var choicesFocused: Bool
     @FocusedValue(\.editingNewTask) private var editingNewTask
@@ -26,7 +27,7 @@ struct ResponsePanel: View {
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var reply: String? {
         guard let choice else { return nil }
-        return choice < options.count ? options[choice] : (trimmed.isEmpty ? nil : trimmed)
+        return choice < options.count ? options[choice] : (trimmed.isEmpty && attachments.isEmpty ? nil : trimmed)
     }
 
     var body: some View {
@@ -39,7 +40,7 @@ struct ResponsePanel: View {
                 if hasChoices {
                     choices
                 } else {
-                    PromptField(placeholder: placeholder, focusOnAppear: true) { model.sendPrompt(taskID: task.id, text: $0) }
+                    PromptField(placeholder: placeholder, focusOnAppear: true) { model.sendPrompt(taskID: task.id, text: $0, attachments: $1) }
                 }
             }
             .padding(16)
@@ -108,15 +109,16 @@ struct ResponsePanel: View {
             .focused($choicesFocused)
             if somethingElse {
                 PromptField(placeholder: task.status == .blocked ? "Give instructions…" : "Answer…", focusOnAppear: true,
-                            externalText: $text)
+                            externalText: $text, externalAttachments: $attachments)
             }
             HStack {
                 Spacer()
                 Button("Send") {
                     guard let reply else { return }
-                    model.sendPrompt(taskID: task.id, text: reply)
+                    model.sendPrompt(taskID: task.id, text: reply, attachments: somethingElse ? attachments.map(\.path) : [])
                     choice = nil
                     text = ""
+                    attachments = []
                 }
                 .buttonStyle(.glassProminent)
                 .disabled(reply == nil)

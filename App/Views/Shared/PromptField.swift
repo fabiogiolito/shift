@@ -1,6 +1,8 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Multi-line text field with a send button inside it. Return adds a line; ⌘↩ submits while the field is focused.
+/// Files and images dropped on it become attachments, sent as their paths.
 struct PromptField: View {
     let placeholder: String
     var submitTitle = "Send"
@@ -10,18 +12,68 @@ struct PromptField: View {
     var focusOnAppear = false
     /// Set when the caller owns the text and sends it with its own button: the field then has none.
     var externalText: Binding<String>?
-    var onSubmit: (String) -> Void = { _ in }
+    /// The caller's attachments, alongside `externalText`.
+    var externalAttachments: Binding<[URL]>?
+    var onSubmit: (String, [String]) -> Void = { _, _ in }
 
     @State private var ownText = ""
+    @State private var ownAttachments: [URL] = []
+    @State private var dropTargeted = false
     @FocusState private var focused: Bool
 
     private var text: String {
         get { externalText?.wrappedValue ?? ownText }
         nonmutating set { if let externalText { externalText.wrappedValue = newValue } else { ownText = newValue } }
     }
+    private var attachments: [URL] {
+        get { externalAttachments?.wrappedValue ?? ownAttachments }
+        nonmutating set {
+            if let externalAttachments { externalAttachments.wrappedValue = newValue } else { ownAttachments = newValue }
+        }
+    }
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !attachments.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(attachments, id: \.self) { url in
+                            AttachmentChip(url: url) { attachments.removeAll { $0 == url } }
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+            }
+            editor
+        }
+        .font(.body)
+        .padding(10)
+        .padding(.trailing, externalText == nil ? 32 : 0) // room for the send button
+        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        // TextEditor draws no focus ring of its own, so the field draws the system one around its edge.
+        // A drag over the field shows it too.
+        .overlay {
+            if focused || dropTargeted {
+                RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if externalText == nil { sendButton }
+        }
+        .onDrop(of: [.fileURL, .image], isTargeted: $dropTargeted) { providers in
+            for provider in providers {
+                Task { if let url = await Self.attachment(from: provider), !attachments.contains(url) { attachments.append(url) } }
+            }
+            return true
+        }
+        .focusedSceneValue(\.focusNewTask, isNewTaskField ? { focused = true } : nil)
+        .focusedValue(\.editingNewTask, isNewTaskField && focused ? true : nil)
+        .onAppear { if focusOnAppear { focused = true } }
+    }
+
+    private var editor: some View {
         // TextEditor, unlike a vertical TextField, keeps Return for new lines. It doesn't size to its text,
         // so a hidden Text with the same content sets the height: 2 to 8 lines.
         Text(text.isEmpty ? " " : text + " ")
@@ -33,40 +85,39 @@ struct PromptField: View {
                 TextEditor(text: Binding(get: { text }, set: { text = $0 }))
                     .scrollContentBackground(.hidden)
                     .focused($focused)
+                    .background(PlainTextDrops())
             }
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(placeholder).foregroundStyle(.tertiary).padding(.horizontal, 5).allowsHitTesting(false)
                 }
             }
-        .font(.body)
-        .padding(10)
-        .padding(.trailing, externalText == nil ? 32 : 0) // room for the send button
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
-        // TextEditor draws no focus ring of its own, so the field draws the system one around its edge.
-        .overlay {
-            if focused {
-                RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
-            }
+    }
+
+    /// A dropped file as is; a dropped image with no file behind it (from a browser, say) saved as a PNG.
+    private static func attachment(from provider: NSItemProvider) async -> URL? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            let item = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier)
+            return item as? URL ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
         }
-        .overlay(alignment: .bottomTrailing) {
-            if externalText == nil { sendButton }
-        }
-        .focusedSceneValue(\.focusNewTask, isNewTaskField ? { focused = true } : nil)
-        .focusedValue(\.editingNewTask, isNewTaskField && focused ? true : nil)
-        .onAppear { if focusOnAppear { focused = true } }
+        guard let data = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? Data,
+              let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) else { return nil }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Shift Attachments")
+        let url = folder.appendingPathComponent("Image \(UUID().uuidString.prefix(8)).png")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return (try? png.write(to: url)) != nil ? url : nil
     }
 
     @ViewBuilder private var sendButton: some View {
         let send = Button {
-            onSubmit(trimmed)
+            onSubmit(trimmed, attachments.map(\.path))
             text = ""
+            attachments = []
         } label: {
             Label(submitTitle, systemImage: "arrow.up").labelStyle(.iconOnly)
         }
         Group {
-            if trimmed.isEmpty { send.buttonStyle(.glass).disabled(true) } else { send.buttonStyle(.glassProminent) }
+            if trimmed.isEmpty && attachments.isEmpty { send.buttonStyle(.glass).disabled(true) } else { send.buttonStyle(.glassProminent) }
         }
         .buttonBorderShape(.circle)
         // Only the focused field owns ⌘↩, so two fields can be on screen.
@@ -79,4 +130,90 @@ struct PromptField: View {
 extension FocusedValues {
     /// True while the New task field has focus, so other ⌘↩ buttons stand aside.
     @Entry var editingNewTask: Bool?
+}
+
+/// A dropped file: its thumbnail or icon, name, and a remove button when `onRemove` is given.
+struct AttachmentChip: View {
+    let url: URL
+    var onRemove: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true {
+                AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { icon }
+                    .frame(width: 24, height: 24)
+                    .clipShape(.rect(cornerRadius: 4))
+            } else {
+                icon.frame(width: 24, height: 24)
+            }
+            Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading)
+            if let onRemove {
+                Button("Remove", systemImage: "xmark.circle.fill", action: onRemove)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.callout)
+        .padding(4)
+        .padding(.trailing, 4)
+        .background(.quaternary, in: .rect(cornerRadius: 8))
+        .help(url.path)
+    }
+
+    private var icon: some View {
+        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
+    }
+}
+
+/// TextEditor's text view takes file and image drops itself and types their paths. Limited to plain text,
+/// it lets them through to the field's drop handler. Sits behind the editor to find the text view there.
+private struct PlainTextDrops: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { Finder() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class Finder: NSView {
+        override func layout() {
+            super.layout()
+            guard let window, bounds.width > 0 else { return }
+            let center = convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil)
+            // The text view with this view's center in its scroll view is the editor this sits behind.
+            var ancestor = superview
+            while let view = ancestor {
+                if let textView = Self.textViews(in: view).first(where: {
+                    let frame = $0.enclosingScrollView ?? $0
+                    return frame.convert(frame.bounds, to: nil).contains(center)
+                }) {
+                    Self.restrictDrops(textView)
+                    return
+                }
+                ancestor = view === window.contentView ? nil : view.superview
+            }
+        }
+
+        /// Gives the text view a subclass whose only drag type is plain text. It re-registers its drag types
+        /// now and then, so unregistering them once doesn't last.
+        private static func restrictDrops(_ textView: NSTextView) {
+            guard let base = object_getClass(textView) else { return }
+            let prefix = "ShiftPlainTextDrops_"
+            guard !NSStringFromClass(base).hasPrefix(prefix) else { return }
+            let name = prefix + NSStringFromClass(base)
+            let subclass: AnyClass? = NSClassFromString(name) ?? {
+                guard let subclass = objc_allocateClassPair(base, name, 0),
+                      let method = class_getInstanceMethod(base, #selector(getter: NSTextView.acceptableDragTypes)) else { return nil }
+                let types: @convention(block) (NSTextView) -> [NSPasteboard.PasteboardType] = { _ in [.string] }
+                class_addMethod(subclass, #selector(getter: NSTextView.acceptableDragTypes),
+                                imp_implementationWithBlock(types), method_getTypeEncoding(method))
+                objc_registerClassPair(subclass)
+                return subclass
+            }()
+            guard let subclass else { return }
+            object_setClass(textView, subclass)
+            textView.updateDragTypeRegistration()
+        }
+
+        private static func textViews(in view: NSView) -> [NSTextView] {
+            (view as? NSTextView).map { [$0] } ?? view.subviews.flatMap(textViews)
+        }
+    }
 }

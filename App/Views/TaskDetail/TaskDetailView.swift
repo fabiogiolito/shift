@@ -47,7 +47,7 @@ struct TaskDetailView: View {
                             ResponsePanel(task: task, maxHeight: windowHeight * 0.5)
                                 .id([task.question, task.approvalRequest, task.blockedReason])
                         } else if let placeholder = promptPlaceholder(task) {
-                            PromptField(placeholder: placeholder) { model.sendPrompt(taskID: taskID, text: $0) }
+                            PromptField(placeholder: placeholder) { model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
                                 .padding(12)
                         }
                     }
@@ -275,10 +275,19 @@ struct TaskDetailView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(task.prompts) { prompt in
-                        promptText(prompt)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 8)
+                        VStack(alignment: .leading, spacing: 6) {
+                            if !prompt.text.isEmpty { promptText(prompt).textSelection(.enabled) }
+                            if !prompt.attachments.isEmpty {
+                                ScrollView(.horizontal) {
+                                    HStack(spacing: 6) {
+                                        ForEach(prompt.attachments, id: \.self) { AttachmentChip(url: URL(fileURLWithPath: $0)) }
+                                    }
+                                }
+                                .scrollIndicators(.never)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
                         if prompt != task.prompts.last { Divider() }
                     }
                 }
