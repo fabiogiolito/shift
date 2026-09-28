@@ -26,5 +26,20 @@
 - The push button stays next to the task list when no task is selected.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.1/Shift-0.1.1.zip" sparkle:edSignature="AppgwZviQnBMX6B6Kg4gQnbg1KZVfUrNvEbTKastq/3XOVUdDsjvZjpbw5XWa/cnCvGSiFuVvX0mP1aSCKPOAw==" length="3319204" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.2</title>
+      <pubDate>Mon, 28 Sep 2026 12:55:13 +0000</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>0.1.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Attach files and images by dropping them on a prompt field. The agent gets their file paths.
+- App projects use a build command in place of a dev server. The task's Build button builds the app and opens it.
+- Drag projects in the sidebar to reorder them.
+- Right-click a project to open it in your editor or in Finder.
+- Task rows resize when the agent's description comes in.
+- Task list sections have more space between them.
+- Diff change counts use a smaller monospaced font.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.2/Shift-0.1.2.zip" sparkle:edSignature="N/SI90oB1auGuMt7nIwpjAcJJNrnhz/EtCnMIvOAl6hKnyFUDgRO7KxvIOatqdC0sd+NcsEtcvwNsBhg0rMTAA==" length="3394554" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
