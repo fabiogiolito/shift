@@ -20,6 +20,8 @@ struct ContentView: View {
         } content: {
             Group {
                 if let project {
+                    // A new identity per project rebuilds the toolbar items; a reused one keeps the
+                    // previous project name's width, truncating or off-centering the new name.
                     TaskListView(project: project, selection: $selectedTask)
                         .toolbar {
                             ToolbarItem(placement: .navigation) {
@@ -28,6 +30,7 @@ struct ContentView: View {
                             }
                                 .sharedBackgroundVisibility(.hidden)
                         }
+                        .id(project.id)
                 } else if model.projects.isEmpty {
                     ContentUnavailableView("No Projects", systemImage: "folder",
                                            description: Text("Add a Git repository with New Project."))
