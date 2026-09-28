@@ -66,8 +66,11 @@ struct TaskListView: View {
         if !tasks.isEmpty {
             // The list doesn't re-measure a row whose content changes in place, so a description that arrives
             // later gives the row a new identity (a fresh, correctly sized row). The tag keeps selection by task.
-            Section(title) {
+            Section {
                 ForEach(tasks, id: \.rowIdentity) { TaskRow(task: $0).tag($0.id) }
+            } header: {
+                // Extra room above each header so the groups read apart.
+                Text(title).padding(.top, 10)
             }
         }
     }
