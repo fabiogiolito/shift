@@ -104,7 +104,11 @@ struct ProjectSettingsView: View {
                     .autocorrectionDisabled()
                 Picker("Test with", selection: Binding(
                     get: { isApp ?? current.isApp },
-                    set: { isApp = $0; if !$0 { project.wrappedValue.buildCommand = "" } })) {
+                    set: {
+                        isApp = $0
+                        if !$0 { project.wrappedValue.buildCommand = "" }
+                        else if !project.wrappedValue.isApp { project.wrappedValue.buildCommand = current.defaultBuildCommand }
+                    })) {
                     Text("Dev server").tag(false)
                     Text("App build").tag(true)
                 }
