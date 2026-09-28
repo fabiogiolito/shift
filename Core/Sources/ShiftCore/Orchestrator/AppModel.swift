@@ -222,6 +222,15 @@ public final class AppModel {
         changed()
     }
 
+    public func moveProjects(from source: IndexSet, to destination: Int) {
+        guard services != nil else { return }
+        let moved = source.map { projects[$0] }
+        var rest = projects.indices.filter { !source.contains($0) }.map { projects[$0] }
+        rest.insert(contentsOf: moved, at: destination - source.count(in: 0..<destination))
+        projects = rest
+        changed()
+    }
+
     /// Removes the project and cleans up all of its tasks.
     public func removeProject(_ id: Project.ID) async {
         guard services != nil else { return }

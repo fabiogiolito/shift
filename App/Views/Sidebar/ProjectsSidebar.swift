@@ -15,28 +15,32 @@ struct ProjectsSidebar: View {
     }
 
     var body: some View {
-        List(projects, selection: $selection) { project in
-            Label {
-                VStack(alignment: .leading) {
-                    Text(project.name)
-                    Text(subtitle(for: project)).font(.caption).foregroundStyle(.secondary)
-                }
-            } icon: {
-                ProjectIcon(repoPath: project.repoPath,
-                            version: model.tasks(in: project.id).compactMap(\.mergedAt).max())
-            }
-            .padding(.vertical, 5)
-            // Tasks waiting on the user; a zero badge is hidden.
-            .badge(model.tasks(in: project.id).filter { [.needsInput, .blocked, .conflict, .completed].contains($0.status) }.count)
-            .contextMenu {
-                Menu("Open in") {
-                    ForEach(apps.installedEditors() + [.finder]) { app in
-                        Button(app.displayName) { apps.open(project.repoURL, in: app) }
+        List(selection: $selection) {
+            ForEach(projects) { project in
+                Label {
+                    VStack(alignment: .leading) {
+                        Text(project.name)
+                        Text(subtitle(for: project)).font(.caption).foregroundStyle(.secondary)
                     }
+                } icon: {
+                    ProjectIcon(repoPath: project.repoPath,
+                                version: model.tasks(in: project.id).compactMap(\.mergedAt).max())
                 }
-                Button("Settings…") { settingsProject = project }
-                Button("Remove", role: .destructive) { removingProject = project }
+                .padding(.vertical, 5)
+                // Tasks waiting on the user; a zero badge is hidden.
+                .badge(model.tasks(in: project.id).filter { [.needsInput, .blocked, .conflict, .completed].contains($0.status) }.count)
+                .contextMenu {
+                    Menu("Open in") {
+                        ForEach(apps.installedEditors() + [.finder]) { app in
+                            Button(app.displayName) { apps.open(project.repoURL, in: app) }
+                        }
+                    }
+                    Button("Settings…") { settingsProject = project }
+                    Button("Remove", role: .destructive) { removingProject = project }
+                }
             }
+            // Offsets refer to the full list, so reordering is off while filtering.
+            .onMove(perform: search.isEmpty ? { model.moveProjects(from: $0, to: $1) } : nil)
         }
         .listStyle(.sidebar)
         .searchable(text: $search, placement: .sidebar)

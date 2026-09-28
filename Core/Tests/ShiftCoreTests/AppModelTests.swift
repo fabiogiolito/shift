@@ -1254,6 +1254,19 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(other?.baseBranch, "develop")
     }
 
+    func testMoveProjectsPersistsOrder() async {
+        await model.addProject(at: temp.appendingPathComponent("b"))
+        await model.addProject(at: temp.appendingPathComponent("c"))
+        let names = { self.model.projects.map(\.name) }
+        let first = names()[0]
+        model.moveProjects(from: [2], to: 0)
+        XCTAssertEqual(names(), ["c", first, "b"])
+        model.moveProjects(from: [0], to: 3)
+        XCTAssertEqual(names(), [first, "b", "c"])
+        await model.flush()
+        XCTAssertEqual(store.state.projects.map(\.name), [first, "b", "c"])
+    }
+
     func testRemoveProjectDeletesItsTasks() async {
         let id = await createCompletedTask()
         await model.removeProject(project.id)
