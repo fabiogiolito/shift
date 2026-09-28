@@ -62,17 +62,8 @@ struct PromptField: View {
         .overlay(alignment: .bottomTrailing) {
             if externalText == nil { sendButton }
         }
-        .onDrop(of: [.fileURL, .image, .plainText], isTargeted: $dropTargeted) { providers in
-            for provider in providers {
-                Task {
-                    if let url = await Self.attachment(from: provider) {
-                        if !attachments.contains(url) { attachments.append(url) }
-                    } else if let string = try? await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) {
-                        let dropped = string as? String ?? (string as? Data).flatMap { String(data: $0, encoding: .utf8) }
-                        if let dropped { text += dropped }
-                    }
-                }
-            }
+        .onDrop(of: [.item], isTargeted: $dropTargeted) { providers in
+            for provider in providers { Task { await add(provider) } }
             return true
         }
         .focusedSceneValue(\.focusNewTask, isNewTaskField ? { focused = true } : nil)
@@ -92,7 +83,7 @@ struct PromptField: View {
                 TextEditor(text: Binding(get: { text }, set: { text = $0 }))
                     .scrollContentBackground(.hidden)
                     .focused($focused)
-                    .background(NoTextViewDrops())
+                    .background(TextViewDropsAndPaste(onPaste: paste))
             }
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
@@ -101,15 +92,39 @@ struct PromptField: View {
             }
     }
 
-    /// A dropped file as is; a dropped image with no file behind it (from a browser, say) saved as a PNG.
-    private static func attachment(from provider: NSItemProvider) async -> URL? {
-        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-            let item = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier)
-            return item as? URL ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
+    private func attach(_ url: URL) {
+        if !attachments.contains(url) { attachments.append(url) }
+    }
+
+    /// A dropped file as is; a dropped image with no file behind it (from a browser, say) saved as a PNG;
+    /// dropped text typed in. Finder's files come typed as what they are (public.png, com.adobe.pdf), their item the file's URL.
+    private func add(_ provider: NSItemProvider) async {
+        for type in provider.registeredTypeIdentifiers.compactMap(UTType.init) {
+            guard let item = try? await provider.loadItem(forTypeIdentifier: type.identifier) else { continue }
+            let data = item as? Data
+            let url = item as? URL ?? (type.conforms(to: .fileURL) ? data.flatMap { URL(dataRepresentation: $0, relativeTo: nil) } : nil)
+            if let url, url.isFileURL {
+                // Finder may give a file reference (file:///.file/id=…); the agent needs the path.
+                return attach((url as NSURL).filePathURL ?? url)
+            }
+            if type.conforms(to: .image), let image = Self.savePNG(data) { return attach(image) }
+            if type.conforms(to: .plainText), let string = item as? String ?? data.flatMap({ String(data: $0, encoding: .utf8) }) {
+                text += string
+                return
+            }
         }
-        guard provider.hasItemConformingToTypeIdentifier(UTType.image.identifier),
-              let data = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? Data,
-              let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) else { return nil }
+    }
+
+    /// Pasted files and images become attachments, like dropped ones. False leaves the paste to the text view.
+    private func paste(from pasteboard: NSPasteboard) -> Bool {
+        var urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        if urls.isEmpty, let image = Self.savePNG(NSImage(pasteboard: pasteboard)?.tiffRepresentation) { urls = [image] }
+        urls.forEach(attach)
+        return !urls.isEmpty
+    }
+
+    private static func savePNG(_ data: Data?) -> URL? {
+        guard let data, let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) else { return nil }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Shift Attachments")
         let url = folder.appendingPathComponent("Image \(UUID().uuidString.prefix(8)).png")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -176,12 +191,22 @@ struct AttachmentChip: View {
 
 /// TextEditor's text view sits in front of the field's drop handler and would take every drop itself: file drags
 /// carry plain text too, so accepting only text still caught them. Accepting no drags lets them all through.
+/// It also pastes images as nothing and files as their names, so `onPaste` gets a paste first; false lets the text view have it.
 /// Sits behind the editor to find the text view there.
-private struct NoTextViewDrops: NSViewRepresentable {
+private struct TextViewDropsAndPaste: NSViewRepresentable {
+    let onPaste: (NSPasteboard) -> Bool
+
     func makeNSView(context: Context) -> NSView { Finder() }
-    func updateNSView(_ view: NSView, context: Context) {}
+    func updateNSView(_ view: NSView, context: Context) { (view as? Finder)?.paste.handle = onPaste }
+
+    final class PasteHandler {
+        var handle: (NSPasteboard) -> Bool = { _ in false }
+    }
 
     final class Finder: NSView {
+        let paste = PasteHandler()
+        nonisolated(unsafe) static var pasteKey = 0
+
         override func layout() {
             super.layout()
             guard let window, bounds.width > 0 else { return }
@@ -193,26 +218,35 @@ private struct NoTextViewDrops: NSViewRepresentable {
                     let frame = $0.enclosingScrollView ?? $0
                     return frame.convert(frame.bounds, to: nil).contains(center)
                 }) {
-                    Self.restrictDrops(textView)
+                    objc_setAssociatedObject(textView, &Self.pasteKey, paste, .OBJC_ASSOCIATION_RETAIN)
+                    Self.subclass(textView)
                     return
                 }
                 ancestor = view === window.contentView ? nil : view.superview
             }
         }
 
-        /// Gives the text view a subclass with no drag types. It re-registers its drag types
-        /// now and then, so unregistering them once doesn't last.
-        private static func restrictDrops(_ textView: NSTextView) {
+        /// Gives the text view a subclass with no drag types, whose paste asks the view's `PasteHandler` first.
+        /// It re-registers its drag types now and then, so unregistering them once doesn't last.
+        private static func subclass(_ textView: NSTextView) {
             guard let base = object_getClass(textView) else { return }
-            let prefix = "ShiftNoDrops_"
+            let prefix = "ShiftPromptTextView_"
             guard !NSStringFromClass(base).hasPrefix(prefix) else { return }
             let name = prefix + NSStringFromClass(base)
             let subclass: AnyClass? = NSClassFromString(name) ?? {
+                let dragTypes = #selector(getter: NSTextView.acceptableDragTypes), paste = #selector(NSText.paste(_:))
                 guard let subclass = objc_allocateClassPair(base, name, 0),
-                      let method = class_getInstanceMethod(base, #selector(getter: NSTextView.acceptableDragTypes)) else { return nil }
+                      let dragTypesMethod = class_getInstanceMethod(base, dragTypes),
+                      let pasteMethod = class_getInstanceMethod(base, paste) else { return nil }
                 let types: @convention(block) (NSTextView) -> [NSPasteboard.PasteboardType] = { _ in [] }
-                class_addMethod(subclass, #selector(getter: NSTextView.acceptableDragTypes),
-                                imp_implementationWithBlock(types), method_getTypeEncoding(method))
+                class_addMethod(subclass, dragTypes, imp_implementationWithBlock(types), method_getTypeEncoding(dragTypesMethod))
+                typealias Paste = @convention(c) (NSTextView, Selector, Any?) -> Void
+                let superPaste = unsafeBitCast(method_getImplementation(pasteMethod), to: Paste.self)
+                let pasteBlock: @convention(block) (NSTextView, Any?) -> Void = { textView, sender in
+                    let handler = objc_getAssociatedObject(textView, &Finder.pasteKey) as? PasteHandler
+                    if handler?.handle(.general) != true { superPaste(textView, paste, sender) }
+                }
+                class_addMethod(subclass, paste, imp_implementationWithBlock(pasteBlock), method_getTypeEncoding(pasteMethod))
                 objc_registerClassPair(subclass)
                 return subclass
             }()
