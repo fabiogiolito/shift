@@ -284,6 +284,18 @@ public final class AppModel {
         return ((try? await services.git.branches(repo: project.repoURL)) ?? []).filter { !taskBranches.contains($0) }
     }
 
+    /// Creates a branch in the project's repo at the tip of `source`. False (and `lastError`) if it could not.
+    public func createBranch(projectID: Project.ID, name: String, from source: String) async -> Bool {
+        guard let services, let project = project(projectID) else { return false }
+        do {
+            try await services.git.createBranch(repo: project.repoURL, name: name, from: source)
+            return true
+        } catch {
+            lastError = "Could not create \(name): \(Self.firstLine(Self.describe(error)))"
+            return false
+        }
+    }
+
     /// Names of agent instruction files found in the repo root, e.g. ["AGENTS.md", "CLAUDE.md"].
     public func instructionFiles(for projectID: Project.ID) -> [String] {
         guard let project = project(projectID) else { return [] }

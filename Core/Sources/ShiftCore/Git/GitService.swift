@@ -36,6 +36,16 @@ public struct GitService: GitServicing {
 
     // MARK: - Worktrees
 
+    public func createBranch(repo: URL, name: String, from source: String) async throws {
+        guard (try? await run(["check-ref-format", "--branch", name], in: repo))?.status == 0 else {
+            throw GitError(message: "“\(name)” is not a valid branch name.")
+        }
+        guard await !branchExists(repo: repo, branch: name) else {
+            throw GitError(message: "A branch named \(name) already exists.")
+        }
+        try await git(["branch", name, "refs/heads/\(source)"], in: repo)
+    }
+
     public func createWorktree(repo: URL, branch: String, base: String, at path: URL) async throws {
         try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
         // A worktree that used to be at `path` and was deleted by hand still blocks the path until pruned.

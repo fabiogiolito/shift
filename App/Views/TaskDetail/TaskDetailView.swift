@@ -12,6 +12,7 @@ struct TaskDetailView: View {
     /// The base picked in the More menu, waiting for confirmation.
     @State private var newBase: String?
     @State private var branches: [String] = []
+    @State private var creatingBranch = false
     /// What the project's folder has checked out, for a merged task: its base may not be it.
     @State private var checkedOut: String?
     @State private var isMerging = false
@@ -87,7 +88,13 @@ struct TaskDetailView: View {
             } message: {
                 Text("Its own commits move onto \(newBase ?? ""), without what \(task.base(in: project)) has, and Merge puts them there. If they conflict, the agent resolves it.")
             }
-            .task { branches = await model.branches(for: project.id) }
+            .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
+            .sheet(isPresented: $creatingBranch) {
+                NewBranchSheet(projectID: project.id, branches: branches, source: task.base(in: project)) { name in
+                    newBase = name
+                    Task { branches = await model.branches(for: project.id) }
+                }
+            }
             .task(id: task.status) {
                 checkedOut = task.status == .merged ? await model.checkedOutBranch(projectID: project.id) : nil
             }
@@ -366,6 +373,8 @@ struct TaskDetailView: View {
                         ForEach(branches.contains(base) ? branches : [base] + branches, id: \.self) { Text($0) }
                     }
                     .pickerStyle(.inline)
+                    Divider()
+                    Button("New Branch…") { creatingBranch = true }
                 }
                 .disabled(task.status == .working)
                 .help(task.status == .working ? "Stop the task to change its base." : "The branch this task merges into")

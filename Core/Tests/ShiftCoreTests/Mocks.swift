@@ -63,6 +63,13 @@ final class MockGit: GitServicing {
     func branches(repo: URL) async throws -> [String] { branchList }
     func currentBranch(repo: URL) async throws -> String { current }
 
+    var createBranchError: Error?
+    func createBranch(repo: URL, name: String, from source: String) async throws {
+        if let createBranchError { throw createBranchError }
+        branchList.append(name)
+        calls.append("branch \(name) from \(source)")
+    }
+
     // Worktree folders are real (the orchestrator checks for them), so tests keep them in a temp directory.
     func createWorktree(repo: URL, branch: String, base: String, at path: URL) async throws {
         await createGate?.wait()

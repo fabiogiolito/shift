@@ -7,6 +7,7 @@ struct ProjectSettingsView: View {
     private let projectID: Project.ID
     @State private var draft: Project?
     @State private var branches: [String] = []
+    @State private var creatingBranch = false
     /// Chosen in the picker; nil follows the project (an app has a build command).
     @State private var isApp: Bool?
 
@@ -59,8 +60,17 @@ struct ProjectSettingsView: View {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: current.repoPath)
                     }
                 }
-                Picker("Base branch for new tasks", selection: project.baseBranch) {
-                    ForEach(branchOptions, id: \.self) { Text($0) }
+                HStack {
+                    Picker("Base branch for new tasks", selection: project.baseBranch) {
+                        ForEach(branchOptions, id: \.self) { Text($0) }
+                    }
+                    Button("New Branch…") { creatingBranch = true }
+                }
+                .sheet(isPresented: $creatingBranch) {
+                    NewBranchSheet(projectID: projectID, branches: branches, source: current.baseBranch) { name in
+                        project.wrappedValue.baseBranch = name
+                        Task { branches = await model.branches(for: projectID) }
+                    }
                 }
             }
 

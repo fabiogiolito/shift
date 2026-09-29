@@ -15,6 +15,9 @@ public protocol GitServicing: Sendable {
     func branches(repo: URL) async throws -> [String]
     func currentBranch(repo: URL) async throws -> String
 
+    /// Creates `branch` at the tip of `source`, checking nothing out. Throws a plain message for an
+    /// invalid or taken name.
+    func createBranch(repo: URL, name: String, from source: String) async throws
     /// Creates `branch` from the current tip of `base` and checks it out in a new worktree at `path`.
     func createWorktree(repo: URL, branch: String, base: String, at path: URL) async throws
     /// Checks out the existing `branch` in a new worktree at `path`, after pruning worktrees whose

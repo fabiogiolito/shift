@@ -365,6 +365,16 @@ final class GitServiceTests: XCTestCase {
         XCTAssertTrue(merged, "fast-forwarded outside the app")
     }
 
+    func testCreateBranchFromSource() async throws {
+        try sh("branch", "develop")
+        try commit("main only")
+        try await service.createBranch(repo: repo, name: "feature/x", from: "develop")
+        XCTAssertEqual(try sh("rev-parse", "feature/x"), try sh("rev-parse", "develop"))
+        XCTAssertEqual(try sh("symbolic-ref", "--short", "HEAD"), "main", "nothing is checked out")
+        do { try await service.createBranch(repo: repo, name: "develop", from: "main"); XCTFail("taken") } catch {}
+        do { try await service.createBranch(repo: repo, name: "bad name", from: "main"); XCTFail("invalid") } catch {}
+    }
+
     /// Moving a task from main to develop takes only its own commits: main's commits stay behind.
     func testRebaseMovesOnlyTheTasksOwnCommits() async throws {
         try sh("branch", "develop")
