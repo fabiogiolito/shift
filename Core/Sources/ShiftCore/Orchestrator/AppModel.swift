@@ -639,6 +639,12 @@ public final class AppModel {
         return await services.store.readLog(taskID: taskID)
     }
 
+    /// The agent's output as a person reads it: its messages, its actions, its errors.
+    public func readableOutput(taskID: TaskItem.ID) async -> String {
+        guard let agent = task(taskID)?.agent else { return "" }
+        return Transcript.readable(await rawOutput(taskID: taskID), agent: agent)
+    }
+
     // MARK: - Runs
 
     private func isCurrent(_ id: TaskItem.ID, _ token: UUID) -> Bool {
@@ -845,7 +851,7 @@ public final class AppModel {
                             $0.description = description ?? $0.description
                         }
                     }
-                case .rawOutput(let output): await services.store.appendLog(taskID: id, text: output)
+                case .rawOutput(let output): await services.store.appendLog(taskID: id, text: output + "\n")
                 case .approvalRequested(let approvalID, let summary):
                     pendingApprovals[id, default: []].append((approvalID, summary))
                     showApproval(id)
