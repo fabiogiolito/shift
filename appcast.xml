@@ -73,5 +73,20 @@
 - The project title in the task list resizes to fit when you switch projects]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.4/Shift-0.1.4.zip" sparkle:edSignature="Tnl4bsEFUotMDkQVKCEbxT2vvqhb85wVfCZwuFgb6z84V0kP4JPEKbSiQhjSdty3ucvVhcg6Z2IMDJIFu9yGDg==" length="3459695" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.5</title>
+      <pubDate>Tue, 29 Sep 2026 15:47:41 +0000</pubDate>
+      <sparkle:version>7</sparkle:version>
+      <sparkle:shortVersionString>0.1.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Pick the model for Claude Code or Codex in project settings or the bottom bar
+- Each task keeps its own base branch, and changing it moves only that task's work
+- Create a new branch from the base picker with New Branch…
+- Push a task's branch to origin from the More menu, or automatically when it finishes
+- Agent output is readable now, with a Raw toggle for the original stream
+- Your new task draft stays put when a task finishes or moves to another section
+- Merging no longer deletes work when a task's base is set to its own branch]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.5/Shift-0.1.5.zip" sparkle:edSignature="f+qIIU9Ixg0JP8lqQLOLGUHQU0sL/HtLMra2fg4HgeD7kawnuaqTp9GHK0nQY+GWnrJkhzoFH9GBoK8aRv1ICA==" length="3544814" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
