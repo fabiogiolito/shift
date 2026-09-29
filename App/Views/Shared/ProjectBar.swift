@@ -8,6 +8,7 @@ struct ProjectBar: View {
     let project: Project
     @State private var branches: [String] = []
     @State private var showingSettings = false
+    @State private var creatingBranch = false
 
     var body: some View {
         // The current value is always offered, so the menu is valid before branches load.
@@ -29,10 +30,12 @@ struct ProjectBar: View {
                     ForEach(branchOptions, id: \.self) { Text($0) }
                 }
                 .pickerStyle(.inline)
+                Divider()
+                Button("New Branch…") { creatingBranch = true }
             } label: {
                 Label(project.baseBranch, systemImage: "arrow.triangle.branch")
             }
-            .help("Base branch")
+            .help("Base branch for new tasks")
 
             Menu {
                 Picker("Agent", selection: binding(\.defaultAgent)) {
@@ -86,7 +89,15 @@ struct ProjectBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
-        .task(id: project.id) { branches = await model.branches(for: project.id) }
+        .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
+        .sheet(isPresented: $creatingBranch) {
+            NewBranchSheet(projectID: project.id, branches: branches, source: project.baseBranch) { name in
+                var updated = project
+                updated.baseBranch = name
+                model.updateProject(updated)
+                Task { branches = await model.branches(for: project.id) }
+            }
+        }
         .task(id: project.defaultAgent) {
             // ponytail: polled; the Claude endpoint rate-limits, so not much more often than this.
             while !Task.isCancelled {
@@ -154,5 +165,73 @@ struct ModelPicker: View {
                 Text(selection).tag(selection)
             }
         }
+    }
+}
+
+/// Asks for a new branch's name and the branch it starts from, and creates it in the project's repo.
+struct NewBranchSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let projectID: Project.ID
+    let branches: [String]
+    let onCreated: (String) -> Void
+    @State private var name = ""
+    @State private var source: String
+    @State private var isCreating = false
+
+    init(projectID: Project.ID, branches: [String], source: String, onCreated: @escaping (String) -> Void) {
+        self.projectID = projectID
+        self.branches = branches.contains(source) ? branches : [source] + branches
+        self.onCreated = onCreated
+        _source = State(initialValue: source)
+    }
+
+    var body: some View {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        Form {
+            TextField("Name", text: $name, prompt: Text("feature/new-homepage"))
+            Picker("From", selection: $source) {
+                ForEach(branches, id: \.self) { Text($0) }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 380)
+        .navigationTitle("New Branch")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Create") {
+                    isCreating = true
+                    Task {
+                        // On failure the sheet stays open; the model's error alert says why.
+                        if await model.createBranch(projectID: projectID, name: trimmed, from: source) {
+                            onCreated(trimmed)
+                            dismiss()
+                        }
+                        isCreating = false
+                    }
+                }
+                .disabled(trimmed.isEmpty || isCreating)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Runs `action` now and each time Shift comes to the front: branches may have been made in a terminal.
+    func onAppearAndActivate(id: some Equatable, _ action: @escaping () async -> Void) -> some View {
+        modifier(ActivationTask(id: id, action: action))
+    }
+}
+
+private struct ActivationTask<ID: Equatable>: ViewModifier {
+    let id: ID
+    let action: () async -> Void
+    @State private var activations = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in activations += 1 }
+            .task(id: "\(id)|\(activations)") { await action() }
     }
 }

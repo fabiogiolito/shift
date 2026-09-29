@@ -9,6 +9,12 @@ struct TaskDetailView: View {
     /// True once the diff has finished sliding in.
     @State private var diffSettled = false
     @State private var confirmingDelete = false
+    /// The base picked in the More menu, waiting for confirmation.
+    @State private var newBase: String?
+    @State private var branches: [String] = []
+    @State private var creatingBranch = false
+    /// What the project's folder has checked out, for a merged task: its base may not be it.
+    @State private var checkedOut: String?
     @State private var isMerging = false
     @State private var changes: Result<DiffSummary, Error>?
     /// nil until first checked.
@@ -74,6 +80,24 @@ struct TaskDetailView: View {
             } message: {
                 Text("Its changes are discarded without merging.")
             }
+            .confirmationDialog("Change the base of “\(task.title)” to \(newBase ?? "")?",
+                                isPresented: Binding(get: { newBase != nil }, set: { if !$0 { newBase = nil } })) {
+                Button("Change Base") {
+                    if let base = newBase { Task { await model.changeBase(taskID: taskID, to: base) } }
+                }
+            } message: {
+                Text("Its own commits move onto \(newBase ?? ""), without what \(task.base(in: project)) has, and Merge puts them there. If they conflict, the agent resolves it.")
+            }
+            .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
+            .sheet(isPresented: $creatingBranch) {
+                NewBranchSheet(projectID: project.id, branches: branches, source: task.base(in: project)) { name in
+                    newBase = name
+                    Task { branches = await model.branches(for: project.id) }
+                }
+            }
+            .task(id: task.status) {
+                checkedOut = task.status == .merged ? await model.checkedOutBranch(projectID: project.id) : nil
+            }
         }
     }
 
@@ -132,9 +156,13 @@ struct TaskDetailView: View {
     @ViewBuilder private func statusLine(_ task: TaskItem, _ project: Project) -> some View {
         switch task.status {
         case .conflict:
-            Text("Its changes conflict with changes made to \(project.baseBranch) since it started.").foregroundStyle(.secondary)
+            Text("Its changes conflict with changes made to \(task.base(in: project)) since it started.").foregroundStyle(.secondary)
         case .merged:
-            Text("Merged into \(project.baseBranch)").foregroundStyle(.secondary)
+            let base = task.base(in: project)
+            // Merged into a branch the folder does not show: say so, or the work looks gone.
+            Text(checkedOut == nil || checkedOut == base ? "Merged into \(base)"
+                 : "Merged into \(base). The project folder has \(checkedOut ?? "") checked out, so it doesn't show there.")
+                .foregroundStyle(.secondary)
         default:
             EmptyView()
         }
@@ -147,7 +175,7 @@ struct TaskDetailView: View {
         let canBuild = project.isApp && task.status != .merged
         if task.serverURL != nil || hasPrimary || canBuild {
             HStack {
-                primaryAction(task)
+                primaryAction(task, project)
                 if canBuild {
                     buildButton
                 } else if let server = task.serverURL, let port = task.port {
@@ -207,9 +235,9 @@ struct TaskDetailView: View {
         }
     }
 
-    @ViewBuilder private func primaryAction(_ task: TaskItem) -> some View {
+    @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         if task.status == .completed {
-            Button("Merge") {
+            Button("Merge into \(task.base(in: project))") {
                 isMerging = true
                 Task { await model.merge(taskID: taskID); isMerging = false }
             }
@@ -338,6 +366,18 @@ struct TaskDetailView: View {
                     Button("Server Log") { output = .serverLog }
                 }
                 Button("Agent Output") { output = .agentOutput }
+                // The current base is always offered, so the picker is valid before branches load.
+                let base = task.base(in: project)
+                Menu("Base Branch") {
+                    Picker("Base Branch", selection: Binding(get: { base }, set: { if $0 != base { newBase = $0 } })) {
+                        ForEach(branches.contains(base) ? branches : [base] + branches, id: \.self) { Text($0) }
+                    }
+                    .pickerStyle(.inline)
+                    Divider()
+                    Button("New Branch…") { creatingBranch = true }
+                }
+                .disabled(task.status == .working)
+                .help(task.status == .working ? "Stop the task to change its base." : "The branch this task merges into")
                 if let remote = model.pushStates[project.id]?.remote {
                     Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
                         .help("Push \(task.branch) to \(remote)")

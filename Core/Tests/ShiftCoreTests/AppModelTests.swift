@@ -562,6 +562,72 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.lastError)
     }
 
+    // MARK: Base branches
+
+    func testTaskKeepsItsBaseWhenTheProjectDefaultChanges() async {
+        git.branchList = ["main", "develop"]
+        let id = await createCompletedTask()
+        project.baseBranch = "develop"
+        model.updateProject(project)
+        await model.merge(taskID: id)
+        XCTAssertTrue(git.calls.contains("merge shift/\(id) into main"))
+    }
+
+    func testChangeBaseMovesTheWorkAndMergesThere() async {
+        git.branchList = ["main", "develop"]
+        let id = await createCompletedTask()
+        let folder = model.task(id)!.worktreeURL.lastPathComponent
+        await model.changeBase(taskID: id, to: "develop")
+        XCTAssertTrue(git.calls.contains("rebase \(folder) from main onto develop"))
+        XCTAssertEqual(model.task(id)?.baseBranch, "develop")
+        XCTAssertEqual(status(id), .completed)
+        await model.merge(taskID: id)
+        XCTAssertTrue(git.calls.contains("merge shift/\(id) into develop"))
+    }
+
+    func testChangeBaseConflictGoesToTheAgent() async {
+        git.branchList = ["main", "develop"]
+        git.rebaseClean = false
+        let id = await createCompletedTask()
+        await model.changeBase(taskID: id, to: "develop")
+        XCTAssertEqual(model.task(id)?.baseBranch, "develop")
+        XCTAssertEqual(model.task(id)?.isResolvingConflict, true)
+        await waitForStatus(id, .completed)
+    }
+
+    func testMergeKeepsABranchWhoseWorkIsNotInBase() async {
+        let id = await createCompletedTask()
+        git.contained = false
+        await model.merge(taskID: id)
+        XCTAssertEqual(status(id), .merged)
+        XCTAssertTrue(git.existingBranches.contains("shift/\(id)"))
+        XCTAssertNotNil(model.lastError)
+    }
+
+    func testMergeIntoAMissingBaseExplains() async {
+        git.branchList = ["main", "develop"]
+        let id = await createCompletedTask()
+        git.branchList = ["develop"]
+        await model.merge(taskID: id)
+        XCTAssertEqual(status(id), .completed)
+        XCTAssertFalse(git.calls.contains { $0.hasPrefix("merge") })
+        XCTAssertEqual(model.lastError?.contains("main no longer exists"), true)
+    }
+
+    func testPushCoversEveryBase() async {
+        git.branchList = ["main", "develop"]
+        _ = await createCompletedTask()
+        project.baseBranch = "develop"
+        model.updateProject(project)
+        _ = await createCompletedTask()
+        git.unpushed = 1
+        await model.refreshPushState(projectID: project.id)
+        XCTAssertEqual(model.pushStates[project.id], .init(remote: "origin", unpushed: 2, branches: ["develop", "main"]))
+        await model.push(projectID: project.id)
+        XCTAssertTrue(git.calls.contains("push develop to origin"))
+        XCTAssertTrue(git.calls.contains("push main to origin"))
+    }
+
     // MARK: Push
 
     func testPushStateFollowsTheRemote() async {
@@ -572,7 +638,7 @@ final class AppModelTests: XCTestCase {
         git.remoteName = "origin"
         git.unpushed = 2
         await model.refreshPushState(projectID: project.id)
-        XCTAssertEqual(model.pushStates[project.id], .init(remote: "origin", unpushed: 2))
+        XCTAssertEqual(model.pushStates[project.id], .init(remote: "origin", unpushed: 2, branches: ["main"]))
     }
 
     func testCompletedTaskPushesItsBranchWhenTheProjectSaysSo() async {
@@ -621,7 +687,7 @@ final class AppModelTests: XCTestCase {
         git.pushError = MockError("Couldn't sign in to github.com. Check your Git credentials.")
         await model.push(projectID: project.id)
         XCTAssertEqual(model.lastError, "Couldn't sign in to github.com. Check your Git credentials.")
-        XCTAssertEqual(model.pushStates[project.id], .init(remote: "origin", unpushed: 2))
+        XCTAssertEqual(model.pushStates[project.id], .init(remote: "origin", unpushed: 2, branches: ["main"]))
     }
 
     func testMergeConflictThenResolveCompletes() async {

@@ -365,6 +365,53 @@ final class GitServiceTests: XCTestCase {
         XCTAssertTrue(merged, "fast-forwarded outside the app")
     }
 
+    func testCreateBranchFromSource() async throws {
+        try sh("branch", "develop")
+        try commit("main only")
+        try await service.createBranch(repo: repo, name: "feature/x", from: "develop")
+        XCTAssertEqual(try sh("rev-parse", "feature/x"), try sh("rev-parse", "develop"))
+        XCTAssertEqual(try sh("symbolic-ref", "--short", "HEAD"), "main", "nothing is checked out")
+        do { try await service.createBranch(repo: repo, name: "develop", from: "main"); XCTFail("taken") } catch {}
+        do { try await service.createBranch(repo: repo, name: "bad name", from: "main"); XCTFail("invalid") } catch {}
+    }
+
+    /// Moving a task from main to develop takes only its own commits: main's commits stay behind.
+    func testRebaseMovesOnlyTheTasksOwnCommits() async throws {
+        try sh("branch", "develop")
+        try write("develop.txt", "d\n"); try sh("checkout", "-q", "develop"); try sh("add", "-A"); try sh("commit", "-qm", "develop")
+        try sh("checkout", "-q", "main")
+        let worktree = try await task("t") { try write("task.txt", "t\n", in: $0) }
+        try write("main-only.txt", "m\n"); try sh("add", "-A"); try sh("commit", "-qm", "main only")
+        try sh("merge", "-q", "--no-edit", "main", in: worktree) // the task picks up main's newer work too
+
+        let clean = try await service.rebase(worktree: worktree, from: "main", onto: "develop")
+        XCTAssertTrue(clean)
+        XCTAssertEqual(read("task.txt", in: worktree), "t\n")
+        XCTAssertEqual(read("develop.txt", in: worktree), "d\n")
+        XCTAssertNil(read("main-only.txt", in: worktree), "main's own commits must not come along")
+    }
+
+    func testRebaseConflictLeavesTheWorktreeAsItWas() async throws {
+        try sh("branch", "develop")
+        let worktree = try await task("t") { try write("a.txt", "task\n", in: $0) }
+        try sh("checkout", "-q", "develop"); try write("a.txt", "develop\n"); try sh("commit", "-qam", "d")
+        try sh("checkout", "-q", "main")
+        let head = try sh("rev-parse", "HEAD", in: worktree)
+        let clean = try await service.rebase(worktree: worktree, from: "main", onto: "develop")
+        XCTAssertFalse(clean)
+        XCTAssertEqual(try sh("rev-parse", "HEAD", in: worktree), head)
+        XCTAssertEqual(try sh("status", "--porcelain", in: worktree), "")
+    }
+
+    /// Found end to end: a task's own branch picked as base "merged" into itself, and cleanup deleted it.
+    func testMergeIntoItselfThrows() async throws {
+        try await service.createWorktree(repo: repo, branch: "t", base: "main", at: root.appendingPathComponent("t"))
+        do {
+            _ = try await service.merge(repo: repo, branch: "t", into: "t", message: "m")
+            XCTFail("merging a branch into itself must fail")
+        } catch {}
+    }
+
     // MARK: - Merge
 
     func testCleanMergeWithBaseCheckedOutKeepsUncommittedChanges() async throws {

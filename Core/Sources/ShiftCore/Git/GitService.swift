@@ -36,6 +36,16 @@ public struct GitService: GitServicing {
 
     // MARK: - Worktrees
 
+    public func createBranch(repo: URL, name: String, from source: String) async throws {
+        guard (try? await run(["check-ref-format", "--branch", name], in: repo))?.status == 0 else {
+            throw GitError(message: "“\(name)” is not a valid branch name.")
+        }
+        guard await !branchExists(repo: repo, branch: name) else {
+            throw GitError(message: "A branch named \(name) already exists.")
+        }
+        try await git(["branch", name, "refs/heads/\(source)"], in: repo)
+    }
+
     public func createWorktree(repo: URL, branch: String, base: String, at path: URL) async throws {
         try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
         // A worktree that used to be at `path` and was deleted by hand still blocks the path until pruned.
@@ -229,6 +239,19 @@ public struct GitService: GitServicing {
         return moves.split(separator: "\n").count > 1
     }
 
+    public func isContained(repo: URL, branch: String, in base: String) async throws -> Bool {
+        try await isAncestor(repo: repo, branch: branch, of: base)
+    }
+
+    public func rebase(worktree: URL, from oldBase: String, onto newBase: String) async throws -> Bool {
+        let hasOld = (try? await run(["show-ref", "--verify", "--quiet", "refs/heads/\(oldBase)"], in: worktree))?.status == 0
+        let forkPoint = try await git(["merge-base", hasOld ? oldBase : newBase, "HEAD"], in: worktree)
+        let out = try await run(["rebase", "--onto", newBase, forkPoint], in: worktree, env: ["GIT_EDITOR": "true"])
+        guard out.status != 0 else { return true }
+        _ = try? await run(["rebase", "--abort"], in: worktree)
+        return false
+    }
+
     private func isAncestor(repo: URL, branch: String, of base: String) async throws -> Bool {
         let out = try await run(["merge-base", "--is-ancestor", branch, base], in: repo)
         if out.status > 1 { throw GitError(message: out.stderr) }
@@ -240,6 +263,10 @@ public struct GitService: GitServicing {
     /// Only then is `base` moved: by a fast-forward where it is checked out (which keeps
     /// uncommitted changes, or refuses without touching anything), by update-ref otherwise.
     public func merge(repo: URL, branch: String, into base: String, message: String) async throws -> MergeResult {
+        // Merged into itself it would count as merged, and cleaning up would delete it with its work.
+        guard branch != base else {
+            throw GitError(message: "\(branch) is the base branch itself. Pick another base branch to merge into.")
+        }
         guard await branchExists(repo: repo, branch: base) else {
             throw GitError(message: "The branch \(base) no longer exists in \(repo.lastPathComponent).")
         }

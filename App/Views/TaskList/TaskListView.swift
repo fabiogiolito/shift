@@ -16,12 +16,16 @@ struct TaskListView: View {
             ("Recently Merged", Array(tasks.filter { $0.status == .merged }
                 .sorted { ($0.mergedAt ?? .distantPast) > ($1.mergedAt ?? .distantPast) }.prefix(10))),
         ]
-        List(selection: $selection) {
-            ForEach(sections, id: \.0) { section($0.0, $0.1) }
-        }
         // The list doesn't re-measure rows and headers that are inserted or moved in place (a task moving to a new
         // section came out clipped), so a change in which task sits in which section rebuilds it at the right sizes.
-        .id(sections.map { "\($0.0):\($0.1.map(\.id))" }.joined())
+        // In a ZStack so the rebuild stops there: bars attached to the list itself are rebuilt with it, and the
+        // new task field would lose what is being typed in it, and its focus.
+        ZStack {
+            List(selection: $selection) {
+                ForEach(sections, id: \.0) { section($0.0, $0.1) }
+            }
+            .id(sections.map { "\($0.0):\($0.1.map(\.id))" }.joined())
+        }
         // Sidebar style keeps section headers from pinning below the toolbar, so the toolbar's edge line
         // lines up with the detail column's. Its sidebar background is dropped: this is the content column.
         .listStyle(.sidebar)
@@ -56,14 +60,15 @@ struct TaskListView: View {
         }
         // Commits may have been made or pushed outside Shift while the user was away.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in activations += 1 }
-        .task(id: "\(project.id)|\(project.baseBranch)|\(activations)") {
+        .task(id: "\(project.id)|\(model.bases(of: project.id))|\(activations)") {
             await model.refreshPushState(projectID: project.id)
         }
     }
 
     private func pushButton(_ state: AppModel.PushState) -> some View {
         let title = state.unpushed == 0 ? "Nothing to push"
-            : "Push \(state.unpushed) \(state.unpushed == 1 ? "commit" : "commits") to \(state.remote)/\(project.baseBranch)"
+            : "Push \(state.unpushed) \(state.unpushed == 1 ? "commit" : "commits") to "
+                + state.branches.map { "\(state.remote)/\($0)" }.formatted(.list(type: .and))
         return Button {
             Task { await model.push(projectID: project.id) }
         } label: {

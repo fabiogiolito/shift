@@ -63,6 +63,13 @@ final class MockGit: GitServicing {
     func branches(repo: URL) async throws -> [String] { branchList }
     func currentBranch(repo: URL) async throws -> String { current }
 
+    var createBranchError: Error?
+    func createBranch(repo: URL, name: String, from source: String) async throws {
+        if let createBranchError { throw createBranchError }
+        branchList.append(name)
+        calls.append("branch \(name) from \(source)")
+    }
+
     // Worktree folders are real (the orchestrator checks for them), so tests keep them in a temp directory.
     func createWorktree(repo: URL, branch: String, base: String, at path: URL) async throws {
         await createGate?.wait()
@@ -118,8 +125,17 @@ final class MockGit: GitServicing {
     }
 
     func isTracked(repo: URL, path: String) async -> Bool { trackedPaths.contains(path) }
+
+    var contained = true
+    func isContained(repo: URL, branch: String, in base: String) async throws -> Bool { contained }
+
+    var rebaseClean = true
+    func rebase(worktree: URL, from oldBase: String, onto newBase: String) async throws -> Bool {
+        calls.append("rebase \(worktree.lastPathComponent) from \(oldBase) onto \(newBase)")
+        return rebaseClean
+    }
     func isMerged(repo: URL, branch: String, base: String) async throws -> Bool { merged }
-    func branchExists(repo: URL, branch: String) async -> Bool { existingBranches.contains(branch) }
+    func branchExists(repo: URL, branch: String) async -> Bool { existingBranches.contains(branch) || branchList.contains(branch) }
 
     var remoteName: String? = "origin"
     var unpushed = 0
