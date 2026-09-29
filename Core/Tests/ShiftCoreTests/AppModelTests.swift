@@ -575,6 +575,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.pushStates[project.id], .init(remote: "origin", unpushed: 2))
     }
 
+    func testCompletedTaskPushesItsBranchWhenTheProjectSaysSo() async {
+        let first = await createCompletedTask()
+        XCTAssertFalse(git.calls.contains("push shift/\(first) to origin"))
+
+        project.pushTaskBranches = true
+        model.updateProject(project)
+        let second = await createCompletedTask()
+        await waitFor("the branch push") { self.git.calls.contains("push shift/\(second) to origin") }
+        XCTAssertNil(model.lastError)
+    }
+
     func testMergeRefreshesPushState() async {
         let id = await createCompletedTask()
         git.unpushed = 1

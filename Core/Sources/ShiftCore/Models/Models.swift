@@ -133,10 +133,13 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var permissions: AgentPermissions
     /// The model each agent runs, by `AgentModel.id`. No entry: the agent's own default.
     public var models: [AgentKind: String]
+    /// Push each task's branch to the remote when the task completes.
+    public var pushTaskBranches: Bool
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
-                buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:]) {
+                buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
+                pushTaskBranches: Bool = false) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -147,6 +150,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.buildCommand = buildCommand
         self.permissions = permissions
         self.models = models
+        self.pushTaskBranches = pushTaskBranches
     }
 
     public init(from decoder: Decoder) throws {
@@ -162,6 +166,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         buildCommand = try values.decodeIfPresent(String.self, forKey: .buildCommand) ?? ""
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
         models = try values.decodeIfPresent([AgentKind: String].self, forKey: .models) ?? [:]
+        pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
     }
 
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }
