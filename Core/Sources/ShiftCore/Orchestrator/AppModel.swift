@@ -11,6 +11,8 @@ public final class AppModel {
     public private(set) var installedAgents: [AgentKind: AgentInstallation] = [:]
     /// Subscription limits per agent, as of the last `refreshUsage`.
     public private(set) var usage: [AgentKind: AgentUsage] = [:]
+    /// The models each installed agent offers, besides its default.
+    public private(set) var models: [AgentKind: [AgentModel]] = [:]
     /// Set when an operation fails outside of any task (e.g. adding a project). UI shows it as an alert.
     public var lastError: String?
     /// Whether each project's base branch has commits to push. No entry: the repo has no remote (or
@@ -116,6 +118,7 @@ public final class AppModel {
         self.projects = previewProjects
         self.tasks = tasks
         self.installedAgents = [.claudeCode: .init(path: "/usr/local/bin/claude"), .codex: .init(path: "/usr/local/bin/codex")]
+        self.models = [.claudeCode: ClaudeCodeAdapter.models]
     }
 
     // MARK: Queries
@@ -163,6 +166,7 @@ public final class AppModel {
 
         for kind in AgentKind.allCases {
             installedAgents[kind] = await services.agents[kind]?.detect()
+            models[kind] = await services.agents[kind]?.models()
         }
         Task { await services.notifier.requestAuthorization() }
 
@@ -804,6 +808,7 @@ public final class AppModel {
             let request = AgentRequest(prompt: text, sessionID: task.sessionID, worktree: task.worktreeURL,
                                        environment: task.port.map { ["PORT": String($0)] } ?? [:],
                                        permissions: project(task.projectID)?.permissions ?? .bypass,
+                                       model: project(task.projectID)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        approvals: channel)
             approvalChannels[id] = channel

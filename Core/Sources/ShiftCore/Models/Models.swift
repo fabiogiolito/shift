@@ -1,11 +1,23 @@
 import Foundation
 
-public enum AgentKind: String, Codable, CaseIterable, Sendable, Identifiable {
+public enum AgentKind: String, Codable, CodingKeyRepresentable, CaseIterable, Sendable, Identifiable {
     case claudeCode, codex
 
     public var id: String { rawValue }
     public var displayName: String { self == .claudeCode ? "Claude Code" : "Codex" }
     public var executableName: String { self == .claudeCode ? "claude" : "codex" }
+}
+
+/// A model an agent can run, e.g. `opus` / "Opus".
+public struct AgentModel: Hashable, Identifiable, Sendable {
+    /// What the agent's CLI takes as its model.
+    public var id: String
+    public var name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
 }
 
 /// How much of the user's agent subscription is used, per limit window (5 hours, a week…).
@@ -119,10 +131,12 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// `SHIFT_WORKTREE` and `SHIFT_TASK` in the environment.
     public var buildCommand: String
     public var permissions: AgentPermissions
+    /// The model each agent runs, by `AgentModel.id`. No entry: the agent's own default.
+    public var models: [AgentKind: String]
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
-                buildCommand: String = "", permissions: AgentPermissions = .bypass) {
+                buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:]) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -132,6 +146,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.setupCommand = setupCommand
         self.buildCommand = buildCommand
         self.permissions = permissions
+        self.models = models
     }
 
     public init(from decoder: Decoder) throws {
@@ -146,6 +161,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         setupCommand = try values.decodeIfPresent(String.self, forKey: .setupCommand) ?? ""
         buildCommand = try values.decodeIfPresent(String.self, forKey: .buildCommand) ?? ""
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
+        models = try values.decodeIfPresent([AgentKind: String].self, forKey: .models) ?? [:]
     }
 
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }

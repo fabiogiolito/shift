@@ -44,7 +44,11 @@ public struct CodexAdapter: AgentAdapter {
 
     /// The app server takes the session and the prompt over stdin.
     static func arguments(for request: AgentRequest, gitDirectory: String?) -> [String] {
-        ["app-server"] + autonomyArguments(request.permissions, gitDirectory: gitDirectory)
+        var arguments = ["app-server"] + autonomyArguments(request.permissions, gitDirectory: gitDirectory)
+        if let model = request.model, let value = try? tomlEncoder.encode(model) {
+            arguments += ["-c", "model=" + String(decoding: value, as: UTF8.self)]
+        }
+        return arguments
     }
 
     static func gitCommonDirectory(of worktree: URL) -> String? {
@@ -58,6 +62,26 @@ public struct CodexAdapter: AgentAdapter {
 
     public func detect() async -> AgentInstallation? {
         await Task.detached { AgentEnvironment.detect(.codex) }.value
+    }
+
+    /// The models Codex lists in its picker, from the catalog it caches in its home directory.
+    /// ponytail: empty until Codex has run once and fetched it; `model/list` over app-server if that matters.
+    public func models() async -> [AgentModel] {
+        let home = AgentEnvironment.loginShell["CODEX_HOME"]
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        guard let data = FileManager.default.contents(atPath: home + "/models_cache.json") else { return [] }
+        return Self.models(fromCache: data)
+    }
+
+    /// `{"models": [{"slug": "gpt-6-astra", "display_name": "GPT-6-Astra", "visibility": "list", "priority": 1}, …]}`
+    static func models(fromCache data: Data) -> [AgentModel] {
+        let models = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["models"] as? [[String: Any]] ?? []
+        return models
+            .filter { $0["visibility"] as? String == "list" }
+            .sorted { ($0["priority"] as? Int ?? .max) < ($1["priority"] as? Int ?? .max) }
+            .compactMap { model in
+                (model["slug"] as? String).map { AgentModel(id: $0, name: model["display_name"] as? String ?? $0) }
+            }
     }
 
     public func run(_ request: AgentRequest) -> AsyncStream<AgentEvent> {

@@ -290,6 +290,19 @@ final class AgentAdapterTests: XCTestCase {
                        "The user denied this action.")
     }
 
+    func testModelArguments() {
+        let request = AgentRequest(prompt: "p", worktree: URL(fileURLWithPath: "/tmp/wt"), model: "opus")
+        let claude = ClaudeCodeAdapter.arguments(for: request)
+        XCTAssertEqual(claude.firstIndex(of: "--model").map { claude[$0 + 1] }, "opus")
+        XCTAssertEqual(CodexAdapter.arguments(for: request, gitDirectory: nil).suffix(2), ["-c", #"model="opus""#])
+        XCTAssertFalse(ClaudeCodeAdapter.arguments(for: AgentRequest(prompt: "p", worktree: request.worktree)).contains("--model"))
+    }
+
+    func testCodexModelsFromCache() {
+        let cache = Data(#"{"models": [{"slug": "b", "display_name": "B", "visibility": "list", "priority": 2}, {"slug": "hidden", "visibility": "hide", "priority": 0}, {"slug": "a", "display_name": "A", "visibility": "list", "priority": 1}]}"#.utf8)
+        XCTAssertEqual(CodexAdapter.models(fromCache: cache), [AgentModel(id: "a", name: "A"), AgentModel(id: "b", name: "B")])
+    }
+
     // MARK: Codex
 
     func testCodexArguments() {
