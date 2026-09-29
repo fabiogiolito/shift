@@ -103,6 +103,84 @@ extension AppModel {
         return model
     }
 
+    /// Upbeat sample data for promotional screenshots: busy, healthy projects.
+    /// Run the app with SHIFT_PREVIEW=promo to browse it.
+    public static func promo() -> AppModel {
+        let store = Project(name: "Storefront", repoPath: "/Users/sam/Sites/storefront", baseBranch: "main",
+                            serverCommand: "pnpm dev --port $PORT")
+        let api = Project(name: "Checkout API", repoPath: "/Users/sam/Sites/checkout-api", baseBranch: "main",
+                          defaultAgent: .codex)
+        let docs = Project(name: "Docs", repoPath: "/Users/sam/Sites/docs", baseBranch: "main")
+
+        func task(_ id: Int, _ title: String, _ status: TaskStatus, in project: Project = store, prompt: String,
+                  description: String, summary: String? = nil, question: String? = nil,
+                  activity: String? = nil, minutes: Double = 4) -> TaskItem {
+            var task = TaskItem(id: id, projectID: project.id, title: title, status: status, agent: project.defaultAgent,
+                                branch: "shift/\(id)", worktreePath: "/Users/sam/.shift/worktrees/storefront/\(id)",
+                                sessionID: "preview", port: status == .merged ? nil : 3000 + id % 100,
+                                prompts: [Prompt(text: prompt)], summary: summary, question: question, activity: activity,
+                                workingSince: status == .working ? Date().addingTimeInterval(-60 * minutes) : nil,
+                                mergedAt: status == .merged ? Date().addingTimeInterval(-3600 * minutes) : nil)
+            task.description = description
+            return task
+        }
+
+        var tasks = [
+            task(101, "Tighter board spacing", .completed,
+                 prompt: "Board items feel too far apart. Tighten the gap and make it a single variable.",
+                 description: "Tightens the space between board items and makes the gap one variable.",
+                 summary: "Changed the gap between board items from 16px to 8px and introduced --board-gap, so spacing is adjusted in one place."),
+            task(102, "Dark mode for product pages", .completed,
+                 prompt: "Product pages ignore dark mode. Make them follow the system appearance.",
+                 description: "Product pages now follow the system's light or dark appearance.",
+                 summary: "Product pages use the theme tokens and follow the system appearance; images get a subtle border in dark mode."),
+            task(103, "Wishlist button", .working,
+                 prompt: "Add a heart button to product cards that saves the item to the wishlist.",
+                 description: "Lets shoppers save any product to their wishlist from the grid.",
+                 activity: "Writing tests for WishlistButton…", minutes: 6),
+            task(104, "Faster hero images", .working,
+                 prompt: "The home page hero loads slowly. Serve responsive AVIF images with a blurred placeholder.",
+                 description: "Serves smaller, responsive hero images with a blurred placeholder.",
+                 activity: "Converting hero images to AVIF…", minutes: 3),
+            task(105, "Saved addresses at checkout", .working,
+                 prompt: "Returning customers should be able to pick a saved address at checkout.",
+                 description: "Lets returning customers pick a saved address at checkout.",
+                 activity: "Running the test suite…", minutes: 11),
+            task(106, "⌘K product search", .working,
+                 prompt: "Add a ⌘K command palette that searches products and categories.",
+                 description: "Opens a quick product search from anywhere with ⌘K.",
+                 activity: "Adding keyboard navigation to results…", minutes: 2),
+            task(107, "Empty cart illustration", .needsInput,
+                 prompt: "The empty cart page is just text. Make it friendlier.",
+                 description: "Replaces the plain empty cart message with an illustration and suggestions.",
+                 question: "Should the empty cart suggest recently viewed products, or this week's bestsellers?"),
+            task(98, "Sticky header on scroll", .merged,
+                 prompt: "Keep the header visible when scrolling down long pages.",
+                 description: "Keeps the header pinned while scrolling.", minutes: 2),
+            task(97, "Fix cart total rounding", .merged,
+                 prompt: "Cart totals are sometimes a cent off. Fix the rounding.",
+                 description: "Totals are computed in cents, so they're never a cent off.", minutes: 5),
+
+            task(201, "Retry failed webhooks", .working, in: api,
+                 prompt: "Retry failed outgoing webhooks with exponential backoff.",
+                 description: "Retries failed webhooks with backoff instead of dropping them.",
+                 activity: "Updating the delivery worker…", minutes: 8),
+            task(202, "Rate limit by API key", .completed, in: api,
+                 prompt: "Rate limit requests per API key, 100 per minute.",
+                 description: "Limits each API key to 100 requests a minute.",
+                 summary: "Added a per-key token bucket in Redis; responses include RateLimit headers and 429s when exceeded."),
+
+            task(301, "Search across all guides", .working, in: docs,
+                 prompt: "Add full-text search across every guide.",
+                 description: "Adds full-text search across every guide.",
+                 activity: "Building the search index…", minutes: 5),
+        ]
+        tasks[6].options = ["Recently viewed products", "This week's bestsellers"]
+        let model = AppModel(previewProjects: [store, api, docs], tasks: tasks)
+        model.pushStates = [store.id: .init(remote: "origin", unpushed: 2), api.id: .init(remote: "origin", unpushed: 0)]
+        return model
+    }
+
     /// Preview servers: blocked tasks show a stopped server, to show that state.
     static func previewServerRunning(_ task: TaskItem?) -> Bool {
         guard let task, task.port != nil else { return false }

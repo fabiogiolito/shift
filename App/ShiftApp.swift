@@ -90,25 +90,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var openWindow: OpenWindowAction?
     #if UPDATER
     /// Release builds only (see project.yml). Checks the feed in `SUFeedURL` in the background.
-    let updater: SPUStandardUpdaterController? = ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == "1"
+    let updater: SPUStandardUpdaterController? = ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] != nil
         ? nil
         : SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     #endif
     /// Launch reconciles every task itself, so the first check waits for the next activation.
     private var lastMergeCheck = Date()
 
-    // SHIFT_PREVIEW=1 launches with sample data and no side effects.
-    lazy var model: AppModel = ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == "1"
-        ? .preview()
-        : .live(onOpenTask: { [weak self] taskID in
+    // SHIFT_PREVIEW=1 launches with sample data and no side effects; SHIFT_PREVIEW=promo with screenshot data.
+    lazy var model: AppModel = switch ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] {
+    case "1": .preview()
+    case "promo": .promo()
+    default: .live(onOpenTask: { [weak self] taskID in
             // ContentView reads the selection from here, whether its window is open or opens now.
             UserDefaults.standard.set(taskID, forKey: "selectedTask")
             self?.showWindow()
         })
+    }
 
     func showWindow() {
         NSApp.activate()
         openWindow?(id: "main")
+    }
+
+    /// SHIFT_APPEARANCE=dark forces dark mode, for screenshots.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        if ProcessInfo.processInfo.environment["SHIFT_APPEARANCE"] == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }
     }
 
     /// Tasks keep running when the window is closed.
