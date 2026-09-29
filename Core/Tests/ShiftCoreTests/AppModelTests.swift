@@ -116,7 +116,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(agent.requests[0].sessionID)
         XCTAssertEqual(agent.requests[0].prompt, "Set the gap to 4px. Thanks!")
         XCTAssertEqual(agent.requests[0].environment["PORT"], "3001")
-        XCTAssertEqual(store.logs[3001], "raw")
+        XCTAssertEqual(store.logs[3001], "raw\n")
         XCTAssertEqual(notifier.notifications, [.init(title: "Set the gap to 4px is ready", body: "Gap is 4px", taskID: 3001)])
         XCTAssertEqual(notifier.badges.last, 1)
         XCTAssertEqual(store.state.tasks, model.tasks)

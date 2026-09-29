@@ -656,3 +656,17 @@ final class AgentAdapterTests: XCTestCase {
         return (events, sessions, activities, finished)
     }
 }
+
+final class TranscriptTests: XCTestCase {
+    func testClaudeLogReadsAsMessagesAndActions() {
+        // Glued lines, as earlier builds logged them.
+        let log = #"$ pnpm install"# + "\n"
+            + #"{"type":"system","subtype":"init","session_id":"s"}"#
+            + #"{"type":"assistant","message":{"content":[{"type":"text","text":"SHIFT_TITLE: X\nLooking."}]},"parent_tool_use_id":null}"#
+            + #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/a/B.swift"}}]}}"#
+            + #"{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"No such file\nmore"}]}}"#
+            + #"{"type":"result","result":"Looking.","is_error":false}"#
+        XCTAssertEqual(Transcript.readable(log, agent: .claudeCode),
+                       "$ pnpm install\n\nLooking.\n\n→ Reading B.swift\n✗ No such file\n\n——— Turn finished")
+    }
+}
