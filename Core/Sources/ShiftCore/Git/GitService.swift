@@ -240,6 +240,10 @@ public struct GitService: GitServicing {
     /// Only then is `base` moved: by a fast-forward where it is checked out (which keeps
     /// uncommitted changes, or refuses without touching anything), by update-ref otherwise.
     public func merge(repo: URL, branch: String, into base: String, message: String) async throws -> MergeResult {
+        // Merged into itself it would count as merged, and cleaning up would delete it with its work.
+        guard branch != base else {
+            throw GitError(message: "\(branch) is the base branch itself. Pick another base branch to merge into.")
+        }
         guard await branchExists(repo: repo, branch: base) else {
             throw GitError(message: "The branch \(base) no longer exists in \(repo.lastPathComponent).")
         }

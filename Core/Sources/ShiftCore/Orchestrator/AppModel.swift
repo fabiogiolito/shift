@@ -270,9 +270,11 @@ public final class AppModel {
         changed()
     }
 
+    /// Branches that can be the project's base: not its tasks' own branches, which merging would delete.
     public func branches(for projectID: Project.ID) async -> [String] {
         guard let services, let project = project(projectID) else { return [] }
-        return (try? await services.git.branches(repo: project.repoURL)) ?? []
+        let taskBranches = Set(tasks(in: projectID).map(\.branch))
+        return ((try? await services.git.branches(repo: project.repoURL)) ?? []).filter { !taskBranches.contains($0) }
     }
 
     /// Names of agent instruction files found in the repo root, e.g. ["AGENTS.md", "CLAUDE.md"].

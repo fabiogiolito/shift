@@ -365,6 +365,15 @@ final class GitServiceTests: XCTestCase {
         XCTAssertTrue(merged, "fast-forwarded outside the app")
     }
 
+    /// Found end to end: a task's own branch picked as base "merged" into itself, and cleanup deleted it.
+    func testMergeIntoItselfThrows() async throws {
+        try await service.createWorktree(repo: repo, branch: "t", base: "main", at: root.appendingPathComponent("t"))
+        do {
+            _ = try await service.merge(repo: repo, branch: "t", into: "t", message: "m")
+            XCTFail("merging a branch into itself must fail")
+        } catch {}
+    }
+
     // MARK: - Merge
 
     func testCleanMergeWithBaseCheckedOutKeepsUncommittedChanges() async throws {
