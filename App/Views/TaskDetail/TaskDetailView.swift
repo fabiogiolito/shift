@@ -233,32 +233,29 @@ struct TaskDetailView: View {
                 }
                 .font(.subheadline.weight(.semibold))
                 // Scrolls on its own, showing at most 4.5 files so it's clear there are more.
-                GroupBox {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(changes.files) { file in
-                                HStack {
-                                    Label(file.path, systemImage: fileSymbol(file.path)).lineLimit(1).truncationMode(.middle)
-                                    Spacer()
-                                    if file.isBinary { Text("Binary").foregroundStyle(.secondary) }
-                                    else if file.kind == .added { Text("Added").foregroundStyle(.green) }
-                                    else if file.kind == .deleted { Text("Deleted").foregroundStyle(.red) }
-                                    else { counts(file.additions, file.deletions) }
-                                }
-                                .padding(.vertical, 8)
-                                if file != changes.files.last { Divider() }
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(changes.files) { file in
+                            HStack {
+                                Label(file.path, systemImage: fileSymbol(file.path)).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                if file.isBinary { Text("Binary").foregroundStyle(.secondary) }
+                                else if file.kind == .added { Text("Added").foregroundStyle(.green) }
+                                else if file.kind == .deleted { Text("Deleted").foregroundStyle(.red) }
+                                else { counts(file.additions, file.deletions) }
                             }
+                            .padding(.vertical, 8)
+                            if file != changes.files.last { Divider() }
                         }
-                        .padding(.horizontal, 8)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { changesHeight = $0 }
                     }
-                    .scrollBounceBehavior(.basedOnSize)
-                    // Max height, not fixed: fewer than 4.5 files take only the room they need.
-                    .frame(height: min(changesHeight, changesHeight / CGFloat(max(changes.files.count, 1)) * 4.5))
-                    // Let the rows draw into the box's inset, so the list is cut at the panel's edge, not short of it.
-                    .scrollClipDisabled()
+                    .padding(.horizontal, 12)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { changesHeight = $0 }
                 }
+                .scrollBounceBehavior(.basedOnSize)
+                // Max height, not fixed: fewer than 4.5 files take only the room they need.
+                .frame(height: min(changesHeight, changesHeight / CGFloat(max(changes.files.count, 1)) * 4.5))
                 .clipShape(.rect(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
             }
         case .failure(let error):
             Text("Couldn't load changes: \(error.localizedDescription)")
