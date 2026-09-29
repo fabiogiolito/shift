@@ -15,26 +15,47 @@
       "layers" : [
         {
           "fill" : {
-            "solid" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+            "solid" : "extended-srgb:1.00000,0.21961,0.23529,1.00000"
           },
           "glass" : true,
           "hidden" : false,
-          "image-name" : "rail-3.svg",
-          "name" : "rail-3"
+          "image-name" : "rail-1.svg",
+          "name" : "rail-1",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         },
         {
           "fill" : {
-            "solid" : "extended-srgb:1.00000,0.21961,0.23529,1.00000"
+            "solid" : "extended-srgb:1.00000,0.55294,0.15686,1.00000"
           },
           "image-name" : "rail-2.svg",
-          "name" : "rail-2"
+          "name" : "rail-2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         },
         {
           "fill" : {
             "solid" : "extended-srgb:1.00000,0.80000,0.00000,1.00000"
           },
-          "image-name" : "rail-1.svg",
-          "name" : "rail-1"
+          "image-name" : "rail-3.svg",
+          "name" : "rail-3",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
       "lighting" : "individual",
