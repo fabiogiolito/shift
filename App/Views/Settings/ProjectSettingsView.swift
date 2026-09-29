@@ -40,6 +40,7 @@ struct ProjectSettingsView: View {
         .task {
             if draft == nil { draft = model.project(projectID) }
             branches = await model.branches(for: projectID)
+            await model.refreshPushState(projectID: projectID)
         }
     }
 
@@ -133,6 +134,18 @@ struct ProjectSettingsView: View {
                     """)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let remote = model.pushStates[projectID]?.remote {
+                Section {
+                    Toggle("Push task branches to \(remote)", isOn: project.pushTaskBranches)
+                } header: {
+                    Text("Git")
+                } footer: {
+                    Text("Pushes each task's branch when the task is finished.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
 
             Section("Advanced") {

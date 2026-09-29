@@ -338,6 +338,10 @@ struct TaskDetailView: View {
                     Button("Server Log") { output = .serverLog }
                 }
                 Button("Agent Output") { output = .agentOutput }
+                if let remote = model.pushStates[project.id]?.remote {
+                    Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
+                        .help("Push \(task.branch) to \(remote)")
+                }
                 if task.status == .working || task.approvalRequest != nil {
                     Button("Stop Task") { model.stop(taskID: taskID) }
                 }
