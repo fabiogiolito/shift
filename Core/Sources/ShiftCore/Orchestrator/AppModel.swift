@@ -403,6 +403,17 @@ public final class AppModel {
         await refreshPushState(projectID: projectID)
     }
 
+    /// Pushes the task's branch to the project's remote. Never forced.
+    public func pushBranch(taskID: TaskItem.ID) async {
+        guard let services, let task = task(taskID), let project = project(task.projectID),
+              let remote = await services.git.remote(repo: project.repoURL, branch: task.branch) else { return }
+        do {
+            try await services.git.push(repo: project.repoURL, branch: task.branch, remote: remote)
+        } catch {
+            lastError = "Could not push \(task.title): \(Self.firstLine(Self.describe(error)))"
+        }
+    }
+
     /// The project's base branch in the browser: its base server, started again first if it stopped.
     public func baseServerURL(projectID: Project.ID) async -> URL? {
         await startBaseServer(projectID)
@@ -926,6 +937,9 @@ public final class AppModel {
         default: ("\(task.title) is ready", settled.summary ?? "")
         }
         enqueue { await services.notifier.notify(title: title, body: body, taskID: id) }
+        if settled.status == .completed, project(task.projectID)?.pushTaskBranches == true {
+            Task { await pushBranch(taskID: id) }
+        }
     }
 
     private static func apply(_ settled: Settled, to task: inout TaskItem) {

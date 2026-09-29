@@ -119,10 +119,12 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// `SHIFT_WORKTREE` and `SHIFT_TASK` in the environment.
     public var buildCommand: String
     public var permissions: AgentPermissions
+    /// Push each task's branch to the remote when the task completes.
+    public var pushTaskBranches: Bool
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
-                buildCommand: String = "", permissions: AgentPermissions = .bypass) {
+                buildCommand: String = "", permissions: AgentPermissions = .bypass, pushTaskBranches: Bool = false) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -132,6 +134,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.setupCommand = setupCommand
         self.buildCommand = buildCommand
         self.permissions = permissions
+        self.pushTaskBranches = pushTaskBranches
     }
 
     public init(from decoder: Decoder) throws {
@@ -146,6 +149,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         setupCommand = try values.decodeIfPresent(String.self, forKey: .setupCommand) ?? ""
         buildCommand = try values.decodeIfPresent(String.self, forKey: .buildCommand) ?? ""
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
+        pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
     }
 
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }
