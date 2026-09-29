@@ -56,14 +56,15 @@ struct TaskListView: View {
         }
         // Commits may have been made or pushed outside Shift while the user was away.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in activations += 1 }
-        .task(id: "\(project.id)|\(project.baseBranch)|\(activations)") {
+        .task(id: "\(project.id)|\(model.bases(of: project.id))|\(activations)") {
             await model.refreshPushState(projectID: project.id)
         }
     }
 
     private func pushButton(_ state: AppModel.PushState) -> some View {
         let title = state.unpushed == 0 ? "Nothing to push"
-            : "Push \(state.unpushed) \(state.unpushed == 1 ? "commit" : "commits") to \(state.remote)/\(project.baseBranch)"
+            : "Push \(state.unpushed) \(state.unpushed == 1 ? "commit" : "commits") to "
+                + state.branches.map { "\(state.remote)/\($0)" }.formatted(.list(type: .and))
         return Button {
             Task { await model.push(projectID: project.id) }
         } label: {

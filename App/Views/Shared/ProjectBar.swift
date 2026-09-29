@@ -32,7 +32,7 @@ struct ProjectBar: View {
             } label: {
                 Label(project.baseBranch, systemImage: "arrow.triangle.branch")
             }
-            .help("Base branch")
+            .help("Base branch for new tasks")
 
             Menu {
                 Picker("Agent", selection: binding(\.defaultAgent)) {

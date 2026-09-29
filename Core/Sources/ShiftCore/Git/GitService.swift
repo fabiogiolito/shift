@@ -229,6 +229,19 @@ public struct GitService: GitServicing {
         return moves.split(separator: "\n").count > 1
     }
 
+    public func isContained(repo: URL, branch: String, in base: String) async throws -> Bool {
+        try await isAncestor(repo: repo, branch: branch, of: base)
+    }
+
+    public func rebase(worktree: URL, from oldBase: String, onto newBase: String) async throws -> Bool {
+        let hasOld = (try? await run(["show-ref", "--verify", "--quiet", "refs/heads/\(oldBase)"], in: worktree))?.status == 0
+        let forkPoint = try await git(["merge-base", hasOld ? oldBase : newBase, "HEAD"], in: worktree)
+        let out = try await run(["rebase", "--onto", newBase, forkPoint], in: worktree, env: ["GIT_EDITOR": "true"])
+        guard out.status != 0 else { return true }
+        _ = try? await run(["rebase", "--abort"], in: worktree)
+        return false
+    }
+
     private func isAncestor(repo: URL, branch: String, of base: String) async throws -> Bool {
         let out = try await run(["merge-base", "--is-ancestor", branch, base], in: repo)
         if out.status > 1 { throw GitError(message: out.stderr) }

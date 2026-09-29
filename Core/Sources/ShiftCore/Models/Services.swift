@@ -43,6 +43,12 @@ public protocol GitServicing: Sendable {
     func isTracked(repo: URL, path: String) async -> Bool
     /// True if `branch` has commits of its own and every one of them is already contained in `base`.
     func isMerged(repo: URL, branch: String, base: String) async throws -> Bool
+    /// True if everything on `branch` is contained in `base` (also when it has no commits of its own).
+    func isContained(repo: URL, branch: String, in base: String) async throws -> Bool
+    /// Moves the worktree's own commits (those not on `oldBase`) onto `newBase`. With `oldBase` gone,
+    /// everything not on `newBase` moves. On a conflict the rebase is aborted, the worktree is left as it
+    /// was and false is returned.
+    func rebase(worktree: URL, from oldBase: String, onto newBase: String) async throws -> Bool
     func branchExists(repo: URL, branch: String) async -> Bool
 
     /// Where `branch` gets pushed: its upstream remote, else `origin`, else the first remote. nil if none.

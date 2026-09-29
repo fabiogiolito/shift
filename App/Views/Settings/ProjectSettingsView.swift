@@ -59,7 +59,7 @@ struct ProjectSettingsView: View {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: current.repoPath)
                     }
                 }
-                Picker("Base branch", selection: project.baseBranch) {
+                Picker("Base branch for new tasks", selection: project.baseBranch) {
                     ForEach(branchOptions, id: \.self) { Text($0) }
                 }
             }

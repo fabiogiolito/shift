@@ -21,13 +21,16 @@ public final class AppModel {
 
     public struct PushState: Equatable, Sendable {
         public var remote: String
-        /// Commits on base that the remote does not have, as of the last fetch.
+        /// Commits on the project's bases that the remote does not have, as of the last fetch.
         public var unpushed: Int
+        /// The bases those commits are on.
+        public var branches: [String]
         public var isPushing = false
 
-        public init(remote: String, unpushed: Int, isPushing: Bool = false) {
+        public init(remote: String, unpushed: Int, branches: [String] = [], isPushing: Bool = false) {
             self.remote = remote
             self.unpushed = unpushed
+            self.branches = branches
             self.isPushing = isPushing
         }
     }
@@ -163,6 +166,10 @@ public final class AppModel {
         }
         // Prompts that never reached the agent before Shift quit were never sent.
         tasks.map(\.id).forEach(dropPending)
+        // Saved before tasks had their own base: they keep the one they have been using.
+        for task in tasks where task.baseBranch == nil {
+            if let base = project(task.projectID)?.baseBranch { update(task.id) { $0.baseBranch = base } }
+        }
 
         for kind in AgentKind.allCases {
             installedAgents[kind] = await services.agents[kind]?.detect()
@@ -300,7 +307,7 @@ public final class AppModel {
         let title = Self.title(for: prompt.isEmpty ? URL(fileURLWithPath: attachments[0]).lastPathComponent : prompt)
         tasks.append(TaskItem(
             id: id, projectID: projectID, title: title.isEmpty ? "Task \(id)" : title, status: .working,
-            agent: agent ?? project.defaultAgent, branch: "shift/\(id)",
+            agent: agent ?? project.defaultAgent, branch: "shift/\(id)", baseBranch: project.baseBranch,
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
             prompts: [first], workingSince: Date()))
         changed()
@@ -355,6 +362,10 @@ public final class AppModel {
 
         // Merging means the user is done with this work: the agent stops first so that what gets
         // committed and merged is not still being written to.
+        if let missing = await missingBase(task, project) {
+            lastError = "Could not merge \(task.title): \(missing)"
+            return
+        }
         let wasRunning = runs[taskID] != nil
         await cancelRun(taskID)
         do {
@@ -363,10 +374,10 @@ public final class AppModel {
                 try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
             }
             let result = try await services.git.merge(repo: project.repoURL, branch: task.branch,
-                                                      into: project.baseBranch, message: task.title)
+                                                      into: task.base(in: project), message: task.title)
             switch result {
             case .merged:
-                await cleanUp(taskID)
+                await cleanUp(taskID, keepingBranchUnlessIn: task.base(in: project))
                 markMerged(taskID)
                 await refreshPushState(projectID: project.id)
                 // Base moved: other tasks may not merge cleanly any more.
@@ -383,25 +394,43 @@ public final class AppModel {
         }
     }
 
-    /// Reads whether the project's base branch has anything to push (no network access).
-    public func refreshPushState(projectID: Project.ID) async {
-        guard let services, let project = project(projectID), pushStates[projectID]?.isPushing != true else { return }
-        let remote = await services.git.remote(repo: project.repoURL, branch: project.baseBranch)
-        let count = if let remote {
-            (try? await services.git.unpushedCount(repo: project.repoURL, branch: project.baseBranch, remote: remote)) ?? 0
-        } else { 0 }
-        // A push started or the project changed meanwhile: this answer is stale.
-        guard pushStates[projectID]?.isPushing != true, self.project(projectID)?.baseBranch == project.baseBranch else { return }
-        pushStates[projectID] = remote.map { PushState(remote: $0, unpushed: count) }
+    /// The project's base for new tasks, then every other base its tasks have (merged ones included).
+    public func bases(of projectID: Project.ID) -> [String] {
+        guard let project = project(projectID) else { return [] }
+        var bases = [project.baseBranch]
+        for task in tasks(in: projectID) where !bases.contains(task.base(in: project)) { bases.append(task.base(in: project)) }
+        return bases
     }
 
-    /// Pushes the project's base branch to its remote. Never forced.
+    /// Reads whether the project's bases have anything to push (no network access).
+    /// ponytail: one remote for all bases, the default base's; per-branch remotes if anyone needs them.
+    public func refreshPushState(projectID: Project.ID) async {
+        guard let services, let project = project(projectID), pushStates[projectID]?.isPushing != true else { return }
+        let bases = bases(of: projectID)
+        let remote = await services.git.remote(repo: project.repoURL, branch: project.baseBranch)
+        var counts: [(String, Int)] = []
+        if let remote {
+            for base in bases where await services.git.branchExists(repo: project.repoURL, branch: base) {
+                let count = (try? await services.git.unpushedCount(repo: project.repoURL, branch: base, remote: remote)) ?? 0
+                if count > 0 { counts.append((base, count)) }
+            }
+        }
+        // A push started or the bases changed meanwhile: this answer is stale.
+        guard pushStates[projectID]?.isPushing != true, self.bases(of: projectID) == bases else { return }
+        pushStates[projectID] = remote.map {
+            PushState(remote: $0, unpushed: counts.reduce(0) { $0 + $1.1 }, branches: counts.map(\.0))
+        }
+    }
+
+    /// Pushes every base of the project that has commits to push. Never forced.
     public func push(projectID: Project.ID) async {
         guard let services, let project = project(projectID), let state = pushStates[projectID],
               !state.isPushing, state.unpushed > 0 else { return }
         pushStates[projectID]?.isPushing = true
         do {
-            try await services.git.push(repo: project.repoURL, branch: project.baseBranch, remote: state.remote)
+            for branch in state.branches {
+                try await services.git.push(repo: project.repoURL, branch: branch, remote: state.remote)
+            }
         } catch {
             lastError = Self.firstLine(Self.describe(error))
         }
@@ -469,7 +498,7 @@ public final class AppModel {
                 _ = try? await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
             }
             guard let clean = try? await services.git.canMergeCleanly(repo: project.repoURL, branch: task.branch,
-                                                                      base: project.baseBranch),
+                                                                      base: task.base(in: project)),
                   let now = eligible(id) else { continue }
             let status: TaskStatus = clean ? .completed : .conflict
             guard now.status != status else { continue }
@@ -497,10 +526,65 @@ public final class AppModel {
         beginWorking(taskID)
         update(taskID) { $0.isResolvingConflict = true }
         startRun(taskID, prompt: """
-            This branch no longer merges cleanly into `\(project.baseBranch)`. Merge `\(project.baseBranch)` \
+            This branch no longer merges cleanly into `\(task.base(in: project))`. Merge `\(task.base(in: project))` \
             into this branch, resolve the conflicts keeping the intent of both sides, verify that the \
             project still builds and its tests pass, and commit the result.
             """)
+    }
+
+    /// Points the task at another base: its own commits move onto `base` (a rebase), so merging brings
+    /// only its work. If they conflict there, the agent moves them. Not while the agent is working.
+    public func changeBase(taskID: TaskItem.ID, to base: String) async {
+        guard let services, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
+              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID),
+              base != task.branch else { return }
+        let old = task.base(in: project)
+        guard base != old else { return }
+        busy.insert(taskID)
+        var clean = true
+        do {
+            // Without a branch there is nothing to move: the task starts from the new base next time.
+            if await services.git.branchExists(repo: project.repoURL, branch: task.branch) {
+                guard FileManager.default.fileExists(atPath: task.worktreePath) else {
+                    throw Failure("The task's folder is missing. Restart its server to recreate it, then change the base.")
+                }
+                try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
+                clean = try await services.git.rebase(worktree: task.worktreeURL, from: old, onto: base)
+            }
+        } catch {
+            busy.remove(taskID)
+            lastError = "Could not change the base of \(task.title): \(Self.firstLine(Self.describe(error)))"
+            return
+        }
+        update(taskID) { $0.baseBranch = base }
+        busy.remove(taskID)
+        if clean {
+            await refreshMergeability()
+        } else {
+            beginWorking(taskID)
+            update(taskID) { $0.isResolvingConflict = true }
+            startRun(taskID, prompt: """
+                This task's base branch changed from `\(old)` to `\(base)`. Move this branch's own commits onto \
+                `\(base)`: `git rebase --onto \(base) $(git merge-base \(old) HEAD)` (or onto `\(base)` if `\(old)` \
+                no longer exists). Resolve the conflicts keeping the intent of both sides, verify that the project \
+                still builds and its tests pass, and finish the rebase.
+                """)
+        }
+        await refreshPushState(projectID: project.id)
+    }
+
+    /// The branch checked out in the project's own folder, which is what it shows.
+    public func checkedOutBranch(projectID: Project.ID) async -> String? {
+        guard let services, let project = project(projectID) else { return nil }
+        return try? await services.git.currentBranch(repo: project.repoURL)
+    }
+
+    /// Why the task's base cannot be used, nil when it exists.
+    private func missingBase(_ task: TaskItem, _ project: Project) async -> String? {
+        guard let services else { return nil }
+        let base = task.base(in: project)
+        guard await !services.git.branchExists(repo: project.repoURL, branch: base) else { return nil }
+        return "The base branch \(base) no longer exists. Pick another one in the task's More menu."
     }
 
     /// Stops the agent. The task becomes blocked and can be restarted with a prompt.
@@ -630,7 +714,7 @@ public final class AppModel {
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
             return .failure(Failure("The task's worktree folder is missing. Restart its server to recreate it."))
         }
-        do { return .success(try await read(services.git, task.worktreeURL, project.baseBranch)) } catch {
+        do { return .success(try await read(services.git, task.worktreeURL, task.base(in: project))) } catch {
             return .failure(Failure(Self.firstLine(Self.describe(error))))
         }
     }
@@ -739,8 +823,9 @@ public final class AppModel {
             if hasBranch {
                 try await services.git.addWorktree(repo: project.repoURL, branch: task.branch, at: task.worktreeURL)
             } else {
+                if let missing = await missingBase(task, project) { throw Failure(missing) }
                 try await services.git.createWorktree(repo: project.repoURL, branch: task.branch,
-                                                      base: project.baseBranch, at: task.worktreeURL)
+                                                      base: task.base(in: project), at: task.worktreeURL)
                 createdBranch = true
             }
             created = true
@@ -918,12 +1003,14 @@ public final class AppModel {
         case .completed(let summary):
             do {
                 try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
+                // Nothing to check against; Merge says why it cannot, and a new base can be picked.
+                if await missingBase(task, project) != nil { return Settled(status: .completed, summary: summary) }
                 let clean = try await services.git.canMergeCleanly(repo: project.repoURL, branch: task.branch,
-                                                                   base: project.baseBranch)
+                                                                   base: task.base(in: project))
                 if clean { return Settled(status: .completed, summary: summary) }
                 if task.isResolvingConflict {
                     return Settled(status: .blocked, summary: summary,
-                                   blockedReason: "The conflict with \(project.baseBranch) could not be resolved.")
+                                   blockedReason: "The conflict with \(task.base(in: project)) could not be resolved.")
                 }
                 return Settled(status: .conflict, summary: summary)
             } catch {
@@ -974,7 +1061,8 @@ public final class AppModel {
     }
 
     /// Releases everything a task holds: agent, server, worktree and branch. The caller clears the record.
-    private func cleanUp(_ id: TaskItem.ID) async {
+    /// `keepingBranchUnlessIn`: the branch is deleted only if all of its work is in that branch.
+    private func cleanUp(_ id: TaskItem.ID, keepingBranchUnlessIn base: String? = nil) async {
         guard let services, let task = task(id) else { return }
         await cancelRun(id)
         serverFailures[id] = nil
@@ -987,9 +1075,14 @@ public final class AppModel {
             await services.servers.stopOrphan(pid: pid)
         }
         guard let project = project(task.projectID) else { return }
+        var deleteBranch: String? = task.branch
+        if let base, (try? await services.git.isContained(repo: project.repoURL, branch: task.branch, in: base)) != true {
+            deleteBranch = nil
+            lastError = "Kept the branch \(task.branch): some of its work is not in \(base)."
+        }
         do {
             try await services.git.removeWorktree(repo: project.repoURL, path: task.worktreeURL,
-                                                  deleteBranch: task.branch)
+                                                  deleteBranch: deleteBranch)
         } catch {
             lastError = "Could not remove the worktree of \(task.title): \(Self.describe(error))"
         }
@@ -1074,9 +1167,9 @@ public final class AppModel {
     private func wasMergedExternally(_ task: TaskItem, _ project: Project, hasWorktree: Bool) async -> Bool {
         guard let services, task.status == .completed || task.status == .conflict,
               (try? await services.git.isMerged(repo: project.repoURL, branch: task.branch,
-                                                base: project.baseBranch)) == true else { return false }
+                                                base: task.base(in: project))) == true else { return false }
         guard hasWorktree else { return true }
-        let changes = try? await services.git.changes(worktree: task.worktreeURL, base: project.baseBranch)
+        let changes = try? await services.git.changes(worktree: task.worktreeURL, base: task.base(in: project))
         return changes?.files.isEmpty == true
     }
 
@@ -1146,7 +1239,7 @@ public final class AppModel {
     }
 
     static func branchMissingReason(_ task: TaskItem, _ project: Project) -> String {
-        "The branch \(task.branch) is missing. Send a prompt to start the task again from \(project.baseBranch)."
+        "The branch \(task.branch) is missing. Send a prompt to start the task again from \(task.base(in: project))."
     }
 
     /// The first non-empty line without git's "fatal: " or "error: ", at most 200 characters.

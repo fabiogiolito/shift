@@ -232,6 +232,9 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var status: TaskStatus
     public var agent: AgentKind
     public var branch: String
+    /// The branch the task started from and merges into. Set when the task is created; only
+    /// `AppModel.changeBase` changes it. nil in state saved before tasks had their own base.
+    public var baseBranch: String?
     public var worktreePath: String
     /// Agent's own session identifier, used to resume the same conversation.
     public var sessionID: String?
@@ -261,7 +264,7 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var mergedAt: Date?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
-                agent: AgentKind, branch: String, worktreePath: String, sessionID: String? = nil,
+                agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,
                 port: Int? = nil, serverPID: Int32? = nil, prompts: [Prompt] = [],
                 description: String? = nil,
                 summary: String? = nil, question: String? = nil, blockedReason: String? = nil,
@@ -273,6 +276,7 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         self.status = status
         self.agent = agent
         self.branch = branch
+        self.baseBranch = baseBranch
         self.worktreePath = worktreePath
         self.sessionID = sessionID
         self.port = port
@@ -299,6 +303,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         status == .blocked && [Self.interruptedReason, Self.legacyInterruptedReason, Self.stoppedReason].contains(blockedReason)
     }
 
+    /// The branch this task merges into: its own, else (state from before tasks had one) the project's.
+    public func base(in project: Project) -> String { baseBranch ?? project.baseBranch }
     public var worktreeURL: URL { URL(fileURLWithPath: worktreePath) }
     public var serverURL: URL? { port.flatMap { URL(string: "http://localhost:\($0)") } }
 }
