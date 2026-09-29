@@ -645,6 +645,14 @@ public final class AppModel {
         return await services.servers.isRunning(taskID: taskID)
     }
 
+    /// True while something answers on the task's port: the server is up, not just started.
+    /// A server can run without answering: still starting, or crashed inside a watcher that stays alive.
+    public func isServerAnswering(taskID: TaskItem.ID) async -> Bool {
+        guard let services else { return Self.previewServerRunning(task(taskID)) }
+        guard let port = task(taskID)?.port else { return false }
+        return await services.ports.isListening(port)
+    }
+
     /// The last 200 lines of the dev server's output, and why it failed to start if it did.
     public func serverLog(taskID: TaskItem.ID) async -> String {
         guard let services else { return Self.previewServerLog }

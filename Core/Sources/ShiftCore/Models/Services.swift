@@ -209,6 +209,8 @@ public protocol ServerManaging: Sendable {
 public protocol PortAllocating: Sendable {
     /// Returns `preferred` if it is free and not in `reserved`, otherwise the next free port above it.
     func allocate(preferred: Int, reserved: Set<Int>) async -> Int
+    /// Whether something accepts connections on the port on loopback.
+    func isListening(_ port: Int) async -> Bool
 }
 
 // MARK: - System

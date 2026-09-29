@@ -298,6 +298,10 @@ final class MockPorts: PortAllocating {
         while taken.contains(port) || reserved.contains(port) { port += 1 }
         return port
     }
+
+    /// Ports whose server runs but does not answer.
+    var silent: Set<Int> = []
+    func isListening(_ port: Int) async -> Bool { !silent.contains(port) }
 }
 
 @MainActor @Observable

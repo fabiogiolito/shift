@@ -438,6 +438,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(dead)
     }
 
+    func testServerThatRunsButDoesNotAnswerIsReported() async {
+        let id = await createCompletedTask()
+        let answering = await model.isServerAnswering(taskID: id)
+        XCTAssertTrue(answering)
+        ports.silent = [model.task(id)!.port!]
+        let silent = await model.isServerAnswering(taskID: id)
+        XCTAssertFalse(silent)
+        let running = await model.isServerRunning(taskID: id)
+        XCTAssertTrue(running)
+    }
+
     func testPortSkipsOnesHeldByOtherTasks() async {
         ports.taken = [3001]
         let first = await createCompletedTask()

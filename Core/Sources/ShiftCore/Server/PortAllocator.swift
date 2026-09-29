@@ -11,6 +11,8 @@ public struct PortAllocator: PortAllocating {
         return preferred
     }
 
+    public func isListening(_ port: Int) async -> Bool { !Self.isFree(port) }
+
     /// Free means we can bind it on both IPv4 and IPv6 loopback. No SO_REUSEADDR on purpose:
     /// with it, a bind next to a wildcard listener would succeed. A port whose server just
     /// stopped also refuses the bind for a while (connections in TIME_WAIT), so a refused bind
