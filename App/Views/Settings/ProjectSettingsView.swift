@@ -85,6 +85,7 @@ struct ProjectSettingsView: View {
                             .disabled(!installed)
                     }
                 }
+                ModelPicker(agent: current.defaultAgent, selection: project.defaultModel)
                 ForEach(["AGENTS.md", "CLAUDE.md"], id: \.self) { name in
                     LabeledContent(name) {
                         if found.contains(name) {
