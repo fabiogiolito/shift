@@ -134,7 +134,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       {/* What Shift handles */}
       <section id="how" className="mx-auto max-w-6xl scroll-mt-24 px-6 pt-32 sm:pt-44">
         <h2 className="reveal mx-auto max-w-3xl text-center text-4xl font-semibold tracking-[-0.035em] text-balance sm:text-6xl">
-          You write the task.
+          You write the tasks.
           <br />
           <span className="text-muted-foreground">Shift does the rest.</span>
         </h2>
