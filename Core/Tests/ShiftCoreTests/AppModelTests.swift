@@ -959,16 +959,41 @@ final class AppModelTests: XCTestCase {
     func testBaseServerRunsOnTheRepoAndComesBackWhenOpened() async {
         XCTAssertEqual(servers.baseStarts, [.init(taskID: -1, command: "pnpm dev", port: 3000)])
         XCTAssertEqual(model.basePorts[project.id], 3000)
+        model.baseServerPoll = .milliseconds(1)
         servers.crash(taskID: -1)
-        let url = await model.baseServerURL(projectID: project.id)
+        // Opened only once the restarted server answers on its port.
+        async let opened = model.baseServerURL(projectID: project.id)
+        await waitFor("the base server to restart") { self.servers.baseStarts.count == 2 && self.model.openingBase == [self.project.id] }
+        ports.taken = [3000]
+        let url = await opened
         XCTAssertEqual(url, URL(string: "http://localhost:3000"))
+        XCTAssertEqual(model.openingBase, [])
+        // Running and answering: opened right away.
+        let again = await model.baseServerURL(projectID: project.id)
+        XCTAssertEqual(again, url)
         XCTAssertEqual(servers.baseStarts.count, 2)
+
+        // Quit without serving (Next.js, with a dev server already on the folder): opens the one its output names.
+        servers.crash(taskID: -1)
+        servers.exitOnStart = true
+        ports.taken = [3000, 3005]
+        servers.logs[-1] = "- Local: http://localhost:3001\nYou can access the existing server at http://localhost:3005,"
+        let existing = await model.baseServerURL(projectID: project.id)
+        XCTAssertEqual(existing, URL(string: "http://localhost:3005"))
+        XCTAssertNil(model.lastError)
+        // Nothing to open: says so.
+        servers.logs[-1] = "npm: command not found"
+        let none = await model.baseServerURL(projectID: project.id)
+        XCTAssertNil(none)
+        XCTAssertEqual(model.lastError?.hasPrefix("The server for Spot did not start on port 3001."), true)
+        servers.exitOnStart = false
+        ports.taken = []
 
         var app = project!
         app.buildCommand = "scripts/build.sh"
         model.updateProject(app)
-        await waitFor("the base server to stop") { self.servers.baseRunning.isEmpty }
-        XCTAssertNil(model.basePorts[project.id])
+        await waitFor("the base server to stop") { self.model.basePorts[self.project.id] == nil }
+        XCTAssertTrue(servers.baseRunning.isEmpty)
     }
 
     func testBecomingAnAppReleasesTaskPorts() async {

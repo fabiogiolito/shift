@@ -258,11 +258,13 @@ final class MockServers: ServerManaging {
     /// Projects' base servers (negative IDs), kept apart so the task assertions above stay exact.
     private(set) var baseStarts: [Start] = []
     private(set) var baseRunning: Set<Int> = []
+    /// Base servers quit as soon as they start.
+    var exitOnStart = false
 
     func start(taskID: Int, command: String, directory: URL, port: Int) async throws -> Int32 {
         if taskID < 0 {
             baseStarts.append(Start(taskID: taskID, command: command, port: port))
-            baseRunning.insert(taskID)
+            if !exitOnStart { baseRunning.insert(taskID) }
             return 1
         }
         if let startError { throw startError }
