@@ -35,26 +35,24 @@ function Panel({ label, className, children }: { label: string; className?: stri
   )
 }
 
-// Hero copy options, picked with ?hero=N from the numbered links in the nav.
-// [headline, highlighted part, subline]
-const HEROES = [
-  ["Run ten agents", "like one.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["A team of agents,", "one window.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Agents as easy as", "a to-do list.", "Add tasks. Get them done. Agents, worktrees, branches, ports, commits, merges, and cleanup are handled for you."],
-  ["Ten agents,", "one checklist.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["A to-do list that", "does itself.", "Every task gets its own agent. Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["One list.", "Ten agents working.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Write the list.", "Agents check it off.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Agents as simple as", "checking a box.", "Write a task, come back to a checkmark. Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Ten agents,", "one place to check.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Mission control", "for your agents.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+// Closing CTA copy options, picked with ?cta=N from the numbered links in the nav.
+// [headline, highlighted part]
+const CTAS = [
+  ["Leave. Come back to a", "checkmark."],
+  ["Start checking", "things off."],
+  ["Add your", "first task."],
+  ["What's first", "on your list?"],
+  ["Your to-do list", "is waiting."],
+  ["Get your list", "done."],
+  ["Put your agents", "to work."],
+  ["Write it down.", "Get it done."],
 ]
 
 const STEPS = ["Describe", "Agent works", "Test", "Merge"]
 
 export default async function Home({ searchParams }: PageProps<"/">) {
-  const pick = Number((await searchParams).hero) || 1
-  const [lead, accent, sub] = HEROES[pick - 1] ?? HEROES[0]
+  const pick = Number((await searchParams).cta) || 1
+  const [lead, accent] = CTAS[pick - 1] ?? CTAS[0]
 
   return (
     <main className="relative">
@@ -66,10 +64,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             Shift
           </a>
           <div className="flex items-center gap-0.5 font-mono text-xs">
-            {HEROES.map((_, i) => (
+            {CTAS.map((_, i) => (
               <Link
                 key={i}
-                href={`?hero=${i + 1}`}
+                href={`?cta=${i + 1}`}
                 scroll={false}
                 aria-current={pick === i + 1}
                 className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground aria-[current=true]:bg-white/10 aria-[current=true]:text-foreground"
@@ -102,11 +100,11 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </Badge>
 
         <h1 className="animate-rise mx-auto mt-8 max-w-5xl text-balance text-6xl leading-[0.95] font-semibold tracking-[-0.045em] [animation-delay:100ms] sm:text-8xl lg:text-[128px]">
-          {lead} <span className="text-rails">{accent}</span>
+          Agents as easy as <span className="text-rails">a to-do list.</span>
         </h1>
 
         <p className="animate-rise mx-auto mt-8 max-w-xl text-lg text-balance text-muted-foreground [animation-delay:200ms] sm:text-xl">
-          {sub}
+          Add tasks. Get them done. Agents, worktrees, branches, ports, commits, merges, and cleanup are handled for you.
         </p>
 
         <div className="animate-rise mt-10 flex flex-wrap items-center justify-center gap-3 [animation-delay:300ms]">
@@ -178,7 +176,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         <div className="reveal">
           <Image src={icon} alt="Shift" width={128} height={128} className="mx-auto drop-shadow-[0_20px_60px_rgba(255,141,40,0.35)]" />
           <h2 className="mx-auto mt-10 max-w-3xl text-4xl font-semibold tracking-[-0.035em] text-balance sm:text-6xl">
-            Leave. Come back to a <span className="text-rails">checkmark.</span>
+            {lead} <span className="text-rails">{accent}</span>
           </h2>
           <div className="mt-10 flex justify-center">
             <DownloadButton />
