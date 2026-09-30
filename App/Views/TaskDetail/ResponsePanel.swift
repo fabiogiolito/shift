@@ -40,7 +40,7 @@ struct ResponsePanel: View {
                 if hasChoices {
                     choices
                 } else {
-                    PromptField(placeholder: placeholder, focusOnAppear: true) { model.sendPrompt(taskID: task.id, text: $0, attachments: $1) }
+                    PromptField(placeholder: placeholder, focusOnAppear: true, draftKey: "task \(task.id)") { model.sendPrompt(taskID: task.id, text: $0, attachments: $1) }
                 }
             }
             .padding(16)

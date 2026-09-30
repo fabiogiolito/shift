@@ -104,7 +104,8 @@ struct TaskListView: View {
     }
 
     private var footer: some View {
-        PromptField(placeholder: "New task", submitTitle: "Start", isNewTaskField: true) { text, attachments in
+        PromptField(placeholder: "New task", submitTitle: "Start", isNewTaskField: true,
+                    draftKey: "project \(project.id)") { text, attachments in
             if let id = model.createTask(projectID: project.id, prompt: text, attachments: attachments) { selection = id }
         }
         .padding(12)
