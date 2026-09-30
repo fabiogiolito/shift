@@ -204,6 +204,7 @@ struct TaskDetailView: View {
                 }
                 Spacer()
             }
+            .controlSize(.large)
         }
     }
 
