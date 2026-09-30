@@ -1,4 +1,5 @@
 import Image from "next/image"
+import Link from "next/link"
 import { ArrowRight, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -34,9 +35,25 @@ function Panel({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+// Hero copy options, picked with ?hero=N from the numbered links in the nav.
+// [headline, highlighted part, subline]
+const HEROES = [
+  ["Ship in", "parallel.", "Hand tasks to AI agents. Each gets its own branch, worktree and dev server. You just test and merge."],
+  ["Shift into", "parallel.", "Stop working one task at a time. Every task gets its own agent, branch and dev server."],
+  ["Hold Shift.", "Select all.", "Multi-select for your backlog. Pick every task and run them at once, each on its own branch."],
+  ["Agents on", "shift.", "Describe the work and walk away. They clock in with a branch, worktree and dev server each."],
+  ["Shift", "gears.", "From one task at a time to all of them at once. Agents build in parallel, you test and merge."],
+  ["Shift the work.", "Keep the merge.", "Agents code in isolated branches. You test each one and decide what lands."],
+  ["The night shift", "writes code.", "Queue up tasks for your agents. Come back to branches ready to test and merge."],
+  ["Shift", "happens.", "Hand off tasks and carry on. Branches, commits and dev servers take care of themselves."],
+]
+
 const STEPS = ["Describe", "Agent works", "Test", "Merge"]
 
-export default function Home() {
+export default async function Home({ searchParams }: PageProps<"/">) {
+  const pick = Number((await searchParams).hero) || 1
+  const [lead, accent, sub] = HEROES[pick - 1] ?? HEROES[0]
+
   return (
     <main className="relative">
       {/* Nav */}
@@ -46,8 +63,21 @@ export default function Home() {
             <Image src={icon} alt="" width={28} height={28} />
             Shift
           </a>
+          <div className="flex items-center gap-0.5 font-mono text-xs">
+            {HEROES.map((_, i) => (
+              <Link
+                key={i}
+                href={`?hero=${i + 1}`}
+                scroll={false}
+                aria-current={pick === i + 1}
+                className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground aria-[current=true]:bg-white/10 aria-[current=true]:text-foreground"
+              >
+                {i + 1}
+              </Link>
+            ))}
+          </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="lg" className="rounded-full text-muted-foreground" nativeButton={false} render={<a href={REPO} />}>
+            <Button variant="ghost" size="lg" className="hidden rounded-full text-muted-foreground sm:inline-flex" nativeButton={false} render={<a href={REPO} />}>
               GitHub
             </Button>
             <Button size="lg" className="rounded-full px-4" nativeButton={false} render={<a href={DOWNLOAD} />}>
@@ -70,12 +100,12 @@ export default function Home() {
           Claude Code · Codex · macOS
         </Badge>
 
-        <h1 className="animate-rise mx-auto mt-8 max-w-5xl text-6xl leading-[0.95] font-semibold tracking-[-0.045em] [animation-delay:100ms] sm:text-8xl lg:text-[128px]">
-          Ship in <span className="text-rails">parallel.</span>
+        <h1 className="animate-rise mx-auto mt-8 max-w-5xl text-balance text-6xl leading-[0.95] font-semibold tracking-[-0.045em] [animation-delay:100ms] sm:text-8xl lg:text-[128px]">
+          {lead} <span className="text-rails">{accent}</span>
         </h1>
 
         <p className="animate-rise mx-auto mt-8 max-w-xl text-lg text-balance text-muted-foreground [animation-delay:200ms] sm:text-xl">
-          Hand tasks to AI agents. Each gets its own branch, worktree and dev server. You just test and merge.
+          {sub}
         </p>
 
         <div className="animate-rise mt-10 flex flex-wrap items-center justify-center gap-3 [animation-delay:300ms]">
