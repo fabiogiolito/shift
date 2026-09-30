@@ -38,14 +38,14 @@ function Panel({ label, children }: { label: string; children: React.ReactNode }
 // Hero copy options, picked with ?hero=N from the numbered links in the nav.
 // [headline, highlighted part, subline]
 const HEROES = [
-  ["Ship in", "parallel.", "Hand tasks to AI agents. Each gets its own branch, worktree and dev server. You just test and merge."],
-  ["Your backlog,", "all at once.", "Give every task to an agent. Each one works on its own branch with its own dev server."],
-  ["Describe.", "Test. Merge.", "Agents do the part in between, each on its own branch, worktree and dev server."],
-  ["Tasks,", "not chats.", "No transcripts to read, no terminals to watch. Write what you want and get a branch ready to test."],
-  ["Stop watching", "agents work.", "Hand off the task and leave. Come back when it is ready to test in your browser."],
-  ["Every task,", "its own branch.", "And its own worktree, agent and dev server. Nothing collides, everything runs at once."],
-  ["Parallel agents,", "without the mess.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Come back to", "a checkmark.", "Describe a task and walk away. It is built on its own branch and running on localhost when you return."],
+  ["Parallel agents,", "handled.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Run ten agents", "like one.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Tasks in.", "Finished branches out.", "Describe what you want. Get back work that is built, committed and running on localhost."],
+  ["Just", "test and merge.", "Agents build every task in parallel. Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Ship more,", "manage less.", "Agents work your tasks in parallel. Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Your whole backlog,", "moving at once.", "Every task gets an agent, a branch and a dev server, all running at the same time."],
+  ["Focus on", "what to build.", "Agents handle the how. Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Finished work,", "ready to test.", "Each task comes back on its own branch, committed and running on localhost."],
 ]
 
 const STEPS = ["Describe", "Agent works", "Test", "Merge"]
