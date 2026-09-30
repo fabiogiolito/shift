@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Rails } from "@/components/rails"
 import { TaskSim } from "@/components/task-sim"
-import { Terminal } from "@/components/terminal"
+import { TaskDetails } from "@/components/task-details"
 import { Screens } from "@/components/screens"
 import icon from "./icon.png"
 
@@ -21,9 +21,9 @@ function DownloadButton() {
   )
 }
 
-function Panel({ label, children }: { label: string; children: React.ReactNode }) {
+function Panel({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
-    <div className="reveal overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] shadow-2xl shadow-black/50 backdrop-blur">
+    <div className={`reveal rounded-2xl border border-white/10 bg-white/[0.02] shadow-2xl shadow-black/50 backdrop-blur ${className ?? ""}`}>
       <div className="flex items-center gap-2 border-b border-white/[0.06] px-5 py-3">
         <span className="size-2.5 rounded-full bg-white/10" />
         <span className="size-2.5 rounded-full bg-white/10" />
@@ -134,17 +134,21 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       {/* What Shift handles */}
       <section id="how" className="mx-auto max-w-6xl scroll-mt-24 px-6 pt-32 sm:pt-44">
         <h2 className="reveal mx-auto max-w-3xl text-center text-4xl font-semibold tracking-[-0.035em] text-balance sm:text-6xl">
-          You write the prompt.
+          You write the task.
           <br />
           <span className="text-muted-foreground">Shift does the rest.</span>
         </h2>
 
-        <div className="mt-16 grid gap-5 lg:grid-cols-2">
-          <Panel label="~/Sites/storefront">
-            <Terminal />
-          </Panel>
-          <Panel label="Storefront · 5 tasks">
+        <div className="mt-16 grid items-start gap-10 lg:grid-cols-2 lg:gap-12">
+          <Panel label="My Project · 5 tasks">
             <TaskSim />
+          </Panel>
+          {/* On small screens the panels stack, so the connector drops in from above instead */}
+          <Panel
+            label="Task 101"
+            className="relative before:absolute before:bottom-full before:left-1/2 before:h-10 before:w-px before:bg-[#30d158] before:shadow-[0_0_8px_#30d158] lg:before:hidden"
+          >
+            <TaskDetails />
           </Panel>
         </div>
 

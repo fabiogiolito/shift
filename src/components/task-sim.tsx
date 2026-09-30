@@ -5,7 +5,6 @@ import { Check, GitMerge } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const TITLES = [
-  "Tighter board spacing",
   "Wishlist button",
   "Dark mode for product pages",
   "⌘K product search",
@@ -20,6 +19,8 @@ const TITLES = [
 type Status = "working" | "input" | "ready" | "merged"
 const CYCLE: Status[] = ["working", "working", "working", "input", "working", "working", "ready", "ready", "ready", "merged", "merged"]
 const ROWS = 5
+// This row stays "ready" and selected; a line connects it to TaskDetails.
+const PINNED = 1
 
 export function TaskSim() {
   const [tick, setTick] = useState(0)
@@ -33,13 +34,24 @@ export function TaskSim() {
   return (
     <ul className="divide-y divide-white/[0.06]">
       {Array.from({ length: ROWS }, (_, i) => {
+        const pinned = i === PINNED
         const t = tick + i * 2 + (i % 2) * 3
         const round = Math.floor(t / CYCLE.length)
-        const status = CYCLE[t % CYCLE.length]
-        const id = 101 + ((round * ROWS + i) % 90)
-        const title = TITLES[(round * ROWS + i) % TITLES.length]
+        const status = pinned ? "ready" : CYCLE[t % CYCLE.length]
+        // Each cycling row alternates between its own two titles, so rows never show the same one
+        const k = i < PINNED ? i : i - 1
+        const id = pinned ? 101 : 102 + ((round * (ROWS - 1) + k) % 90)
+        const title = pinned ? "Tighter board spacing" : TITLES[k * 2 + (round % 2)]
         return (
-          <li key={i} className="flex h-14 items-center gap-3 px-5">
+          <li
+            key={i}
+            className={cn(
+              "relative flex h-14 items-center gap-3 px-5",
+              // Connector: runs from the selected row across the grid gap to the details panel
+              pinned &&
+                "bg-white/[0.05] lg:after:absolute lg:after:top-1/2 lg:after:left-full lg:after:h-px lg:after:w-[calc(3rem+1px)] lg:after:bg-[#30d158] lg:after:shadow-[0_0_8px_#30d158] lg:before:absolute lg:before:top-1/2 lg:before:left-full lg:before:z-10 lg:before:size-2 lg:before:-translate-x-1/2 lg:before:-translate-y-1/2 lg:before:rounded-full lg:before:bg-[#30d158]"
+            )}
+          >
             <StatusIcon status={status} />
             <span
               key={title}
