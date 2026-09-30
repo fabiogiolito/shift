@@ -154,7 +154,7 @@ dt::before { content: "✓"; color: var(--green); }
 .screens:has([value=light]:checked) img[data-theme=dark],
 .screens:has([value="01"]:checked) img:not([data-shot="01"]),
 .screens:has([value="02"]:checked) img:not([data-shot="02"]),
-.screens:has([value="03"]:checked) img:not([data-shot="03"]),
+.screens:has([value="03"]:checked) img:not([data-shot="03"]) { position: absolute; inset: 0; scale: .99; opacity: 0; pointer-events: none; }
 
 /* CTA */
 .cta { position: relative; isolation: isolate; padding: 10rem 1.5rem; text-align: center; }
