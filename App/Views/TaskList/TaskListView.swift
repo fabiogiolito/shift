@@ -46,12 +46,18 @@ struct TaskListView: View {
             }
             if !project.isApp {
                 ToolbarItem {
+                    let opening = model.openingBase.contains(project.id)
                     Button {
                         Task { if let url = await model.baseServerURL(projectID: project.id) { ExternalApps().openInBrowser(url) } }
                     } label: {
-                        Image(systemName: "globe")
+                        if opening {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "globe")
+                        }
                     }
-                    .help("Open \(project.baseBranch) in browser")
+                    .disabled(opening)
+                    .help(opening ? "Starting the server for \(project.baseBranch)…" : "Open \(project.baseBranch) in browser")
                 }
             }
             if let pushState {

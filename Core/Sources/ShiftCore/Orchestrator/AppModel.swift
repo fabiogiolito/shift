@@ -38,6 +38,8 @@ public final class AppModel {
     /// Web projects: the port of the dev server running on the project's own checkout, its base branch.
     /// No entry: not started yet.
     public private(set) var basePorts: [Project.ID: Int] = [:]
+    /// Projects whose base server is coming up to be opened in the browser.
+    public private(set) var openingBase: Set<Project.ID> = []
 
     /// App projects: each task's latest build since launch. No entry: not built yet.
     public private(set) var builds: [TaskItem.ID: BuildState] = [:]
@@ -100,6 +102,8 @@ public final class AppModel {
     @ObservationIgnored private var lastBadge: Int?
     /// Base servers share the servers' task ID space; they get negative IDs so no task has theirs.
     @ObservationIgnored private var baseServerIDs: [Project.ID: Int] = [:]
+    /// How often a base server that is coming up is checked (tests shorten it).
+    @ObservationIgnored var baseServerPoll: Duration = .milliseconds(200)
     /// `start()` runs once per launch; the window calls it again whenever it is reopened.
     @ObservationIgnored private var started = false
 
@@ -461,10 +465,48 @@ public final class AppModel {
         }
     }
 
-    /// The project's base branch in the browser: its base server, started again first if it stopped.
+    /// The project's base branch in the browser: its base server, started again first if it stopped, once it
+    /// answers. Nil (and `lastError`) if it never does.
     public func baseServerURL(projectID: Project.ID) async -> URL? {
+        guard let services, !openingBase.contains(projectID) else { return nil }
+        func url(_ port: Int) -> URL? { URL(string: "http://localhost:\(port)") }
+        if let id = baseServerIDs[projectID], let port = basePorts[projectID],
+           await services.servers.isRunning(taskID: id), await isListening(port) { return url(port) }
+
+        openingBase.insert(projectID)
+        defer { openingBase.remove(projectID) }
         await startBaseServer(projectID)
-        return basePorts[projectID].flatMap { URL(string: "http://localhost:\($0)") }
+        guard let project = project(projectID), let id = baseServerIDs[projectID],
+              let port = basePorts[projectID] else { return nil }
+        // Up for 3 seconds before it counts: Next.js listens for a second or two before it finds another
+        // dev server running on the folder and quits. Given up on after 30 seconds.
+        var up = 0
+        for _ in 0..<150 {
+            guard await services.servers.isRunning(taskID: id) else { break }
+            up = await isListening(port) ? up + 1 : 0
+            if up == 15 { return url(port) }
+            try? await Task.sleep(for: baseServerPoll)
+        }
+        // Not on its port, but its output may say where the project is served: Next.js names the server
+        // already running on the folder, and some servers ignore PORT.
+        // ponytail: only the last 30 lines of output are read; the project's command should honor $PORT.
+        let log = await services.servers.log(taskID: id, lines: 30)
+        let others = Set(tasks.filter { $0.status != .merged }.compactMap(\.port))
+            .union(basePorts.filter { $0.key != projectID }.values)
+        for match in log.matches(of: #/https?://(?:localhost|127\.0\.0\.1):(\d+)/#).reversed() {
+            guard let logged = Int(match.1), !others.contains(logged), await isListening(logged) else { continue }
+            // Still running, just not on the port it was given: found right away next time.
+            if await services.servers.isRunning(taskID: id), basePorts[projectID] == port { basePorts[projectID] = logged }
+            return url(logged)
+        }
+        lastError = "The server for \(project.name) did not start on port \(port). "
+            + "Its output is in \(ShiftPaths.logs.appendingPathComponent("server-\(id).log").path)."
+        return nil
+    }
+
+    /// Whether something answers on the port: the allocator only passes over a port that is taken.
+    private func isListening(_ port: Int) async -> Bool {
+        await services?.ports.allocate(preferred: port, reserved: []) != port
     }
 
     /// Keeps a web project's base server running (starting it if it is not), and stops it once the project
