@@ -40,7 +40,7 @@ function Panel({ label, children }: { label: string; children: React.ReactNode }
 const HEROES = [
   ["Run ten agents", "like one.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
   ["A team of agents,", "one window.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Agents as easy as", "a to-do list.", "Add tasks, and they’re done. Agents, worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Agents as easy as", "a to-do list.", "Add tasks. Get them done. Agents, worktrees, branches, ports, commits, merges, and cleanup are handled for you."],
   ["Ten agents,", "one checklist.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
   ["A to-do list that", "does itself.", "Every task gets its own agent. Worktrees, branches, ports, commits and cleanup are handled for you."],
   ["One list.", "Ten agents working.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
