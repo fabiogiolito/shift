@@ -38,14 +38,14 @@ function Panel({ label, children }: { label: string; children: React.ReactNode }
 // Hero copy options, picked with ?hero=N from the numbered links in the nav.
 // [headline, highlighted part, subline]
 const HEROES = [
-  ["Pull an", "extra shift.", "Without working it. Agents take your tasks in parallel, each on its own branch and dev server."],
-  ["The", "agent shift.", "Hand over your tasks. Agents work them in parallel, each on its own branch, worktree and dev server."],
-  ["Extra shifts.", "Zero overtime.", "Agents build your tasks in parallel on their own branches. You just test and merge."],
-  ["Clock out.", "Agents clock in.", "Describe the work and walk away. Come back to branches ready to test and merge."],
-  ["Agents take", "the extra shift.", "Every task runs at once, each with its own branch, worktree and dev server."],
-  ["Every task gets", "its own shift.", "One agent, one branch, one dev server each. All running at the same time."],
-  ["Staff the", "agent shift.", "Assign tasks to Claude Code or Codex. Each works on its own branch while you do something else."],
-  ["An extra shift", "that runs itself.", "Branches, worktrees, commits and dev servers are handled. You test and merge."],
+  ["Ship in", "parallel.", "Hand tasks to AI agents. Each gets its own branch, worktree and dev server. You just test and merge."],
+  ["Your backlog,", "all at once.", "Give every task to an agent. Each one works on its own branch with its own dev server."],
+  ["Describe.", "Test. Merge.", "Agents do the part in between, each on its own branch, worktree and dev server."],
+  ["Tasks,", "not chats.", "No transcripts to read, no terminals to watch. Write what you want and get a branch ready to test."],
+  ["Stop watching", "agents work.", "Hand off the task and leave. Come back when it is ready to test in your browser."],
+  ["Every task,", "its own branch.", "And its own worktree, agent and dev server. Nothing collides, everything runs at once."],
+  ["Parallel agents,", "without the mess.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Come back to", "a checkmark.", "Describe a task and walk away. It is built on its own branch and running on localhost when you return."],
 ]
 
 const STEPS = ["Describe", "Agent works", "Test", "Merge"]
