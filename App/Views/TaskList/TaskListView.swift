@@ -6,6 +6,8 @@ struct TaskListView: View {
     @Environment(AppModel.self) private var model
     let project: Project
     @Binding var selection: TaskItem.ID?
+    /// Owned by the caller, so what's typed is still there when the user comes back to this project.
+    @Binding var draft: NewTaskDraft
     @State private var activations = 0
 
     var body: some View {
@@ -104,11 +106,18 @@ struct TaskListView: View {
     }
 
     private var footer: some View {
-        PromptField(placeholder: "New task", submitTitle: "Start", isNewTaskField: true) { text, attachments in
+        PromptField(placeholder: "New task", submitTitle: "Start", isNewTaskField: true,
+                    externalText: $draft.text, externalAttachments: $draft.attachments, keepsSendButton: true) { text, attachments in
             if let id = model.createTask(projectID: project.id, prompt: text, attachments: attachments) { selection = id }
         }
         .padding(12)
     }
+}
+
+/// A new task not started yet: what's typed in the field and dropped on it.
+struct NewTaskDraft {
+    var text = ""
+    var attachments: [URL] = []
 }
 
 struct TaskRow: View {

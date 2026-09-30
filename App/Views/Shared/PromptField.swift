@@ -15,6 +15,8 @@ struct PromptField: View {
     var externalText: Binding<String>?
     /// The caller's attachments, alongside `externalText`.
     var externalAttachments: Binding<[URL]>?
+    /// Keeps the send button when the caller owns the text, for a draft that outlives the field.
+    var keepsSendButton = false
     var onSubmit: (String, [String]) -> Void = { _, _ in }
 
     @State private var ownText = ""
@@ -32,6 +34,7 @@ struct PromptField: View {
             if let externalAttachments { externalAttachments.wrappedValue = newValue } else { ownAttachments = newValue }
         }
     }
+    private var hasSendButton: Bool { externalText == nil || keepsSendButton }
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
@@ -50,7 +53,7 @@ struct PromptField: View {
         }
         .font(.body)
         .padding(10)
-        .padding(.trailing, externalText == nil ? 32 : 0) // room for the send button
+        .padding(.trailing, hasSendButton ? 32 : 0) // room for the send button
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
         // TextEditor draws no focus ring of its own, so the field draws the system one around its edge.
@@ -61,7 +64,7 @@ struct PromptField: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if externalText == nil { sendButton }
+            if hasSendButton { sendButton }
         }
         .onDrop(of: [.item], isTargeted: $dropTargeted) { providers in
             for provider in providers { Task { await add(provider) } }
