@@ -155,7 +155,6 @@ dt::before { content: "✓"; color: var(--green); }
 .screens:has([value="01"]:checked) img:not([data-shot="01"]),
 .screens:has([value="02"]:checked) img:not([data-shot="02"]),
 .screens:has([value="03"]:checked) img:not([data-shot="03"]),
-.screens:has([value="04"]:checked) img:not([data-shot="04"]) { position: absolute; inset: 0; scale: .99; opacity: 0; pointer-events: none; }
 
 /* CTA */
 .cta { position: relative; isolation: isolate; padding: 10rem 1.5rem; text-align: center; }
@@ -279,7 +278,7 @@ footer a:hover { color: var(--fg); }
     </div>
 
     <div class="hero-shot wrap rise" style="--i:4">
-      <img class="tilt" src="screens/dark-01-ready-to-test.webp" alt="Shift app showing parallel tasks" width="2400" height="1565" fetchpriority="high">
+      <img class="tilt" src="screens/dark-01-ready-to-test.webp" alt="Shift app showing parallel tasks" width="2784" height="1784" fetchpriority="high">
     </div>
   </section>
 
@@ -331,7 +330,6 @@ footer a:hover { color: var(--fg); }
           <label><input type="radio" name="shot" value="01" checked>Ready to test</label>
           <label><input type="radio" name="shot" value="02">Working</label>
           <label><input type="radio" name="shot" value="03">Needs input</label>
-          <label><input type="radio" name="shot" value="04">Codex</label>
         </div>
         <div class="tabs" role="radiogroup" aria-label="Theme">
           <label><input type="radio" name="theme" value="dark" aria-label="Dark" checked><svg class="i"><use href="#i-moon"/></svg></label>
@@ -339,14 +337,12 @@ footer a:hover { color: var(--fg); }
         </div>
       </div>
       <div class="shots">
-        <img data-shot="01" data-theme="dark" src="screens/dark-01-ready-to-test.webp" alt="Shift — Ready to test" width="2400" height="1565" loading="lazy">
-        <img data-shot="01" data-theme="light" src="screens/light-01-ready-to-test.webp" alt="Shift — Ready to test" width="2400" height="1565" loading="lazy">
-        <img data-shot="02" data-theme="dark" src="screens/dark-02-working.webp" alt="Shift — Working" width="2400" height="1565" loading="lazy">
-        <img data-shot="02" data-theme="light" src="screens/light-02-working.webp" alt="Shift — Working" width="2400" height="1565" loading="lazy">
-        <img data-shot="03" data-theme="dark" src="screens/dark-03-needs-input.webp" alt="Shift — Needs input" width="2400" height="1565" loading="lazy">
-        <img data-shot="03" data-theme="light" src="screens/light-03-needs-input.webp" alt="Shift — Needs input" width="2400" height="1565" loading="lazy">
-        <img data-shot="04" data-theme="dark" src="screens/dark-04-codex-project.webp" alt="Shift — Codex" width="2400" height="1565" loading="lazy">
-        <img data-shot="04" data-theme="light" src="screens/light-04-codex-project.webp" alt="Shift — Codex" width="2400" height="1565" loading="lazy">
+        <img data-shot="01" data-theme="dark" src="screens/dark-01-ready-to-test.webp" alt="Shift — Ready to test" width="2784" height="1784" loading="lazy">
+        <img data-shot="01" data-theme="light" src="screens/light-01-ready-to-test.webp" alt="Shift — Ready to test" width="2784" height="1784" loading="lazy">
+        <img data-shot="02" data-theme="dark" src="screens/dark-02-working.webp" alt="Shift — Working" width="2784" height="1784" loading="lazy">
+        <img data-shot="02" data-theme="light" src="screens/light-02-working.webp" alt="Shift — Working" width="2784" height="1784" loading="lazy">
+        <img data-shot="03" data-theme="dark" src="screens/dark-03-needs-input.webp" alt="Shift — Needs input" width="2784" height="1784" loading="lazy">
+        <img data-shot="03" data-theme="light" src="screens/light-03-needs-input.webp" alt="Shift — Needs input" width="2784" height="1784" loading="lazy">
       </div>
     </div>
   </section>
