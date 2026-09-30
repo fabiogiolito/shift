@@ -186,6 +186,7 @@ struct TaskDetailView: View {
                             Text("localhost:\(String(port))")
                             Image(systemName: "arrow.up.right").imageScale(.small)
                         }
+                        .frame(minHeight: Self.actionLabelHeight)
                     }
                     .buttonStyle(.glass)
                     .help(serverRunning == true ? "Open in browser" : "Server not running")
@@ -205,8 +206,12 @@ struct TaskDetailView: View {
                 Spacer()
             }
             .controlSize(.large)
+            .buttonBorderShape(.roundedRectangle)
         }
     }
+
+    /// A large button is 28 points tall around a 16 point label; a 20 point label makes it 32.
+    private static let actionLabelHeight: CGFloat = 20
 
     /// Builds the task's worktree and opens the app it built, replacing the one opened by the last build.
     @ViewBuilder private var buildButton: some View {
@@ -218,14 +223,17 @@ struct TaskDetailView: View {
                 }
             }
         } label: {
-            if state == .building {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.mini)
-                    Text("Building…")
+            Group {
+                if state == .building {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text("Building…")
+                    }
+                } else {
+                    Label("Build", systemImage: "hammer")
                 }
-            } else {
-                Label("Build", systemImage: "hammer")
             }
+            .frame(minHeight: Self.actionLabelHeight)
         }
         .buttonStyle(.glass)
         .disabled(state == .building)
@@ -238,15 +246,19 @@ struct TaskDetailView: View {
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         if task.status == .completed {
-            Button("Merge into \(task.base(in: project))") {
+            Button {
                 isMerging = true
                 Task { await model.merge(taskID: taskID); isMerging = false }
+            } label: {
+                Text("Merge into \(task.base(in: project))").frame(minHeight: Self.actionLabelHeight)
             }
             .buttonStyle(.glassProminent)
             .disabled(isMerging)
         } else if task.status == .conflict {
-            Button("Resolve") { model.resolveConflict(taskID: taskID) }
-                .buttonStyle(.glassProminent).tint(TaskStatus.conflict.color)
+            Button { model.resolveConflict(taskID: taskID) } label: {
+                Text("Resolve").frame(minHeight: Self.actionLabelHeight)
+            }
+            .buttonStyle(.glassProminent).tint(TaskStatus.conflict.color)
         }
     }
 
