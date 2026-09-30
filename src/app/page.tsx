@@ -1,5 +1,4 @@
 import Image from "next/image"
-import Link from "next/link"
 import { ArrowRight, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,25 +34,9 @@ function Panel({ label, className, children }: { label: string; className?: stri
   )
 }
 
-// Closing CTA copy options, picked with ?cta=N from the numbered links in the nav.
-// [headline, highlighted part]
-const CTAS = [
-  ["Leave. Come back to a", "checkmark."],
-  ["Start checking", "things off."],
-  ["Add your", "first task."],
-  ["What's first", "on your list?"],
-  ["Your to-do list", "is waiting."],
-  ["Get your list", "done."],
-  ["Put your agents", "to work."],
-  ["Write it down.", "Get it done."],
-]
-
 const STEPS = ["Describe", "Agent works", "Test", "Merge"]
 
-export default async function Home({ searchParams }: PageProps<"/">) {
-  const pick = Number((await searchParams).cta) || 1
-  const [lead, accent] = CTAS[pick - 1] ?? CTAS[0]
-
+export default function Home() {
   return (
     <main className="relative">
       {/* Nav */}
@@ -63,19 +46,6 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             <Image src={icon} alt="" width={28} height={28} />
             Shift
           </a>
-          <div className="flex items-center gap-0.5 font-mono text-xs">
-            {CTAS.map((_, i) => (
-              <Link
-                key={i}
-                href={`?cta=${i + 1}`}
-                scroll={false}
-                aria-current={pick === i + 1}
-                className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground aria-[current=true]:bg-white/10 aria-[current=true]:text-foreground"
-              >
-                {i + 1}
-              </Link>
-            ))}
-          </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="lg" className="hidden rounded-full text-muted-foreground sm:inline-flex" nativeButton={false} render={<a href={REPO} />}>
               GitHub
@@ -176,7 +146,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         <div className="reveal">
           <Image src={icon} alt="Shift" width={128} height={128} className="mx-auto drop-shadow-[0_20px_60px_rgba(255,141,40,0.35)]" />
           <h2 className="mx-auto mt-10 max-w-3xl text-4xl font-semibold tracking-[-0.035em] text-balance sm:text-6xl">
-            {lead} <span className="text-rails">{accent}</span>
+            What’s first <span className="text-rails">on your list?</span>
           </h2>
           <div className="mt-10 flex justify-center">
             <DownloadButton />
