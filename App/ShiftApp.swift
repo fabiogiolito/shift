@@ -24,6 +24,7 @@ struct ShiftApp: App {
             .task {
                 await delegate.model.start()
                 ready = true
+                delegate.applyScreenshotSize()
             }
         }
         .commands {
@@ -116,6 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// SHIFT_APPEARANCE=dark forces dark mode, for screenshots.
     func applicationDidFinishLaunching(_ notification: Notification) {
         if ProcessInfo.processInfo.environment["SHIFT_APPEARANCE"] == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }
+    }
+
+    /// SHIFT_WINDOW_SIZE=1280x780 sizes the window, for screenshots.
+    func applyScreenshotSize() {
+        let size = ProcessInfo.processInfo.environment["SHIFT_WINDOW_SIZE"]?.split(separator: "x").compactMap { Double($0) }
+        guard let size, size.count == 2, let window = NSApp.windows.first(where: \.isVisible) else { return }
+        window.setFrame(NSRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
     }
 
     /// Tasks keep running when the window is closed.

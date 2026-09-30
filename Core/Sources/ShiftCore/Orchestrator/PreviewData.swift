@@ -104,21 +104,25 @@ extension AppModel {
     }
 
     /// Upbeat sample data for promotional screenshots: busy, healthy projects.
-    /// Run the app with SHIFT_PREVIEW=promo to browse it.
+    /// Run the app with SHIFT_PREVIEW=promo to browse it. Projects are folders in ~/Sites (they need not exist);
+    /// an `icon.svg` in one shows as its icon. `scripts/screenshots.sh` takes the website's screenshots from it.
     public static func promo() -> AppModel {
-        let store = Project(name: "Storefront", repoPath: "/Users/sam/Sites/storefront", baseBranch: "main",
+        let sites = NSHomeDirectory() + "/Sites/"
+        let store = Project(name: "Storefront", repoPath: sites + "storefront", baseBranch: "main",
                             serverCommand: "pnpm dev --port $PORT")
-        let api = Project(name: "Checkout API", repoPath: "/Users/sam/Sites/checkout-api", baseBranch: "main",
+        let api = Project(name: "Checkout API", repoPath: sites + "checkout-api", baseBranch: "main",
                           defaultAgent: .codex)
-        let docs = Project(name: "Docs", repoPath: "/Users/sam/Sites/docs", baseBranch: "main")
+        let admin = Project(name: "Admin", repoPath: sites + "admin", baseBranch: "main")
+        let docs = Project(name: "Docs", repoPath: sites + "docs", baseBranch: "main")
 
         func task(_ id: Int, _ title: String, _ status: TaskStatus, in project: Project = store, prompt: String,
-                  description: String, summary: String? = nil, question: String? = nil,
+                  followUps: [String] = [], description: String, summary: String? = nil, question: String? = nil,
                   activity: String? = nil, minutes: Double = 4) -> TaskItem {
             var task = TaskItem(id: id, projectID: project.id, title: title, status: status, agent: project.defaultAgent,
                                 branch: "shift/\(id)", worktreePath: "/Users/sam/.shift/worktrees/storefront/\(id)",
                                 sessionID: "preview", port: status == .merged ? nil : 3000 + id % 100,
-                                prompts: [Prompt(text: prompt)], summary: summary, question: question, activity: activity,
+                                prompts: ([prompt] + followUps).map { Prompt(text: $0) }, summary: summary,
+                                question: question, activity: activity,
                                 workingSince: status == .working ? Date().addingTimeInterval(-60 * minutes) : nil,
                                 mergedAt: status == .merged ? Date().addingTimeInterval(-3600 * minutes) : nil)
             task.description = description
@@ -128,16 +132,27 @@ extension AppModel {
         var tasks = [
             task(101, "Tighter board spacing", .completed,
                  prompt: "Board items feel too far apart. Tighten the gap and make it a single variable.",
+                 followUps: ["8px is right on desktop, but keep 12px on phones.",
+                             "Add a short note to the docs explaining the variable."],
                  description: "Tightens the space between board items and makes the gap one variable.",
-                 summary: "Changed the gap between board items from 16px to 8px and introduced --board-gap, so spacing is adjusted in one place."),
+                 summary: "Board items now sit 8px apart (12px on phones), set by a single --board-gap variable that is documented in docs/spacing.md."),
             task(102, "Dark mode for product pages", .completed,
                  prompt: "Product pages ignore dark mode. Make them follow the system appearance.",
                  description: "Product pages now follow the system's light or dark appearance.",
                  summary: "Product pages use the theme tokens and follow the system appearance; images get a subtle border in dark mode."),
+            task(108, "Gift card balance", .completed,
+                 prompt: "Let customers check a gift card's balance before paying with it.",
+                 description: "Shows a gift card's remaining balance at checkout.",
+                 summary: "Checkout shows the remaining balance as soon as a gift card code is entered."),
             task(103, "Wishlist button", .working,
                  prompt: "Add a heart button to product cards that saves the item to the wishlist.",
+                 followUps: ["Fill the heart when the item is already saved, and let a second click remove it."],
                  description: "Lets shoppers save any product to their wishlist from the grid.",
                  activity: "Writing tests for WishlistButton…", minutes: 6),
+            task(107, "Empty cart illustration", .needsInput,
+                 prompt: "The empty cart page is just text. Make it friendlier.",
+                 description: "Replaces the plain empty cart message with an illustration and suggestions.",
+                 question: "Should the empty cart suggest recently viewed products, or this week's bestsellers?"),
             task(104, "Faster hero images", .working,
                  prompt: "The home page hero loads slowly. Serve responsive AVIF images with a blurred placeholder.",
                  description: "Serves smaller, responsive hero images with a blurred placeholder.",
@@ -150,16 +165,25 @@ extension AppModel {
                  prompt: "Add a ⌘K command palette that searches products and categories.",
                  description: "Opens a quick product search from anywhere with ⌘K.",
                  activity: "Adding keyboard navigation to results…", minutes: 2),
-            task(107, "Empty cart illustration", .needsInput,
-                 prompt: "The empty cart page is just text. Make it friendlier.",
-                 description: "Replaces the plain empty cart message with an illustration and suggestions.",
-                 question: "Should the empty cart suggest recently viewed products, or this week's bestsellers?"),
+            task(109, "Size guide on product pages", .working,
+                 prompt: "Add a size guide link next to the size picker that opens a chart for that product type.",
+                 description: "Adds a size chart shoppers can open from the size picker.",
+                 activity: "Reading ProductOptions.tsx…", minutes: 1),
             task(98, "Sticky header on scroll", .merged,
                  prompt: "Keep the header visible when scrolling down long pages.",
                  description: "Keeps the header pinned while scrolling.", minutes: 2),
             task(97, "Fix cart total rounding", .merged,
                  prompt: "Cart totals are sometimes a cent off. Fix the rounding.",
                  description: "Totals are computed in cents, so they're never a cent off.", minutes: 5),
+            task(96, "Free shipping progress bar", .merged,
+                 prompt: "Show how much more to spend for free shipping in the cart.",
+                 description: "Shows how far the cart is from free shipping.", minutes: 20),
+            task(95, "Product image zoom", .merged,
+                 prompt: "Let shoppers zoom into product photos on hover and pinch.",
+                 description: "Zooms product photos on hover and pinch.", minutes: 26),
+            task(94, "Back in stock emails", .merged,
+                 prompt: "Let shoppers ask for an email when a sold out item is back.",
+                 description: "Emails shoppers when a sold out item returns.", minutes: 48),
 
             task(201, "Retry failed webhooks", .working, in: api,
                  prompt: "Retry failed outgoing webhooks with exponential backoff.",
@@ -169,14 +193,35 @@ extension AppModel {
                  prompt: "Rate limit requests per API key, 100 per minute.",
                  description: "Limits each API key to 100 requests a minute.",
                  summary: "Added a per-key token bucket in Redis; responses include RateLimit headers and 429s when exceeded."),
+            task(203, "Idempotency keys for payments", .working, in: api,
+                 prompt: "Accept an Idempotency-Key header on POST /payments so retries never charge twice.",
+                 description: "Makes payment requests safe to retry.",
+                 activity: "Adding the idempotency table migration…", minutes: 4),
 
-            task(301, "Search across all guides", .working, in: docs,
+            task(301, "Bulk edit product prices", .working, in: admin,
+                 prompt: "Let staff select several products and change their prices at once.",
+                 description: "Changes the price of many products in one step.",
+                 activity: "Building the bulk edit sheet…", minutes: 7),
+            task(302, "Export orders as CSV", .completed, in: admin,
+                 prompt: "Add an Export button to the orders table that downloads the filtered orders as CSV.",
+                 description: "Downloads the orders in view as a CSV file.",
+                 summary: "The orders table has an Export button that downloads the current filter as CSV."),
+            task(303, "Refund reason field", .working, in: admin,
+                 prompt: "Require a reason when staff refund an order, and show it in the order timeline.",
+                 description: "Records why each refund was made.",
+                 activity: "Updating the refund dialog…", minutes: 2),
+
+            task(401, "Search across all guides", .working, in: docs,
                  prompt: "Add full-text search across every guide.",
                  description: "Adds full-text search across every guide.",
                  activity: "Building the search index…", minutes: 5),
+            task(402, "Copy button on code blocks", .working, in: docs,
+                 prompt: "Add a copy button to every code block.",
+                 description: "Copies a code block with one click.",
+                 activity: "Styling the button…", minutes: 3),
         ]
-        tasks[6].options = ["Recently viewed products", "This week's bestsellers"]
-        let model = AppModel(previewProjects: [store, api, docs], tasks: tasks)
+        tasks[4].options = ["Recently viewed products", "This week's bestsellers"]
+        let model = AppModel(previewProjects: [store, api, admin, docs], tasks: tasks)
         model.pushStates = [store.id: .init(remote: "origin", unpushed: 2), api.id: .init(remote: "origin", unpushed: 0)]
         return model
     }
