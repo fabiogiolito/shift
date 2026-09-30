@@ -205,6 +205,18 @@ final class GitServiceTests: XCTestCase {
 
     // MARK: - Basics
 
+    func testInitRepositoryCommitsTheFolder() async throws {
+        let folder = root.appendingPathComponent("plain")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try "hello\n".write(to: folder.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+        try await service.initRepository(folder)
+        let branch = try await service.currentBranch(repo: folder)
+        let branches = try await service.branches(repo: folder)
+        XCTAssertEqual(branches, [branch])
+        let tracked = await service.isTracked(repo: folder, path: "notes.txt")
+        XCTAssertTrue(tracked)
+    }
+
     func testRepositoryAndBranches() async throws {
         let isRepo = await service.isRepository(repo)
         let isNotRepo = await service.isRepository(root)

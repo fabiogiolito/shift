@@ -18,7 +18,7 @@ struct TaskDetailView: View {
     @State private var isMerging = false
     @State private var changes: Result<DiffSummary, Error>?
     /// nil until first checked.
-    @State private var serverRunning: Bool?
+    @State private var server: ServerState?
     @State private var output: Output?
     /// For capping the response panel's height.
     @State private var windowHeight: CGFloat = 0
@@ -182,24 +182,35 @@ struct TaskDetailView: View {
                     Button { apps.openInBrowser(server) } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "circle.fill").imageScale(.small)
-                                .foregroundStyle(serverRunning == true ? Color.green : Color.secondary)
+                                .foregroundStyle(self.server?.color ?? .secondary)
                             Text("localhost:\(String(port))")
                             Image(systemName: "arrow.up.right").imageScale(.small)
                         }
                     }
                     .buttonStyle(.glass)
-                    .help(serverRunning == true ? "Open in browser" : "Server not running")
-                    .task {
+                    .help(self.server == .up ? "Open in browser" : self.server?.label ?? "")
+                    .task(id: task.port) {
                         while !Task.isCancelled {
-                            serverRunning = await model.isServerRunning(taskID: taskID)
-                            try? await Task.sleep(for: .seconds(3))
+                            let alive = await model.isServerRunning(taskID: taskID)
+                            let answers = alive ? await model.isServerAnswering(taskID: taskID) : false
+                            // Once up, a server that stops answering has crashed inside a process that stayed alive.
+                            let wasUp = self.server == .up || self.server == .notResponding
+                            self.server = !alive ? .stopped : answers ? .up : wasUp ? .notResponding : .starting
+                            // Quick while starting, so the link turns green as soon as the port answers.
+                            try? await Task.sleep(for: .seconds(self.server == .starting ? 1 : 3))
                         }
                     }
                     // The port may still come up, so the button stays.
-                    if serverRunning == false {
-                        Text("Stopped").foregroundStyle(.secondary)
-                        Button("Restart") { Task { await model.restartServer(taskID: taskID) } }
+                    if let state = self.server, state != .up {
+                        Text(state.label).foregroundStyle(state == .starting ? .secondary : state.color)
+                        if state != .starting {
+                            Button("Log") { output = .serverLog }.buttonStyle(.glass).controlSize(.small)
+                            Button("Restart") {
+                                self.server = .starting
+                                Task { await model.restartServer(taskID: taskID) }
+                            }
                             .buttonStyle(.glass).controlSize(.small)
+                        }
                     }
                 }
                 Spacer()
@@ -362,7 +373,10 @@ struct TaskDetailView: View {
                 if project.isApp {
                     Button("Build Log") { output = .buildLog }
                 } else if task.port != nil {
-                    Button("Restart Server") { Task { await model.restartServer(taskID: taskID) } }
+                    Button("Restart Server") {
+                        server = .starting
+                        Task { await model.restartServer(taskID: taskID) }
+                    }
                     Button("Server Log") { output = .serverLog }
                 }
                 Button("Agent Output") { output = .agentOutput }
@@ -423,6 +437,34 @@ struct TaskDetailView: View {
     }
 }
 
+/// The dev server, as the port link shows it.
+private enum ServerState {
+    /// Running, not answering yet.
+    case starting
+    case up
+    /// Was up, still running, stopped answering.
+    case notResponding
+    /// The process exited.
+    case stopped
+
+    var label: String {
+        switch self {
+        case .starting: "Starting…"
+        case .up: "Running"
+        case .notResponding: "Not responding"
+        case .stopped: "Stopped"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .starting: .orange
+        case .up: .green
+        case .notResponding, .stopped: .red
+        }
+    }
+}
+
 /// Debugging text, from the ••• menu.
 private enum Output: String, Identifiable {
     case serverLog = "Server Log", buildLog = "Build Log", agentOutput = "Agent Output"
@@ -452,6 +494,8 @@ private struct OutputSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
             }
+            // The latest output, where errors are, is at the end.
+            .defaultScrollAnchor(.bottom)
             .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
             HStack {

@@ -60,6 +60,10 @@ final class MockGit: GitServicing {
     private(set) var calls: [String] = []
 
     func isRepository(_ url: URL) async -> Bool { isRepo }
+    func initRepository(_ url: URL) async throws {
+        calls.append("init \(url.lastPathComponent)")
+        isRepo = true
+    }
     func branches(repo: URL) async throws -> [String] { branchList }
     func currentBranch(repo: URL) async throws -> String { current }
 
@@ -298,6 +302,10 @@ final class MockPorts: PortAllocating {
         while taken.contains(port) || reserved.contains(port) { port += 1 }
         return port
     }
+
+    /// Ports whose server runs but does not answer.
+    var silent: Set<Int> = []
+    func isListening(_ port: Int) async -> Bool { !silent.contains(port) }
 }
 
 @MainActor @Observable

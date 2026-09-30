@@ -17,6 +17,13 @@ public struct GitService: GitServicing {
         (try? await run(["rev-parse", "--git-dir"], in: url))?.status == 0
     }
 
+    public func initRepository(_ url: URL) async throws {
+        try await git(["init"], in: url)
+        try await git(["add", "-A"], in: url)
+        // --allow-empty: an empty folder still needs a commit for worktrees to start from.
+        try await git(["commit", "--no-verify", "--allow-empty", "-m", "Initial commit"], in: url)
+    }
+
     public func branches(repo: URL) async throws -> [String] {
         try await git(["for-each-ref", "--format=%(refname:short)", "refs/heads"], in: repo)
             .split(separator: "\n").map(String.init)

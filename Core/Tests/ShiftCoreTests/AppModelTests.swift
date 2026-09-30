@@ -438,6 +438,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(dead)
     }
 
+    func testServerThatRunsButDoesNotAnswerIsReported() async {
+        let id = await createCompletedTask()
+        let answering = await model.isServerAnswering(taskID: id)
+        XCTAssertTrue(answering)
+        ports.silent = [model.task(id)!.port!]
+        let silent = await model.isServerAnswering(taskID: id)
+        XCTAssertFalse(silent)
+        let running = await model.isServerRunning(taskID: id)
+        XCTAssertTrue(running)
+    }
+
     func testPortSkipsOnesHeldByOtherTasks() async {
         ports.taken = [3001]
         let first = await createCompletedTask()
@@ -1340,6 +1351,14 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(added)
         XCTAssertEqual(model.lastError, "notes is not a Git repository.")
         XCTAssertEqual(model.projects.count, 1)
+    }
+
+    func testAddProjectInitializesGitWhenAsked() async {
+        git.isRepo = false
+        let added = await model.addProject(at: temp.appendingPathComponent("notes"), initializingGit: true)
+        XCTAssertEqual(added?.name, "notes")
+        XCTAssertEqual(git.calls, ["init notes"])
+        XCTAssertNil(model.lastError)
     }
 
     func testAddProjectDefaults() async {

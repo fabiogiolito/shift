@@ -207,15 +207,30 @@ public final class AppModel {
 
     // MARK: Projects
 
+    /// For asking before `addProject(at:initializingGit:)`. True for a folder that is already a project.
+    public func isRepository(_ url: URL) async -> Bool {
+        guard let services else { return true }
+        return await services.git.isRepository(url)
+    }
+
     /// Validates that `url` is a Git repository and adds it with sensible defaults.
+    /// `initializingGit`: a folder that is not a repository is made one, with everything in it committed.
     @discardableResult
-    public func addProject(at url: URL) async -> Project? {
+    public func addProject(at url: URL, initializingGit: Bool = false) async -> Project? {
         guard let services else { return nil }
         let path = url.standardizedFileURL.path
         if let existing = projects.first(where: { $0.repoPath == path }) { return existing }
-        guard await services.git.isRepository(url) else {
-            lastError = "\(url.lastPathComponent) is not a Git repository."
-            return nil
+        if !(await services.git.isRepository(url)) {
+            guard initializingGit else {
+                lastError = "\(url.lastPathComponent) is not a Git repository."
+                return nil
+            }
+            do {
+                try await services.git.initRepository(url)
+            } catch {
+                lastError = "Could not initialize Git in \(url.lastPathComponent): \(Self.describe(error))"
+                return nil
+            }
         }
         let branches = (try? await services.git.branches(repo: url)) ?? []
         var base = ["main", "master"].first(where: branches.contains)
@@ -643,6 +658,14 @@ public final class AppModel {
     public func isServerRunning(taskID: TaskItem.ID) async -> Bool {
         guard let services else { return Self.previewServerRunning(task(taskID)) }
         return await services.servers.isRunning(taskID: taskID)
+    }
+
+    /// True while something answers on the task's port: the server is up, not just started.
+    /// A server can run without answering: still starting, or crashed inside a watcher that stays alive.
+    public func isServerAnswering(taskID: TaskItem.ID) async -> Bool {
+        guard let services else { return Self.previewServerRunning(task(taskID)) }
+        guard let port = task(taskID)?.port else { return false }
+        return await services.ports.isListening(port)
     }
 
     /// The last 200 lines of the dev server's output, and why it failed to start if it did.

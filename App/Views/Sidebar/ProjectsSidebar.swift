@@ -79,8 +79,18 @@ struct ProjectsSidebar: View {
         panel.prompt = "Add"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
+            var initializingGit = false
+            if !(await model.isRepository(url)) {
+                let alert = NSAlert()
+                alert.messageText = "This folder isn't a Git repository."
+                alert.informativeText = "Initialize Git to use it with Shift?"
+                alert.addButton(withTitle: "Initialize Git")
+                alert.addButton(withTitle: "Cancel")
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                initializingGit = true
+            }
             let known = Set(model.projects.map(\.id))
-            guard let project = await model.addProject(at: url) else { return }
+            guard let project = await model.addProject(at: url, initializingGit: initializingGit) else { return }
             selection = project.id
             // A new project opens its settings, so permissions and commands can be reviewed first.
             if !known.contains(project.id) { settingsProject = project }
