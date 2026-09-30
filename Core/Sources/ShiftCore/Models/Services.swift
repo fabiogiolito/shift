@@ -12,6 +12,8 @@ public enum MergeResult: Equatable, Sendable {
 
 public protocol GitServicing: Sendable {
     func isRepository(_ url: URL) async -> Bool
+    /// Makes the folder a repository and commits everything in it: tasks branch off a commit.
+    func initRepository(_ url: URL) async throws
     func branches(repo: URL) async throws -> [String]
     func currentBranch(repo: URL) async throws -> String
 

@@ -60,6 +60,10 @@ final class MockGit: GitServicing {
     private(set) var calls: [String] = []
 
     func isRepository(_ url: URL) async -> Bool { isRepo }
+    func initRepository(_ url: URL) async throws {
+        calls.append("init \(url.lastPathComponent)")
+        isRepo = true
+    }
     func branches(repo: URL) async throws -> [String] { branchList }
     func currentBranch(repo: URL) async throws -> String { current }
 

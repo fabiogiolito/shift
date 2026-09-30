@@ -1353,6 +1353,14 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.projects.count, 1)
     }
 
+    func testAddProjectInitializesGitWhenAsked() async {
+        git.isRepo = false
+        let added = await model.addProject(at: temp.appendingPathComponent("notes"), initializingGit: true)
+        XCTAssertEqual(added?.name, "notes")
+        XCTAssertEqual(git.calls, ["init notes"])
+        XCTAssertNil(model.lastError)
+    }
+
     func testAddProjectDefaults() async {
         git.branchList = ["develop", "master"]
         let added = await model.addProject(at: temp.appendingPathComponent("site"))
