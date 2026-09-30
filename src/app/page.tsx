@@ -38,14 +38,16 @@ function Panel({ label, children }: { label: string; children: React.ReactNode }
 // Hero copy options, picked with ?hero=N from the numbered links in the nav.
 // [headline, highlighted part, subline]
 const HEROES = [
-  ["Ten agents,", "one checklist.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
   ["Run ten agents", "like one.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
   ["A team of agents,", "one window.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
   ["Agents as easy as", "a to-do list.", "Add a task, get a checkmark. Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Ten tasks", "at the same time.", "Each with its own agent. Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Multiply yourself", "by ten.", "Give every task its own agent. Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["One prompt each.", "Ten tasks done.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
-  ["Parallel agents,", "on autopilot.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Ten agents,", "one checklist.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["A to-do list that", "does itself.", "Every task gets its own agent. Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["One list.", "Ten agents working.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Write the list.", "Agents check it off.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Agents as simple as", "checking a box.", "Write a task, come back to a checkmark. Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Ten agents,", "one place to check.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
+  ["Mission control", "for your agents.", "Worktrees, branches, ports, commits and cleanup are handled for you."],
 ]
 
 const STEPS = ["Describe", "Agent works", "Test", "Merge"]
