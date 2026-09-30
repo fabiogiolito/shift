@@ -94,9 +94,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
         <Badge
           variant="outline"
-          className="animate-rise h-8 gap-2 rounded-full border-white/10 bg-white/[0.03] px-3.5 font-mono text-xs text-muted-foreground backdrop-blur"
+          className="animate-rise h-8 rounded-full border-white/10 bg-white/[0.03] px-3.5 font-mono text-xs text-muted-foreground backdrop-blur"
         >
-          <span className="size-1.5 rounded-full bg-[#30d158] shadow-[0_0_8px_#30d158]" />
           Claude Code · Codex · macOS
         </Badge>
 
