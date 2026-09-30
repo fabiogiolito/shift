@@ -6,8 +6,6 @@ struct ContentView: View {
     @State private var selectedProject: Project.ID?
     /// Persisted so the app reopens on the task the user was looking at.
     @AppStorage("selectedTask") private var selectedTask: TaskItem.ID?
-    /// Each project's unsent new task, kept while another project is shown.
-    @State private var drafts: [Project.ID: NewTaskDraft] = [:]
     /// The project bar spans the task list and detail columns but not the sidebar. No split view placement
     /// does that, so it's laid over the window's bottom trailing corner, sized from the two columns.
     @State private var listWidth: CGFloat = 0
@@ -24,8 +22,7 @@ struct ContentView: View {
                 if let project {
                     // A new identity per project rebuilds the toolbar items; a reused one keeps the
                     // previous project name's width, truncating or off-centering the new name.
-                    TaskListView(project: project, selection: $selectedTask,
-                                 draft: Binding(get: { drafts[project.id] ?? NewTaskDraft() }, set: { drafts[project.id] = $0 }))
+                    TaskListView(project: project, selection: $selectedTask)
                         .toolbar {
                             ToolbarItem(placement: .navigation) {
                                 // Lines the name up with the list's section headers.

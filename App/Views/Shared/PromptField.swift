@@ -15,8 +15,9 @@ struct PromptField: View {
     var externalText: Binding<String>?
     /// The caller's attachments, alongside `externalText`.
     var externalAttachments: Binding<[URL]>?
-    /// Keeps the send button when the caller owns the text, for a draft that outlives the field.
-    var keepsSendButton = false
+    /// Keeps what's typed and attached under this key after the field is gone, so it's back when the user
+    /// returns to the project or task it belongs to.
+    var draftKey: String?
     var onSubmit: (String, [String]) -> Void = { _, _ in }
 
     @State private var ownText = ""
@@ -25,16 +26,21 @@ struct PromptField: View {
     @FocusState private var focused: Bool
 
     private var text: String {
-        get { externalText?.wrappedValue ?? ownText }
-        nonmutating set { if let externalText { externalText.wrappedValue = newValue } else { ownText = newValue } }
-    }
-    private var attachments: [URL] {
-        get { externalAttachments?.wrappedValue ?? ownAttachments }
+        get { externalText?.wrappedValue ?? draftKey.map { PromptDrafts.shared.drafts[$0]?.text ?? "" } ?? ownText }
         nonmutating set {
-            if let externalAttachments { externalAttachments.wrappedValue = newValue } else { ownAttachments = newValue }
+            if let externalText { externalText.wrappedValue = newValue }
+            else if let draftKey { PromptDrafts.shared.drafts[draftKey, default: PromptDraft()].text = newValue }
+            else { ownText = newValue }
         }
     }
-    private var hasSendButton: Bool { externalText == nil || keepsSendButton }
+    private var attachments: [URL] {
+        get { externalAttachments?.wrappedValue ?? draftKey.map { PromptDrafts.shared.drafts[$0]?.attachments ?? [] } ?? ownAttachments }
+        nonmutating set {
+            if let externalAttachments { externalAttachments.wrappedValue = newValue }
+            else if let draftKey { PromptDrafts.shared.drafts[draftKey, default: PromptDraft()].attachments = newValue }
+            else { ownAttachments = newValue }
+        }
+    }
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
@@ -53,7 +59,7 @@ struct PromptField: View {
         }
         .font(.body)
         .padding(10)
-        .padding(.trailing, hasSendButton ? 32 : 0) // room for the send button
+        .padding(.trailing, externalText == nil ? 32 : 0) // room for the send button
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
         // TextEditor draws no focus ring of its own, so the field draws the system one around its edge.
@@ -64,7 +70,7 @@ struct PromptField: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if hasSendButton { sendButton }
+            if externalText == nil { sendButton }
         }
         .onDrop(of: [.item], isTargeted: $dropTargeted) { providers in
             for provider in providers { Task { await add(provider) } }
@@ -152,6 +158,19 @@ struct PromptField: View {
         .help("\(submitTitle) (⌘↩)")
         .padding(6)
     }
+}
+
+/// A prompt not sent yet: what's typed in a field and dropped on it.
+struct PromptDraft {
+    var text = ""
+    var attachments: [URL] = []
+}
+
+/// Unsent prompts by `PromptField.draftKey`. Here rather than in the views that show the fields, so typing
+/// redraws only the fields. Kept until the app quits.
+@MainActor @Observable final class PromptDrafts {
+    static let shared = PromptDrafts()
+    var drafts: [String: PromptDraft] = [:]
 }
 
 extension FocusedValues {
