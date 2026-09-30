@@ -88,5 +88,19 @@
 - Merging no longer deletes work when a task's base is set to its own branch]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.5/Shift-0.1.5.zip" sparkle:edSignature="f+qIIU9Ixg0JP8lqQLOLGUHQU0sL/HtLMra2fg4HgeD7kawnuaqTp9GHK0nQY+GWnrJkhzoFH9GBoK8aRv1ICA==" length="3544814" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.6</title>
+      <pubDate>Wed, 30 Sep 2026 16:45:41 +0000</pubDate>
+      <sparkle:version>8</sparkle:version>
+      <sparkle:shortVersionString>0.1.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- The server link shows Starting, Running, Not responding or Stopped, based on whether the server actually answers.
+- A server that stops responding offers Log and Restart, and logs open scrolled to the end.
+- The globe shows a spinner while the base server starts, and opens the browser once the server is ready.
+- If a server ends up on a different address, the globe opens that one, or tells you the server did not start.
+- Adding a folder that is not a Git repository offers to initialize Git for you.
+- Server, merge and task action buttons are taller, with rounded corners.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.6/Shift-0.1.6.zip" sparkle:edSignature="Zsp6HFm+PwTA3JJ95Yk8eSUdskNDPNV33LKN2m5c4rJTA/lx38i4GUWFt9++RYrmlpUkqvwh8bS8l6imqAfnBQ==" length="3569215" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
