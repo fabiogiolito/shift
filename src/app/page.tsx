@@ -38,14 +38,14 @@ function Panel({ label, children }: { label: string; children: React.ReactNode }
 // Hero copy options, picked with ?hero=N from the numbered links in the nav.
 // [headline, highlighted part, subline]
 const HEROES = [
-  ["Ship in", "parallel.", "Hand tasks to AI agents. Each gets its own branch, worktree and dev server. You just test and merge."],
-  ["Shift into", "parallel.", "Stop working one task at a time. Every task gets its own agent, branch and dev server."],
-  ["Hold Shift.", "Select all.", "Multi-select for your backlog. Pick every task and run them at once, each on its own branch."],
-  ["Agents on", "shift.", "Describe the work and walk away. They clock in with a branch, worktree and dev server each."],
-  ["Shift", "gears.", "From one task at a time to all of them at once. Agents build in parallel, you test and merge."],
-  ["Shift the work.", "Keep the merge.", "Agents code in isolated branches. You test each one and decide what lands."],
-  ["The night shift", "writes code.", "Queue up tasks for your agents. Come back to branches ready to test and merge."],
-  ["Shift", "happens.", "Hand off tasks and carry on. Branches, commits and dev servers take care of themselves."],
+  ["Pull an", "extra shift.", "Without working it. Agents take your tasks in parallel, each on its own branch and dev server."],
+  ["The", "agent shift.", "Hand over your tasks. Agents work them in parallel, each on its own branch, worktree and dev server."],
+  ["Extra shifts.", "Zero overtime.", "Agents build your tasks in parallel on their own branches. You just test and merge."],
+  ["Clock out.", "Agents clock in.", "Describe the work and walk away. Come back to branches ready to test and merge."],
+  ["Agents take", "the extra shift.", "Every task runs at once, each with its own branch, worktree and dev server."],
+  ["Every task gets", "its own shift.", "One agent, one branch, one dev server each. All running at the same time."],
+  ["Staff the", "agent shift.", "Assign tasks to Claude Code or Codex. Each works on its own branch while you do something else."],
+  ["An extra shift", "that runs itself.", "Branches, worktrees, commits and dev servers are handled. You test and merge."],
 ]
 
 const STEPS = ["Describe", "Agent works", "Test", "Merge"]
