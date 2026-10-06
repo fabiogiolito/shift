@@ -13,9 +13,11 @@ final class ProjectSetupTests: XCTestCase {
         }
     }
 
-    func testOnlyViteGetsAPortFlag() {
+    func testOnlyViteAndAstroGetAPortFlag() {
         let next = Data(#"{"scripts": {"dev": "next dev"}}"#.utf8)
         XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["pnpm-lock.yaml"], packageJSON: next).server, "pnpm run dev")
+        let astro = Data(#"{"scripts": {"dev": "astro dev"}}"#.utf8)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["yarn.lock"], packageJSON: astro).server, "yarn run dev --port $PORT")
     }
 
     func testUntrackedEnvFilesAreCopied() {
