@@ -21,8 +21,17 @@ enum ProjectSetup {
             .map { "cp \"$SHIFT_REPO/\($0)\" ." }
 
         let package = packageJSON.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
-        let hasDev = (package?["scripts"] as? [String: Any])?["dev"] is String
-        return (steps.joined(separator: " && "), hasDev ? "\(manager ?? "npm") run dev" : "")
+        guard let dev = (package?["scripts"] as? [String: Any])?["dev"] as? String else {
+            return (steps.joined(separator: " && "), "")
+        }
+        // Vite ignores $PORT, so pass it as a flag. npm needs `--` to forward it; the others
+        // forward arguments as-is (and pnpm would hand a literal `--` on to vite).
+        let runner = manager ?? "npm"
+        var server = "\(runner) run dev"
+        if dev.range(of: #"\bvite\b"#, options: .regularExpression) != nil {
+            server += runner == "npm" ? " -- --port $PORT" : " --port $PORT"
+        }
+        return (steps.joined(separator: " && "), server)
     }
 
     static func suggest(repo: URL, git: GitServicing) async -> (setup: String, server: String) {
