@@ -9,8 +9,15 @@ final class ProjectSetupTests: XCTestCase {
                                     ("bun.lock", "bun"), ("package-lock.json", "npm")] {
             let suggestion = ProjectSetup.suggest(rootFiles: ["package.json", lockfile, "src"], packageJSON: dev)
             XCTAssertEqual(suggestion.setup, "\(manager) install")
-            XCTAssertEqual(suggestion.server, "\(manager) run dev")
+            XCTAssertEqual(suggestion.server, "\(manager) run dev" + (manager == "npm" ? " -- --port $PORT" : " --port $PORT"))
         }
+    }
+
+    func testOnlyViteAndAstroGetAPortFlag() {
+        let next = Data(#"{"scripts": {"dev": "next dev"}}"#.utf8)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["pnpm-lock.yaml"], packageJSON: next).server, "pnpm run dev")
+        let astro = Data(#"{"scripts": {"dev": "astro dev"}}"#.utf8)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["yarn.lock"], packageJSON: astro).server, "yarn run dev --port $PORT")
     }
 
     func testUntrackedEnvFilesAreCopied() {
@@ -29,7 +36,7 @@ final class ProjectSetupTests: XCTestCase {
         // No lockfile: nothing to install, npm runs the script.
         let bare = ProjectSetup.suggest(rootFiles: ["package.json"], packageJSON: dev)
         XCTAssertEqual(bare.setup, "")
-        XCTAssertEqual(bare.server, "npm run dev")
+        XCTAssertEqual(bare.server, "npm run dev -- --port $PORT")
     }
 
     func testServerCommandFallsBackToAStaticFileServer() {
