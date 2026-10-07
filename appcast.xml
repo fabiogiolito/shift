@@ -113,5 +113,19 @@
 - The suggested dev server command now gives Vite and Astro projects their task's port.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.7/Shift-0.1.7.zip" sparkle:edSignature="PHDgB4FKW1P+CoMGK0SvQnURUbIucLYuQ0ZTwsI73O5mbwjFKC5+GGY2VUI/gra38CFThjExdOFdhDGKXpXGCA==" length="3578082" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.8</title>
+      <pubDate>Wed, 07 Oct 2026 16:48:34 +0000</pubDate>
+      <sparkle:version>10</sparkle:version>
+      <sparkle:shortVersionString>0.1.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- If another app is already using a task's server port, the server moves to a free port.
+- When an agent creates a project in an empty folder, its dev server starts automatically and runs `npm install` first if it needs to.
+- Each server start begins with an empty log.
+- Follow-up prompts no longer change a task's title and description, which stay about the whole task.
+- Prompt history shows your newest prompts first.
+- Image attachments appear as thumbnails. Hover over one to see its name and a remove button.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.8/Shift-0.1.8.zip" sparkle:edSignature="sjXpaEDh1sY278CjD9d2SyBt3AUIR6bVAPr5KqYIDyi0mtHYJGgcBy/rT7GSfxOaPHKluPUiXkKpQ3kKoEacCg==" length="3585965" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
