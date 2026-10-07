@@ -102,5 +102,16 @@
 - Server, merge and task action buttons are taller, with rounded corners.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.6/Shift-0.1.6.zip" sparkle:edSignature="Zsp6HFm+PwTA3JJ95Yk8eSUdskNDPNV33LKN2m5c4rJTA/lx38i4GUWFt9++RYrmlpUkqvwh8bS8l6imqAfnBQ==" length="3569215" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.7</title>
+      <pubDate>Wed, 07 Oct 2026 10:41:41 +0000</pubDate>
+      <sparkle:version>9</sparkle:version>
+      <sparkle:shortVersionString>0.1.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Unsent text in the new task field is kept per project. Switching projects shows a blank field, and coming back brings your draft and attachments back.
+- Each task keeps its own unsent prompt or answer when you switch to another task.
+- The suggested dev server command now gives Vite and Astro projects their task's port.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.7/Shift-0.1.7.zip" sparkle:edSignature="PHDgB4FKW1P+CoMGK0SvQnURUbIucLYuQ0ZTwsI73O5mbwjFKC5+GGY2VUI/gra38CFThjExdOFdhDGKXpXGCA==" length="3578082" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
