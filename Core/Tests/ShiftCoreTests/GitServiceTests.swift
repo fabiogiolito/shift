@@ -689,6 +689,9 @@ final class GitServiceTests: XCTestCase {
                        "Couldn't reach github.com. Check your internet connection and try again.")
         XCTAssertEqual(message("To github.com:me/spot.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs"),
                        "The remote has changes that aren't in your main. Pull them in your usual Git tool, then push again.")
+        XCTAssertEqual(message("remote: Internal Server Error\n ! [remote rejected] main -> main (Internal Server Error)\n"
+                               + "error: failed to push some refs to 'https://github.com/me/spot.git'"),
+                       "github.com refused the push: Internal Server Error")
         XCTAssertEqual(message("Welcome!\nerror: src refspec main does not match any"),
                        "Could not push to origin: src refspec main does not match any")
         XCTAssertEqual(GitService.host(of: "ssh://git@example.com:2222/x.git"), "example.com")

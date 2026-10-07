@@ -394,6 +394,10 @@ public struct GitService: GitServicing {
                "Operation timed out", "Network is unreachable", "Failed to connect", "Connection reset", "unable to access") {
             return "Couldn't reach \(host(of: url)). Check your internet connection and try again."
         }
+        // The server said no (a hook, a branch rule, its own error): its reason is in parentheses.
+        if let reason = output.firstMatch(of: #/\[remote rejected\][^(\n]*\((.+)\)/#)?.1 {
+            return "\(host(of: url)) refused the push: \(reason)"
+        }
         // The login shell's own output may come first: git's error line, if there is one, says the most.
         let lines = output.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         let line = lines.first { $0.hasPrefix("fatal: ") || $0.hasPrefix("error: ") } ?? lines.first ?? "git push failed"
