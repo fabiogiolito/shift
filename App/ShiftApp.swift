@@ -117,6 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// SHIFT_APPEARANCE=dark forces dark mode, for screenshots.
     func applicationDidFinishLaunching(_ notification: Notification) {
         if ProcessInfo.processInfo.environment["SHIFT_APPEARANCE"] == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }
+        #if UPDATER
+        // Sparkle's own schedule waits a day between checks; check on every launch too. Prompts only if one is found.
+        updater?.updater.checkForUpdatesInBackground()
+        #endif
     }
 
     /// SHIFT_WINDOW_SIZE=1280x780 sizes the window, for screenshots.
