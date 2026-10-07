@@ -323,7 +323,7 @@ struct TaskDetailView: View {
             Text("Prompt History").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             GroupBox {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(task.prompts) { prompt in
+                    ForEach(task.prompts.reversed()) { prompt in
                         VStack(alignment: .leading, spacing: 6) {
                             if !prompt.text.isEmpty { promptText(prompt).textSelection(.enabled) }
                             if !prompt.attachments.isEmpty {
@@ -337,7 +337,7 @@ struct TaskDetailView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 8)
-                        if prompt != task.prompts.last { Divider() }
+                        if prompt != task.prompts.first { Divider() }
                     }
                 }
                 .padding(.horizontal, 8)
