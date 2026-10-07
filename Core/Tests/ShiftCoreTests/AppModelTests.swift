@@ -370,7 +370,7 @@ final class AppModelTests: XCTestCase {
         git.trackedPaths = [".env.local"]
         let added = await model.addProject(at: repo)
         XCTAssertEqual(added?.setupCommand, #"pnpm install && cp "$SHIFT_REPO/.env" ."#)
-        XCTAssertEqual(added?.serverCommand, "pnpm run dev")
+        XCTAssertEqual(added?.serverCommand, "pnpm run dev --port $PORT")
     }
 
     func testEveryRunUsesTheProjectsCurrentPermissions() async {
@@ -1013,6 +1013,35 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(servers.starts, [.init(taskID: id, command: ProjectSetup.serverCommand(for: project), port: id)])
         XCTAssertEqual(servers.starts[0].command, ProjectSetup.staticServer)
         XCTAssertEqual(model.task(id)?.serverPID, servers.running[id])
+    }
+
+    func testServerSwitchesToTheDevScriptTheAgentCreated() async throws {
+        useNoServerCommand()
+        let (id, gate) = await createPausedTask()
+        XCTAssertEqual(servers.starts.map(\.command), [ProjectSetup.staticServer])
+
+        // The agent scaffolds a Next.js app in the empty folder, without installing it.
+        let worktree = model.task(id)!.worktreeURL
+        try Data(#"{"scripts":{"dev":"next dev"}}"#.utf8).write(to: worktree.appendingPathComponent("package.json"))
+        gate.open()
+        await waitForStatus(id, .completed)
+        await model.flush()
+        XCTAssertEqual(servers.starts.map(\.command), [ProjectSetup.staticServer, "npm install && npm run dev"])
+
+        // Installed now: a restart runs the script alone.
+        try FileManager.default.createDirectory(at: worktree.appendingPathComponent("node_modules"),
+                                                withIntermediateDirectories: true)
+        await model.restartServer(taskID: id)
+        XCTAssertEqual(servers.starts.last?.command, "npm run dev")
+    }
+
+    func testRestartMovesOffAPortSomethingElseTookMeanwhile() async {
+        let id = await createCompletedTask()
+        XCTAssertEqual(model.task(id)?.port, id)
+        ports.taken = [id]  // another project's server grabbed it while ours was down
+        await model.restartServer(taskID: id)
+        XCTAssertEqual(model.task(id)?.port, id + 1)
+        XCTAssertEqual(servers.starts.last?.port, id + 1)
     }
 
     func testTaskFromBeforeEveryTaskHadAServerGetsOneOnLaunchAndRestart() async {

@@ -84,6 +84,7 @@ public actor ServerManager: ServerManaging {
 
     private func spawn(taskID: Int, command: String, directory: URL, port: Int) throws -> pid_t {
         try FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
+        // Each start gets a fresh log, so a restart shows only the new server's output.
         let log = logPath(taskID)
 
         var environment = ProcessInfo.processInfo.environment
@@ -91,7 +92,7 @@ public actor ServerManager: ServerManaging {
         let shell = environment["SHELL"] ?? "/bin/zsh"
         return try spawnProcessGroup(shell, ["-lc", command], environment: environment, directory: directory) {
             posix_spawn_file_actions_addopen(&$0, 0, "/dev/null", O_RDONLY, 0)
-            posix_spawn_file_actions_addopen(&$0, 1, log, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+            posix_spawn_file_actions_addopen(&$0, 1, log, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
             posix_spawn_file_actions_adddup2(&$0, 1, 2)
         }
     }
