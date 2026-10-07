@@ -26,9 +26,10 @@ enum OutcomeProtocol {
     """
 
     static let describeAgain = """
-    This task already has a title and a description. Only if this message changes what the task is meant \
-    to accomplish, start your first message with these two lines, each on a line of its own; otherwise \
-    do not write them at all:
+    This task already has a title and a description. Only if this message changes what the task as a whole \
+    is meant to accomplish, start your first message with these two lines, each on a line of its own; otherwise \
+    do not write them at all. They replace the old ones, so cover the work across every message in this \
+    conversation, not only this one:
 
     SHIFT_TITLE: <title>
     SHIFT_DESCRIPTION: <description>
@@ -38,8 +39,8 @@ enum OutcomeProtocol {
     The title says what the task will accomplish, written like a changelog entry: at most about six \
     words, sentence case, no trailing punctuation, for example "Marketing homepage with separate ordering \
     page". Name the outcome, not the problem, and do not reuse the user's wording.
-    The description is one or two plain sentences on what you are going to do and why, from the user's \
-    point of view. It is not a restatement of the prompt and not a list of steps.
+    The description is one or two plain sentences on what the task does and why, from the user's \
+    point of view. It is not a restatement of the latest prompt and not a list of steps.
     """
 
     static let outcome = """
