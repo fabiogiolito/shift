@@ -178,37 +178,48 @@ extension FocusedValues {
     @Entry var editingNewTask: Bool?
 }
 
-/// A dropped file: its thumbnail or icon, name, and a remove button when `onRemove` is given. Clicking it opens Quick Look.
+/// A dropped file: its icon, name, and a remove button when `onRemove` is given; an image shows only its thumbnail,
+/// with its name on hover and the remove button in its corner. Clicking it opens Quick Look.
 struct AttachmentChip: View {
     let url: URL
     var onRemove: (() -> Void)?
     @State private var preview: URL?
+    @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        Group {
             if UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true {
                 AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { icon }
-                    .frame(width: 24, height: 24)
-                    .clipShape(.rect(cornerRadius: 4))
+                    .frame(width: 48, height: 48)
+                    .clipShape(.rect(cornerRadius: 8))
+                    .overlay(alignment: .topTrailing) {
+                        if let onRemove, hovering { removeButton(onRemove).background(.background, in: .circle).padding(3) }
+                    }
+                    .help(url.lastPathComponent)
             } else {
-                icon.frame(width: 24, height: 24)
-            }
-            Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading)
-            if let onRemove {
-                Button("Remove", systemImage: "xmark.circle.fill", action: onRemove)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    icon.frame(width: 24, height: 24)
+                    Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading)
+                    if let onRemove { removeButton(onRemove) }
+                }
+                .font(.callout)
+                .padding(4)
+                .padding(.trailing, 4)
+                .background(.quaternary, in: .rect(cornerRadius: 8))
+                .help(url.path)
             }
         }
-        .font(.callout)
-        .padding(4)
-        .padding(.trailing, 4)
-        .background(.quaternary, in: .rect(cornerRadius: 8))
         .contentShape(.rect(cornerRadius: 8))
+        .onHover { hovering = $0 }
         .onTapGesture { preview = url }
         .quickLookPreview($preview)
-        .help(url.path)
+    }
+
+    private func removeButton(_ action: @escaping () -> Void) -> some View {
+        Button("Remove", systemImage: "xmark.circle.fill", action: action)
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
     }
 
     private var icon: some View {
