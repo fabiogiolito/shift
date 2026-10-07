@@ -44,12 +44,28 @@ enum ProjectSetup {
         return suggest(rootFiles: files, packageJSON: package, tracked: tracked)
     }
 
-    /// What serves a task's worktree: the project's own server command, or a static file server.
+    /// What serves a task's worktree: the project's own server command, else the dev script found in
+    /// `directory` (a project the agent created after it was added), else a static file server.
     // ponytail: depends on python3 being installed (it ships with the Xcode command line tools);
     // replace with an in-process server if that becomes a problem.
-    static func serverCommand(for project: Project) -> String {
+    static func serverCommand(for project: Project, in directory: URL? = nil) -> String {
         let command = project.serverCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        return command.isEmpty ? staticServer : command
+        if !command.isEmpty { return command }
+        guard let directory else { return staticServer }
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        let package = FileManager.default.contents(atPath: directory.appendingPathComponent("package.json").path)
+        let detected = suggest(rootFiles: files, packageJSON: package).server
+        return detected.isEmpty ? staticServer : detected
+    }
+
+    /// The install to run before a detected dev script when the project has no commands of its own
+    /// (it was empty when added) and nothing installed its dependencies yet.
+    static func installStep(for project: Project, in directory: URL) -> String? {
+        guard project.serverCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              project.setupCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        guard files.contains("package.json"), !files.contains("node_modules") else { return nil }
+        return "\(lockfiles.first { files.contains($0.0) }?.1 ?? "npm") install"
     }
 
     /// Serves the worktree on both 127.0.0.1 and ::1, since browsers may resolve `localhost` to either,

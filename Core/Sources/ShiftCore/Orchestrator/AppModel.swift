@@ -88,6 +88,8 @@ public final class AppModel {
     @ObservationIgnored private var settingUp: Set<TaskItem.ID> = []
     /// Why the task's dev server last failed to start, until it starts. Shown with its log.
     @ObservationIgnored private var serverFailures: [TaskItem.ID: String] = [:]
+    /// The command each task's dev server was last started with.
+    @ObservationIgnored private var serverCommands: [TaskItem.ID: String] = [:]
     @ObservationIgnored private var buildRuns: [TaskItem.ID: Task<CommandResult, Error>] = [:]
     @ObservationIgnored private var buildLogs: [TaskItem.ID: String] = [:]
     /// Tasks with a merge or delete in progress.
@@ -541,7 +543,7 @@ public final class AppModel {
             .union(basePorts.filter { $0.key != projectID }.values)
         let port = await services.ports.allocate(preferred: basePorts[projectID] ?? 3000, reserved: reserved)
         do {
-            _ = try await services.servers.start(taskID: id, command: ProjectSetup.serverCommand(for: project),
+            _ = try await services.servers.start(taskID: id, command: ProjectSetup.serverCommand(for: project, in: project.repoURL),
                                                  directory: project.repoURL, port: port)
             basePorts[projectID] = port
         } catch {
@@ -1030,6 +1032,12 @@ public final class AppModel {
             try check(id, token)
             let settled = await settle(id, outcome)
             try check(id, token)
+            // The agent may have created the project (a package.json with a dev script): serve that now.
+            if let now = self.task(id), let owner = self.project(now.projectID), serverCommands[id] != nil,
+               serverCommands[id] != ProjectSetup.serverCommand(for: owner, in: now.worktreeURL) {
+                await startServer(id)
+                try check(id, token)
+            }
 
             // From here to the end of the iteration there is no await: a prompt sent now either
             // is pending already, or finds the task settled and starts a run of its own.
@@ -1193,8 +1201,11 @@ public final class AppModel {
             update(id) { $0.port = port }
         }
         guard let port else { return nil }
+        let command = ProjectSetup.serverCommand(for: project, in: task.worktreeURL)
+        serverCommands[id] = command
+        let install = ProjectSetup.installStep(for: project, in: task.worktreeURL)
         do {
-            let pid = try await services.servers.start(taskID: id, command: ProjectSetup.serverCommand(for: project),
+            let pid = try await services.servers.start(taskID: id, command: install.map { "\($0) && \(command)" } ?? command,
                                                        directory: task.worktreeURL, port: port)
             // Merged or deleted while the server was starting: it must not outlive the task.
             guard let now = self.task(id), now.status != .merged else {
