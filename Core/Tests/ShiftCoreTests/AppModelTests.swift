@@ -1035,6 +1035,15 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(servers.starts.last?.command, "npm run dev")
     }
 
+    func testRestartMovesOffAPortSomethingElseTookMeanwhile() async {
+        let id = await createCompletedTask()
+        XCTAssertEqual(model.task(id)?.port, id)
+        ports.taken = [id]  // another project's server grabbed it while ours was down
+        await model.restartServer(taskID: id)
+        XCTAssertEqual(model.task(id)?.port, id + 1)
+        XCTAssertEqual(servers.starts.last?.port, id + 1)
+    }
+
     func testTaskFromBeforeEveryTaskHadAServerGetsOneOnLaunchAndRestart() async {
         project.serverCommand = ""
         git.existingBranches = ["shift/2001", "shift/2002"]

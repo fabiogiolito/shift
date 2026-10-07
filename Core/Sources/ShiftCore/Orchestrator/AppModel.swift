@@ -1192,15 +1192,14 @@ public final class AppModel {
     @discardableResult
     private func startServer(_ id: TaskItem.ID) async -> String? {
         guard let services, let task = task(id), let project = project(task.projectID), !project.isApp else { return nil }
-        var port = task.port
-        if port == nil {
-            // A task from before every task had a server.
-            let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port)).union(basePorts.values)
-            port = await services.ports.allocate(preferred: id, reserved: reserved)
-            guard let now = self.task(id), now.status != .merged else { return nil }
-            update(id) { $0.port = port }
-        }
-        guard let port else { return nil }
+        // Our own server must be off to tell whether something else (another project's dev server,
+        // which may have hopped to the next port while ours was down) now holds the task's port.
+        await services.servers.stop(taskID: id)
+        // A task from before every task had a server has no port yet.
+        let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port)).union(basePorts.values)
+        let port = await services.ports.allocate(preferred: task.port ?? id, reserved: reserved)
+        guard let now = self.task(id), now.status != .merged else { return nil }
+        if port != now.port { update(id) { $0.port = port } }
         let command = ProjectSetup.serverCommand(for: project, in: task.worktreeURL)
         serverCommands[id] = command
         let install = ProjectSetup.installStep(for: project, in: task.worktreeURL)
