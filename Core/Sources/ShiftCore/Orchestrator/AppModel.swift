@@ -38,6 +38,10 @@ public final class AppModel {
     /// Web projects: the port of the dev server running on the project's own checkout, its base branch.
     /// No entry: not started yet.
     public private(set) var basePorts: [Project.ID: Int] = [:]
+    /// This Mac's name on the tailnet (e.g. "mac.tail1234.ts.net"), once a task server was shared there.
+    /// Nil: Tailscale is not installed or not running.
+    public private(set) var tailnetHost: String?
+
     /// Projects whose base server is coming up to be opened in the browser.
     public private(set) var openingBase: Set<Project.ID> = []
 
@@ -297,7 +301,10 @@ public final class AppModel {
         if project.isApp {
             for task in tasks(in: project.id) where task.serverPID != nil || task.port != nil {
                 update(task.id) { $0.serverPID = nil; $0.port = nil }
-                Task { await services.servers.stop(taskID: task.id) }
+                Task {
+                    await services.servers.stop(taskID: task.id)
+                    if let port = task.port { await services.tailscale?.unserve(port: port) }
+                }
             }
         }
         changed()
@@ -1193,6 +1200,7 @@ public final class AppModel {
         builds[id] = nil
         buildLogs[id] = nil
         await services.servers.stop(taskID: id)
+        if let port = task.port { await services.tailscale?.unserve(port: port) }
         if let pid = task.serverPID, !(await services.servers.isRunning(taskID: id)) {
             // Not one of ours from this launch; harmless if it is already gone.
             await services.servers.stopOrphan(pid: pid)
@@ -1245,6 +1253,12 @@ public final class AppModel {
             }
             update(id) { $0.serverPID = pid }
             serverFailures[id] = nil
+            if let tailscale = services.tailscale {
+                Task {
+                    if let old = task.port, old != port { await tailscale.unserve(port: old) }
+                    tailnetHost = await tailscale.serve(port: port)
+                }
+            }
             return nil
         } catch {
             let message = "Dev server failed to start: \(Self.describe(error))"

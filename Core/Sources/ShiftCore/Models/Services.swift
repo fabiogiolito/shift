@@ -252,15 +252,18 @@ public struct Services: Sendable {
     public var ports: PortAllocating
     public var notifier: Notifying
     public var store: StateStoring
+    /// Shares task servers on the tailnet. Nil: not shared (tests, or nothing to share with).
+    public var tailscale: Tailscale?
 
     public init(git: GitServicing, agents: [AgentKind: AgentAdapter], servers: ServerManaging,
-                ports: PortAllocating, notifier: Notifying, store: StateStoring) {
+                ports: PortAllocating, notifier: Notifying, store: StateStoring, tailscale: Tailscale? = nil) {
         self.git = git
         self.agents = agents
         self.servers = servers
         self.ports = ports
         self.notifier = notifier
         self.store = store
+        self.tailscale = tailscale
     }
 }
 

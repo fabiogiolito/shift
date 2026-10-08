@@ -201,6 +201,22 @@ struct TaskDetailView: View {
                             try? await Task.sleep(for: .seconds(self.server == .starting ? 1 : 3))
                         }
                     }
+                    if let host = model.tailnetHost, let tailnet = URL(string: "https://\(host):\(port)") {
+                        Menu {
+                            Button("Copy Link") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(tailnet.absoluteString, forType: .string)
+                            }
+                        } label: {
+                            Label("Tailscale", systemImage: "network").frame(minHeight: Self.actionLabelHeight)
+                        } primaryAction: {
+                            apps.openInBrowser(tailnet)
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.glass)
+                        .fixedSize()
+                        .help("Open \(tailnet.absoluteString), reachable from any device on your tailnet")
+                    }
                     // The port may still come up, so the button stays.
                     if let state = self.server, state != .up {
                         Text(state.label).foregroundStyle(state == .starting ? .secondary : state.color)
