@@ -89,6 +89,8 @@ public actor ServerManager: ServerManaging {
 
         var environment = ProcessInfo.processInfo.environment
         environment["PORT"] = String(port)
+        // Vite refuses requests for other host names; this lets the Tailscale link through.
+        environment["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS"] = ".ts.net"
         let shell = environment["SHELL"] ?? "/bin/zsh"
         return try spawnProcessGroup(shell, ["-lc", command], environment: environment, directory: directory) {
             posix_spawn_file_actions_addopen(&$0, 0, "/dev/null", O_RDONLY, 0)
