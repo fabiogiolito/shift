@@ -192,6 +192,7 @@ struct AttachmentChip: View {
                 AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { icon }
                     .frame(width: 48, height: 48)
                     .clipShape(.rect(cornerRadius: 8))
+                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
                     .overlay(alignment: .topTrailing) {
                         if let onRemove, hovering { removeButton(onRemove).background(.background, in: .circle).padding(3) }
                     }
