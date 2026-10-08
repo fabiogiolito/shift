@@ -47,6 +47,10 @@ public struct AgentUsage: Equatable, Sendable {
 
     /// The window closest to its limit: the one that will pause the agent first.
     public var tightest: Window? { windows.min { $0.percentLeft() < $1.percentLeft() } }
+
+    /// When the agent can run again after using up a window: the latest reset of the used-up ones.
+    /// nil if none is used up. May be in the past when this reading is from before the reset.
+    public var limitResetsAt: Date? { windows.filter { $0.usedPercent >= 100 }.compactMap(\.resetsAt).max() }
 }
 
 public struct AgentInstallation: Codable, Hashable, Sendable {
@@ -301,6 +305,14 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     /// Blocked because it was stopped or interrupted, so `AppModel.resume(taskID:)` can carry on.
     public var canResume: Bool {
         status == .blocked && [Self.interruptedReason, Self.legacyInterruptedReason, Self.stoppedReason].contains(blockedReason)
+            || isUsageLimited
+    }
+
+    /// Blocked because the agent's subscription limit was reached ("You've hit your usage limit…").
+    // ponytail: matched on the agent's wording; an agent-written reason with these words also counts.
+    public var isUsageLimited: Bool {
+        status == .blocked && blockedReason?.range(of: "usage limit|hit your limit|limit reached",
+                                                   options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// The branch this task merges into: its own, else (state from before tasks had one) the project's.

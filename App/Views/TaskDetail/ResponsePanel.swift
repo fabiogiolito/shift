@@ -37,6 +37,7 @@ struct ResponsePanel: View {
                     message.frame(maxWidth: .infinity, alignment: .leading)
                     trailingActions
                 }
+                if let resetsAt = model.limitResetsAt(taskID: task.id) { limitReset(resetsAt) }
                 if hasChoices {
                     choices
                 } else {
@@ -94,6 +95,26 @@ struct ResponsePanel: View {
             Button("Allow") { model.answerApproval(taskID: task.id, allow: true) }.buttonStyle(.glassProminent)
         } else if task.canResume {
             Button("Continue") { model.resume(taskID: task.id) }.buttonStyle(.glassProminent)
+        }
+    }
+
+    /// Usage limit reached: a countdown to the reset, and whether to carry on by itself then.
+    private func limitReset(_ resetsAt: Date) -> some View {
+        HStack {
+            Label {
+                HStack(spacing: 4) {
+                    Text("Limit resets in")
+                    Text(timerInterval: Date.now...max(resetsAt, .now), countsDown: true).font(.body.monospaced())
+                }
+            } icon: {
+                Image(systemName: "hourglass")
+            }
+            .foregroundStyle(.secondary)
+            Spacer()
+            Toggle("Continue automatically when limit resets", isOn: Binding(
+                get: { model.continuesAfterLimit }, set: { model.continuesAfterLimit = $0 }))
+                .toggleStyle(.switch)
+                .controlSize(.small)
         }
     }
 

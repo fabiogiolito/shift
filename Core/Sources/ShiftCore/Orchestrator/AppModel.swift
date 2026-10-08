@@ -108,6 +108,8 @@ public final class AppModel {
     @ObservationIgnored var baseServerPoll: Duration = .milliseconds(200)
     /// `start()` runs once per launch; the window calls it again whenever it is reopened.
     @ObservationIgnored private var started = false
+    /// When each task was last continued after its limit reset, so a stale usage reading can't retry it in a loop.
+    @ObservationIgnored private var autoContinued: [TaskItem.ID: Date] = [:]
 
     public init(services: Services) {
         self.services = services
@@ -154,6 +156,31 @@ public final class AppModel {
         if let usage = await services?.agents[kind]?.usage() { self.usage[kind] = usage }
     }
 
+    /// When a usage-limited task's limit resets, if its agent's usage says. May be in the past.
+    public func limitResetsAt(taskID: TaskItem.ID) -> Date? {
+        guard let task = task(taskID), task.isUsageLimited else { return nil }
+        return usage[task.agent]?.limitResetsAt
+    }
+
+    /// Usage-limited tasks carry on by themselves once their limit resets.
+    public var continuesAfterLimit = UserDefaults.standard.bool(forKey: "continuesAfterLimit") {
+        didSet { UserDefaults.standard.set(continuesAfterLimit, forKey: "continuesAfterLimit") }
+    }
+
+    /// Continues the usage-limited tasks whose limit has reset, if `continuesAfterLimit`.
+    func continueLimitedTasks() async {
+        guard continuesAfterLimit else { return }
+        for task in tasks where task.isUsageLimited {
+            guard let resets = limitResetsAt(taskID: task.id), resets <= .now,
+                  autoContinued[task.id].map({ $0.timeIntervalSinceNow < -300 }) ?? true else { continue }
+            await refreshUsage(task.agent)
+            // The reading was stale and the limit is still reached: wait for the new reset.
+            if let resets = limitResetsAt(taskID: task.id), resets > .now { continue }
+            autoContinued[task.id] = .now
+            resume(taskID: task.id)
+        }
+    }
+
     // MARK: Lifecycle
 
     /// Loads persisted state, detects agents, reconciles with reality (see docs/specs/orchestrator.md).
@@ -188,6 +215,9 @@ public final class AppModel {
         }
         changed()
         for project in projects { await startBaseServer(project.id) }
+        Task { [weak self] in
+            while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
+        }
     }
 
     /// Called on app termination: stop servers and agents, persist.
@@ -1122,6 +1152,8 @@ public final class AppModel {
         default: ("\(task.title) is ready", settled.summary ?? "")
         }
         enqueue { await services.notifier.notify(title: title, body: body, taskID: id) }
+        // For the countdown to the reset: the last reading is likely from before the limit was reached.
+        if self.task(id)?.isUsageLimited == true { Task { await refreshUsage(task.agent) } }
         if settled.status == .completed, project(task.projectID)?.pushTaskBranches == true {
             Task { await pushBranch(taskID: id) }
         }
