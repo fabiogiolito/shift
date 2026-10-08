@@ -14,10 +14,12 @@ struct DiffView: View {
     /// Bumped by Try Again to load again.
     @State private var attempt = 0
 
-    init(taskID: TaskItem.ID, isSettled: Bool) {
+    /// `selecting` is the path of the file to open at.
+    init(taskID: TaskItem.ID, isSettled: Bool, selecting path: String? = nil) {
         self.taskID = taskID
         self.source = nil
         self.isSettled = isSettled
+        _selection = State(initialValue: path)
     }
 
     /// For previews and UI work: renders the given files without asking the model.
@@ -101,7 +103,7 @@ struct DiffView: View {
                         }
                     }
                 }
-                .onChange(of: selection) { _, id in
+                .onChange(of: selection, initial: true) { _, id in
                     if let id { proxy.scrollTo(id, anchor: .top) }
                 }
             }
