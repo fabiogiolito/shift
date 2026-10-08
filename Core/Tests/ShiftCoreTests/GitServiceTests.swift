@@ -350,6 +350,10 @@ final class GitServiceTests: XCTestCase {
         let clash = try await service.canMergeCleanly(repo: repo, branch: "clash", base: "main")
         XCTAssertTrue(clean)
         XCTAssertFalse(clash)
+        let none = try await service.conflictedFiles(repo: repo, branch: "clean", base: "main")
+        let files = try await service.conflictedFiles(repo: repo, branch: "clash", base: "main")
+        XCTAssertEqual(none, [])
+        XCTAssertEqual(files, ["a.txt"])
         XCTAssertEqual(try snapshot(), before)
 
         let notYet = try await service.isMerged(repo: repo, branch: "clean", base: "main")

@@ -627,6 +627,13 @@ public final class AppModel {
         channel.answer(id: answered.id, allow: allow)
     }
 
+    /// The files that keep a conflicting task from merging into its base. Empty if none or unknown.
+    public func conflictedFiles(taskID: TaskItem.ID) async -> [String] {
+        guard let services, let task = task(taskID), task.status == .conflict, let project = project(task.projectID) else { return [] }
+        return (try? await services.git.conflictedFiles(repo: project.repoURL, branch: task.branch,
+                                                         base: task.base(in: project))) ?? []
+    }
+
     /// Hands a conflict back to the agent.
     public func resolveConflict(taskID: TaskItem.ID) {
         guard services != nil, let task = task(taskID), task.status == .conflict, !busy.contains(taskID),
