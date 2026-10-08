@@ -1491,6 +1491,32 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(status(id), .completed, "only stopped or interrupted tasks resume")
     }
 
+    func testUsageLimitedTaskContinuesOnceTheLimitResets() async {
+        agent.currentUsage = AgentUsage(windows: [.init(name: "5-hour", usedPercent: 100, resetsAt: .now + 3600)])
+        agent.scripts = [[.emit(.sessionStarted(id: "s1")), .emit(.finished(.blocked(reason: "You've hit your usage limit.")))],
+                         [.emit(.finished(.completed(summary: "Done")))]]
+        let id = model.createTask(projectID: project.id, prompt: "Do it")!
+        await waitForStatus(id, .blocked)
+        XCTAssertTrue(model.task(id)!.isUsageLimited)
+        await waitFor("the reset time") { self.model.limitResetsAt(taskID: id) != nil }
+
+        model.continuesAfterLimit = true
+        defer { model.continuesAfterLimit = false }
+        await model.continueLimitedTasks()
+        XCTAssertEqual(status(id), .blocked, "not before the reset")
+
+        agent.currentUsage = AgentUsage(windows: [.init(name: "5-hour", usedPercent: 0, resetsAt: .now + 18000)])
+        await model.refreshUsage(.claudeCode)
+        XCTAssertNil(model.limitResetsAt(taskID: id))
+        // The reading from before the reset still says used up, with a reset time now past.
+        agent.currentUsage = AgentUsage(windows: [.init(name: "5-hour", usedPercent: 100, resetsAt: .now - 1)])
+        await model.refreshUsage(.claudeCode)
+        agent.currentUsage = AgentUsage(windows: [.init(name: "5-hour", usedPercent: 0, resetsAt: .now + 18000)])
+        await model.continueLimitedTasks()
+        await waitForStatus(id, .completed)
+        XCTAssertEqual(agent.requests.last?.prompt, "Continue the task.")
+    }
+
     // MARK: Mergeability
 
     func testRefreshFlipsBetweenCompletedAndConflictAndNotifiesOnce() async {

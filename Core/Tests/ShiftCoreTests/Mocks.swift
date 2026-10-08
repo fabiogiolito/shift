@@ -196,6 +196,8 @@ final class MockAgent: AgentAdapter {
     }
 
     func detect() async -> AgentInstallation? { installation }
+    var currentUsage: AgentUsage?
+    func usage() async -> AgentUsage? { currentUsage }
 
     nonisolated func run(_ request: AgentRequest) -> AsyncStream<AgentEvent> {
         AsyncStream { continuation in
