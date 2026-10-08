@@ -8,6 +8,8 @@ struct TaskDetailView: View {
     @State private var showingDiff = false
     /// True once the diff has finished sliding in.
     @State private var diffSettled = false
+    /// The file the diff opens at, when opened from a row of the changed files.
+    @State private var diffPath: String?
     @State private var confirmingDelete = false
     /// The base picked in the More menu, waiting for confirmation.
     @State private var newBase: String?
@@ -36,7 +38,7 @@ struct TaskDetailView: View {
         if let task = model.task(taskID), let project = model.project(task.projectID) {
             Group {
                 if showingDiff {
-                    DiffView(taskID: taskID, isSettled: diffSettled).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    DiffView(taskID: taskID, isSettled: diffSettled, selecting: diffPath).frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(reduceMotion ? .opacity : .move(edge: .trailing))
                 } else {
                     ScrollView {
@@ -297,7 +299,7 @@ struct TaskDetailView: View {
                     Text("\(changes.files.count) \(changes.files.count == 1 ? "file" : "files") changed ·").foregroundStyle(.secondary)
                     counts(changes.additions, changes.deletions)
                     Spacer()
-                    Button("View diff") { showDiff(true) }.buttonStyle(.glass)
+                    Button("View diff") { diffPath = nil; showDiff(true) }.buttonStyle(.glass)
                 }
                 .font(.subheadline.weight(.semibold))
                 // Scrolls on its own, showing at most 4.5 files so it's clear there are more.
@@ -313,6 +315,8 @@ struct TaskDetailView: View {
                                 else { counts(file.additions, file.deletions) }
                             }
                             .padding(.vertical, 8)
+                            .contentShape(.rect)
+                            .onTapGesture { diffPath = file.path; showDiff(true) }
                             if file != changes.files.last { Divider() }
                         }
                     }
