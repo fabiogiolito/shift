@@ -122,6 +122,10 @@ final class MockGit: GitServicing {
         return canMerge
     }
 
+    func conflictedFiles(repo: URL, branch: String, base: String) async throws -> [String] {
+        canMerge ? [] : ["a.txt"]
+    }
+
     func merge(repo: URL, branch: String, into base: String, message: String) async throws -> MergeResult {
         if let mergeError { throw mergeError }
         calls.append("merge \(branch) into \(base)")

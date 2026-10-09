@@ -237,6 +237,16 @@ public struct GitService: GitServicing {
         try await mergedTree(repo: repo, branch: branch, base: base) != nil
     }
 
+    public func conflictedFiles(repo: URL, branch: String, base: String) async throws -> [String] {
+        let out = try await run(["merge-tree", "--write-tree", "--name-only", "--no-messages", base, branch], in: repo)
+        switch out.status {
+        // The merged tree's id, then one conflicted path per line.
+        case 1: return out.stdout.split(separator: "\n").dropFirst().map(String.init)
+        case 0: return []
+        default: throw GitError(message: out.stderr)
+        }
+    }
+
     /// A branch that never got a commit of its own is contained in base too, but nobody merged it.
     /// ponytail: "commits of its own" is read from the branch's reflog (more than the entry for its
     /// creation); record the starting commit on the task if reflogs turn out not to be reliable.

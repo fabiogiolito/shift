@@ -18,6 +18,8 @@ struct TaskDetailView: View {
     /// What the project's folder has checked out, for a merged task: its base may not be it.
     @State private var checkedOut: String?
     @State private var isMerging = false
+    /// For a conflicting task: the files that conflict with its base.
+    @State private var conflicts: [String] = []
     @State private var changes: Result<DiffSummary, Error>?
     /// nil until first checked.
     @State private var server: ServerState?
@@ -77,6 +79,7 @@ struct TaskDetailView: View {
                 }
             }
             .task(id: task.status) { changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil }
+            .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
             .confirmationDialog("Delete “\(task.title)”?", isPresented: $confirmingDelete) {
                 Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: taskID) } }
             } message: {
@@ -158,7 +161,11 @@ struct TaskDetailView: View {
     @ViewBuilder private func statusLine(_ task: TaskItem, _ project: Project) -> some View {
         switch task.status {
         case .conflict:
-            Text("Its changes conflict with changes made to \(task.base(in: project)) since it started.").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Its changes conflict with changes made to \(task.base(in: project)) since it started\(conflicts.isEmpty ? "." : ", in:")")
+                ForEach(conflicts, id: \.self) { Text($0).monospaced().textSelection(.enabled) }
+            }
+            .foregroundStyle(.secondary)
         case .merged:
             let base = task.base(in: project)
             // Merged into a branch the folder does not show: say so, or the work looks gone.
