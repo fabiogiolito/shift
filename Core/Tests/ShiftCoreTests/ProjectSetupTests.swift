@@ -58,5 +58,7 @@ final class ProjectSetupTests: XCTestCase {
         XCTAssertEqual(ProjectSetup.failure(CommandResult(exitCode: 127, output: "")), "Setup failed (exit code 127).")
         XCTAssertEqual(ProjectSetup.failure(CommandResult(exitCode: 1, output: "a\nb\nc\nd\ne\nf\n")),
                        "Setup failed (exit code 1).\nb\nc\nd\ne\nf")
+        XCTAssertEqual(ProjectSetup.failure(CommandResult(exitCode: 1, output: "Packages: +372\n+++++++\n ERR_PNPM_NO_OFFLINE_TARBALL  missing\n")),
+                       "Setup failed (exit code 1).\nPackages: +372\nERR_PNPM_NO_OFFLINE_TARBALL  missing")
     }
 }
