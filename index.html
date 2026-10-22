@@ -66,6 +66,31 @@ h1 { max-width: 48rem; margin: 1.5rem auto 0; font-size: 3rem; line-height: 1; l
 .shot { margin-top: 4rem; }
 .shot img, .shots img { width: 100%; }
 
+/* Hero load-in: headline letters rise out of a blur while the git commands Shift replaces burst out
+   from the center and the app shot rises up; everything else fades in after. Scrolling scatters the commands. */
+.hero { position: relative; overflow-x: clip; isolation: isolate; }
+.hero > :not(.shot, .gitcmds) { position: relative; z-index: 1; }
+.hero > .mono { animation: eyebrow-in .7s ease 1.3s both; }
+h1 .w { display: inline-block; white-space: nowrap; }
+h1 .l { display: inline-block; animation: letter-rise .6s var(--ease) calc(var(--i) * 25ms + 100ms) both; will-change: transform, opacity, filter; }
+.gitcmds { position: absolute; inset: 0 0 auto; z-index: 0; height: 680px; font-family: var(--mono); pointer-events: none; animation: cmds-burst 1.2s cubic-bezier(.16, .84, .24, 1) .1s both; }
+.gitcmd { position: absolute; display: inline-flex; align-items: center; gap: .5rem; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 10px 30px -12px rgba(0, 0, 0, .18); font-size: 13px; line-height: 1; white-space: nowrap; transform: rotate(var(--r)); animation: cmd-float 7s ease-in-out infinite; }
+.gitcmd:nth-child(2n) { animation-duration: 9s; animation-delay: -3s; }
+.gitcmd:nth-child(3n) { animation-duration: 8s; animation-delay: -5s; }
+.gitcmd b { font-weight: 500; color: var(--muted); }
+.shot img { animation: shot-rise 1.2s cubic-bezier(.16, 1, .3, 1) .15s both; }
+@supports (animation-timeline: scroll()) {
+  .gitcmd { animation: cmd-float 7s ease-in-out infinite, cmd-scatter linear both; animation-timeline: auto, scroll(root); animation-range: normal, 0 420px; }
+  .shot { transform-origin: 50% 0; animation: shot-scroll linear both; animation-timeline: scroll(root); animation-range: 0 420px; }
+}
+header, .section, .cta, footer { transition: opacity .7s ease 1.4s; }
+.hero .lede { transition: opacity .6s ease 1.35s, translate .6s cubic-bezier(.2, .8, .2, 1) 1.35s; }
+.hero .actions { transition: opacity .6s ease 1.5s, translate .6s cubic-bezier(.2, .8, .2, 1) 1.5s; }
+@starting-style {
+  header, .section, .cta, footer { opacity: 0; }
+  .hero .lede, .hero .actions { opacity: 0; translate: 0 12px; }
+}
+
 /* Sections */
 .section { padding: 8rem 1.5rem 0; }
 h2 { max-width: 40rem; margin-inline: auto; text-align: center; font-size: 2rem; line-height: 1.1; letter-spacing: -.035em; }
@@ -144,15 +169,31 @@ footer a:hover { color: var(--fg); }
   h2 { font-size: 3rem; }
   .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+@media (max-width: 959px) {
+  .gitcmd:nth-child(n+3) { display: none; }
+  .gitcmd { padding: 7px 10px; font-size: 11px; }
+}
+@media (max-width: 639px) {
+  .gitcmds { display: none; }
+}
 @media (min-width: 1024px) {
   .panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @keyframes spin { to { rotate: 360deg; } }
 @keyframes fade { from { opacity: 0; } }
+@keyframes eyebrow-in { from { color: transparent; } }
+@keyframes letter-rise { from { opacity: 0; transform: translateY(.4em); filter: blur(8px); } }
+@keyframes cmds-burst { 0% { scale: .12; opacity: 0; } 25% { opacity: 1; } }
+@keyframes cmd-float { 50% { translate: 0 -8px; } }
+@keyframes cmd-scatter { to { transform: translate(var(--dx), var(--dy)) rotate(calc(var(--r) * 3)) scale(.8); opacity: 0; filter: blur(6px); } }
+@keyframes shot-rise { from { opacity: 0; translate: 0 140px; } }
+@keyframes shot-scroll { from { transform: translateY(40px) scale(.92); opacity: .6; } }
 
 @media (prefers-reduced-motion: reduce) {
   .st.working { animation-duration: 3s; }
+  .hero > .mono, h1 .l, .gitcmds, .gitcmd, .shot, .shot img { animation: none !important; }
+  header, .hero .lede, .hero .actions, .section, .cta, footer { transition: none !important; }
 }
 </style>
 </head>
@@ -183,9 +224,19 @@ footer a:hover { color: var(--fg); }
 
   <!-- Hero -->
   <section class="hero">
+    <!-- Git commands Shift replaces -->
+    <div class="gitcmds" aria-hidden="true">
+      <span class="gitcmd" style="--dx:-220px;--dy:-160px;--r:-6deg;top:13%;left:9%"><b>$</b> git worktree add ../wt-101</span>
+      <span class="gitcmd" style="--dx:240px;--dy:-170px;--r:5deg;top:10%;right:10%"><b>$</b> git checkout -b shift/101</span>
+      <span class="gitcmd" style="--dx:-280px;--dy:-20px;--r:4deg;top:36%;left:4%"><b>$</b> npm run dev -- --port 3001</span>
+      <span class="gitcmd" style="--dx:280px;--dy:10px;--r:-4deg;top:40%;right:5%"><b>$</b> git commit -am &quot;spacing&quot;</span>
+      <span class="gitcmd" style="--dx:-240px;--dy:160px;--r:-3deg;top:60%;left:11%"><b>$</b> git merge shift/101</span>
+      <span class="gitcmd" style="--dx:240px;--dy:170px;--r:7deg;top:63%;right:12%"><b>$</b> git branch -D shift/101</span>
+    </div>
+
     <span class="mono">Claude Code · Codex · macOS</span>
 
-    <h1>Agents as easy as a to-do list.</h1>
+    <h1 aria-label="Agents as easy as a to-do list."><span class="w" aria-hidden="true"><span class="l" style="--i:0">A</span><span class="l" style="--i:1">g</span><span class="l" style="--i:2">e</span><span class="l" style="--i:3">n</span><span class="l" style="--i:4">t</span><span class="l" style="--i:5">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:6">a</span><span class="l" style="--i:7">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:8">e</span><span class="l" style="--i:9">a</span><span class="l" style="--i:10">s</span><span class="l" style="--i:11">y</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:12">a</span><span class="l" style="--i:13">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:14">a</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:15">t</span><span class="l" style="--i:16">o</span><span class="l" style="--i:17">-</span><span class="l" style="--i:18">d</span><span class="l" style="--i:19">o</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:20">l</span><span class="l" style="--i:21">i</span><span class="l" style="--i:22">s</span><span class="l" style="--i:23">t</span><span class="l" style="--i:24">.</span></span></h1>
 
     <p class="lede">Add tasks. Get them done. Agents, worktrees, branches, ports, commits, merges, and cleanup are handled for you.</p>
 
