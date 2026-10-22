@@ -89,9 +89,11 @@ enum ProjectSetup {
         """ + "'"
 
     /// Short reason for a blocked task: the exit code and the last few lines of output.
+    /// Progress bars (lines with no letters or digits, like pnpm's `+++++`) are dropped so they don't bury the error.
     static func failure(_ result: CommandResult) -> String {
         let tail = result.output.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) }
             .suffix(5).joined(separator: "\n")
         let headline = "Setup failed (exit code \(result.exitCode))."
         return tail.isEmpty ? headline : headline + "\n" + String(tail.suffix(400))
