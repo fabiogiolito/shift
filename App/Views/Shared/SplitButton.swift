@@ -1,40 +1,30 @@
-import AppKit
 import SwiftUI
 
-/// A button with a chevron beside it that drops down more actions. Both halves are plain Buttons, so they
-/// take the surrounding button style and size like any other button (a SwiftUI Menu ignores both).
-struct SplitButton<Label: View>: View {
-    let items: [(title: String, action: () -> Void)]
+/// One glass button with two targets: the label runs `action`, the chevron drops down `menu`. Drawn by
+/// hand because a SwiftUI Menu with a primary action ignores button styles (it can't be prominent).
+/// As tall as a large glass button.
+struct SplitButton<Label: View, MenuContent: View>: View {
+    var prominent = false
     let action: () -> Void
     @ViewBuilder let label: Label
-    var labelHeight: CGFloat = 20
+    @ViewBuilder let menu: MenuContent
 
     var body: some View {
-        HStack(spacing: 2) {
-            Button(action: action) { label.frame(minHeight: labelHeight) }
-            Button { showMenu() } label: {
-                Image(systemName: "chevron.down").imageScale(.small).frame(minHeight: labelHeight)
+        HStack(spacing: 0) {
+            Button(action: action) {
+                label.lineLimit(1).fixedSize()
+                    .padding(.leading, 14).padding(.trailing, 10)
+                    .frame(maxHeight: .infinity).contentShape(.rect)
             }
+            .buttonStyle(.plain)
+            Divider().padding(.vertical, 7)
+            Menu { menu } label: { Image(systemName: "chevron.down").imageScale(.small) }
+                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+                .padding(.leading, 8).padding(.trailing, 11)
+                .frame(maxHeight: .infinity).contentShape(.rect)
         }
+        .foregroundStyle(prominent ? .white : .primary)
+        .frame(height: 28)
+        .glassEffect(prominent ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .rect(cornerRadius: 8))
     }
-
-    private func showMenu() {
-        let menu = NSMenu()
-        for item in items { menu.addItem(ClosureMenuItem(item.title, item.action)) }
-        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
-    }
-}
-
-private final class ClosureMenuItem: NSMenuItem {
-    private let handler: () -> Void
-
-    init(_ title: String, _ handler: @escaping () -> Void) {
-        self.handler = handler
-        super.init(title: title, action: #selector(run), keyEquivalent: "")
-        target = self
-    }
-
-    required init(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-    @objc private func run() { handler() }
 }
