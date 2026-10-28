@@ -688,6 +688,42 @@ public final class AppModel {
         await refreshPushState(projectID: project.id)
     }
 
+    /// Merges the latest of the task's base into its branch. If that conflicts, the agent does the merge.
+    /// Not while the agent is working.
+    public func syncBase(taskID: TaskItem.ID) async {
+        guard let services, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
+              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID) else { return }
+        let base = task.base(in: project)
+        if let missing = await missingBase(task, project) {
+            lastError = "Could not re-sync \(task.title): \(missing)"
+            return
+        }
+        busy.insert(taskID)
+        let clean: Bool
+        do {
+            guard FileManager.default.fileExists(atPath: task.worktreePath) else {
+                throw Failure("The task's folder is missing. Restart its server to recreate it, then re-sync.")
+            }
+            try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
+            clean = try await services.git.mergeBase(worktree: task.worktreeURL, base: base)
+        } catch {
+            busy.remove(taskID)
+            lastError = "Could not re-sync \(task.title): \(Self.firstLine(Self.describe(error)))"
+            return
+        }
+        busy.remove(taskID)
+        if clean {
+            await refreshMergeability()
+        } else {
+            beginWorking(taskID)
+            update(taskID) { $0.isResolvingConflict = true }
+            startRun(taskID, prompt: """
+                Merge `\(base)` into this branch to bring in its latest changes. Resolve the conflicts keeping the \
+                intent of both sides, verify that the project still builds and its tests pass, and commit the result.
+                """)
+        }
+    }
+
     /// The branch checked out in the project's own folder, which is what it shows.
     public func checkedOutBranch(projectID: Project.ID) async -> String? {
         guard let services, let project = project(projectID) else { return nil }

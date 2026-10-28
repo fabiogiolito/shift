@@ -269,6 +269,14 @@ public struct GitService: GitServicing {
         return false
     }
 
+    public func mergeBase(worktree: URL, base: String) async throws -> Bool {
+        let out = try await run(["merge", "--no-edit", base], in: worktree, env: ["GIT_EDITOR": "true"])
+        guard out.status != 0 else { return true }
+        // Not a conflict (no merge in progress to abort): git's own reason.
+        guard (try? await run(["merge", "--abort"], in: worktree))?.status == 0 else { throw GitError(message: out.stderr) }
+        return false
+    }
+
     private func isAncestor(repo: URL, branch: String, of base: String) async throws -> Bool {
         let out = try await run(["merge-base", "--is-ancestor", branch, base], in: repo)
         if out.status > 1 { throw GitError(message: out.stderr) }

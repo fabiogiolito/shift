@@ -142,6 +142,11 @@ final class MockGit: GitServicing {
         calls.append("rebase \(worktree.lastPathComponent) from \(oldBase) onto \(newBase)")
         return rebaseClean
     }
+    var mergeBaseClean = true
+    func mergeBase(worktree: URL, base: String) async throws -> Bool {
+        calls.append("merge \(base) into \(worktree.lastPathComponent)")
+        return mergeBaseClean
+    }
     func isMerged(repo: URL, branch: String, base: String) async throws -> Bool { merged }
     func branchExists(repo: URL, branch: String) async -> Bool { existingBranches.contains(branch) || branchList.contains(branch) }
 

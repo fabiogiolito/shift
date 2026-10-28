@@ -57,6 +57,9 @@ public protocol GitServicing: Sendable {
     /// everything not on `newBase` moves. On a conflict the rebase is aborted, the worktree is left as it
     /// was and false is returned.
     func rebase(worktree: URL, from oldBase: String, onto newBase: String) async throws -> Bool
+    /// Merges `base` into the worktree's branch, bringing its newer commits in. On a conflict the merge is
+    /// aborted, the worktree is left as it was and false is returned.
+    func mergeBase(worktree: URL, base: String) async throws -> Bool
     func branchExists(repo: URL, branch: String) async -> Bool
 
     /// Where `branch` gets pushed: its upstream remote, else `origin`, else the first remote. nil if none.

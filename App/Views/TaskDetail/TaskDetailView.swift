@@ -438,6 +438,9 @@ struct TaskDetailView: View {
                 }
                 .disabled(task.status == .working)
                 .help(task.status == .working ? "Stop the task to change its base." : "The branch this task merges into")
+                Button("Re-sync Base Branch") { Task { await model.syncBase(taskID: taskID) } }
+                    .disabled(task.status == .working)
+                    .help(task.status == .working ? "Stop the task to re-sync it." : "Merge the latest \(base) into this task")
                 if let remote = model.pushStates[project.id]?.remote {
                     Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
                         .help("Push \(task.branch) to \(remote)")

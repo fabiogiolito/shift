@@ -419,6 +419,21 @@ final class GitServiceTests: XCTestCase {
         XCTAssertEqual(try sh("status", "--porcelain", in: worktree), "")
     }
 
+    func testMergeBaseBringsInNewerBaseWorkAndAbortsOnConflict() async throws {
+        let worktree = try await task("t") { try write("a.txt", "task\n", in: $0) }
+        try write("main.txt", "m\n"); try sh("add", "-A"); try sh("commit", "-qm", "main")
+        let clean = try await service.mergeBase(worktree: worktree, base: "main")
+        XCTAssertTrue(clean)
+        XCTAssertEqual(read("main.txt", in: worktree), "m\n")
+
+        try write("a.txt", "main\n"); try sh("add", "-A"); try sh("commit", "-qm", "conflict")
+        let head = try sh("rev-parse", "HEAD", in: worktree)
+        let conflicted = try await service.mergeBase(worktree: worktree, base: "main")
+        XCTAssertFalse(conflicted)
+        XCTAssertEqual(try sh("rev-parse", "HEAD", in: worktree), head)
+        XCTAssertEqual(try sh("status", "--porcelain", in: worktree), "")
+    }
+
     /// Found end to end: a task's own branch picked as base "merged" into itself, and cleanup deleted it.
     func testMergeIntoItselfThrows() async throws {
         try await service.createWorktree(repo: repo, branch: "t", base: "main", at: root.appendingPathComponent("t"))
