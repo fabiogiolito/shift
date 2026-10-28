@@ -688,15 +688,16 @@ public final class AppModel {
         await refreshPushState(projectID: project.id)
     }
 
-    /// Merges the latest of the task's base into its branch. If that conflicts, the agent does the merge.
-    /// Not while the agent is working.
-    public func syncBase(taskID: TaskItem.ID) async {
+    /// Merges the latest of the task's base into its branch. On a conflict nothing changes and the
+    /// conflicting files are returned, for the user to undo or hand to `fixSyncConflict`. Not while the agent works.
+    @discardableResult
+    public func syncBase(taskID: TaskItem.ID) async -> [String] {
         guard let services, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
-              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID) else { return }
+              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID) else { return [] }
         let base = task.base(in: project)
         if let missing = await missingBase(task, project) {
             lastError = "Could not re-sync \(task.title): \(missing)"
-            return
+            return []
         }
         busy.insert(taskID)
         let clean: Bool
@@ -709,19 +710,28 @@ public final class AppModel {
         } catch {
             busy.remove(taskID)
             lastError = "Could not re-sync \(task.title): \(Self.firstLine(Self.describe(error)))"
-            return
+            return []
         }
         busy.remove(taskID)
-        if clean {
+        guard !clean else {
             await refreshMergeability()
-        } else {
-            beginWorking(taskID)
-            update(taskID) { $0.isResolvingConflict = true }
-            startRun(taskID, prompt: """
-                Merge `\(base)` into this branch to bring in its latest changes. Resolve the conflicts keeping the \
-                intent of both sides, verify that the project still builds and its tests pass, and commit the result.
-                """)
+            return []
         }
+        let files = (try? await services.git.conflictedFiles(repo: project.repoURL, branch: task.branch, base: base)) ?? []
+        // Unknown files still mean a conflict: the caller must offer the choice.
+        return files.isEmpty ? ["(files unknown)"] : files
+    }
+
+    /// Hands a re-sync that conflicted to the agent, which merges the base in and resolves it.
+    public func fixSyncConflict(taskID: TaskItem.ID) {
+        guard services != nil, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
+              runs[taskID]?.active != true, let project = project(task.projectID) else { return }
+        beginWorking(taskID)
+        update(taskID) { $0.isResolvingConflict = true }
+        startRun(taskID, prompt: """
+            Merge `\(task.base(in: project))` into this branch to bring in its latest changes. Resolve the conflicts \
+            keeping the intent of both sides, verify that the project still builds and its tests pass, and commit the result.
+            """)
     }
 
     /// The branch checked out in the project's own folder, which is what it shows.
