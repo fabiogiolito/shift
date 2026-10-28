@@ -210,6 +210,12 @@ struct TaskDetailView: View {
                             try? await Task.sleep(for: .seconds(self.server == .starting ? 1 : 3))
                         }
                     }
+                    Label(task.branch, systemImage: "arrow.triangle.branch")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .help("The branch this server runs")
                     if let host = model.tailnetHost, let tailnet = URL(string: "https://\(host):\(port)") {
                         Menu {
                             Button("Copy Link") {
