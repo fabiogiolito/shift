@@ -127,5 +127,21 @@
 - Image attachments appear as thumbnails. Hover over one to see its name and a remove button.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.8/Shift-0.1.8.zip" sparkle:edSignature="sjXpaEDh1sY278CjD9d2SyBt3AUIR6bVAPr5KqYIDyi0mtHYJGgcBy/rT7GSfxOaPHKluPUiXkKpQ3kKoEacCg==" length="3585965" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.9</title>
+      <pubDate>Wed, 28 Oct 2026 15:38:13 +0000</pubDate>
+      <sparkle:version>11</sparkle:version>
+      <sparkle:shortVersionString>0.1.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Share task dev servers on your tailnet: if Tailscale is installed, a Tailscale button appears next to the localhost link
+- When you hit a usage limit, a countdown shows when it resets and the task continues automatically
+- Re-sync a task with its base branch from the More menu. If there's a conflict, choose to fix it with the agent, view the diff or undo
+- Open a pull request from the merge button's dropdown
+- Conflicted tasks list the files that conflict
+- Click a changed file to open the diff at that file
+- See the server's reason when a push is rejected
+- The branch name now shows next to the localhost button]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.9/Shift-0.1.9.zip" sparkle:edSignature="H2xteN72LJIAzE3DHvM4hpbnK3AWUBc/09GQZP9bjA16bdRFMk9ftPg/U8hquSwnaxali6NJbEbuAkxmuf8yBg==" length="3654136" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
