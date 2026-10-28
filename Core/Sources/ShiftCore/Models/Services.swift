@@ -61,6 +61,8 @@ public protocol GitServicing: Sendable {
 
     /// Where `branch` gets pushed: its upstream remote, else `origin`, else the first remote. nil if none.
     func remote(repo: URL, branch: String) async -> String?
+    /// The remote's fetch URL as configured, e.g. `git@github.com:owner/repo.git`. nil if unknown.
+    func remoteURL(repo: URL, remote: String) async -> String?
     /// Commits on `branch` that are not on `<remote>/<branch>` as last fetched (no network). All of
     /// the branch's commits if the remote does not have it yet.
     func unpushedCount(repo: URL, branch: String, remote: String) async throws -> Int

@@ -195,7 +195,6 @@ struct TaskDetailView: View {
                             Text("localhost:\(String(port))")
                             Image(systemName: "arrow.up.right").imageScale(.small)
                         }
-                        .frame(minHeight: Self.actionLabelHeight)
                     }
                     .buttonStyle(.glass)
                     .help(self.server == .up ? "Open in browser" : self.server?.label ?? "")
@@ -217,19 +216,14 @@ struct TaskDetailView: View {
                         .textSelection(.enabled)
                         .help("The branch this server runs")
                     if let host = model.tailnetHost, let tailnet = URL(string: "https://\(host):\(port)") {
-                        Menu {
+                        SplitButton { apps.openInBrowser(tailnet) } label: {
+                            Label("Tailscale", systemImage: "network")
+                        } menu: {
                             Button("Copy Link") {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(tailnet.absoluteString, forType: .string)
                             }
-                        } label: {
-                            Label("Tailscale", systemImage: "network").frame(minHeight: Self.actionLabelHeight)
-                        } primaryAction: {
-                            apps.openInBrowser(tailnet)
                         }
-                        .menuStyle(.button)
-                        .buttonStyle(.glass)
-                        .fixedSize()
                         .help("Open \(tailnet.absoluteString), reachable from any device on your tailnet")
                     }
                     // The port may still come up, so the button stays.
@@ -252,9 +246,6 @@ struct TaskDetailView: View {
         }
     }
 
-    /// A large button is 28 points tall around a 16 point label; a 20 point label makes it 32.
-    private static let actionLabelHeight: CGFloat = 20
-
     /// Builds the task's worktree and opens the app it built, replacing the one opened by the last build.
     @ViewBuilder private var buildButton: some View {
         let state = model.builds[taskID]
@@ -275,7 +266,6 @@ struct TaskDetailView: View {
                     Label("Build", systemImage: "hammer")
                 }
             }
-            .frame(minHeight: Self.actionLabelHeight)
         }
         .buttonStyle(.glass)
         .disabled(state == .building)
@@ -288,17 +278,24 @@ struct TaskDetailView: View {
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         if task.status == .completed {
-            Button {
+            SplitButton(prominent: true) {
                 isMerging = true
                 Task { await model.merge(taskID: taskID); isMerging = false }
             } label: {
-                Text("Merge into \(task.base(in: project))").frame(minHeight: Self.actionLabelHeight)
+                Text("Merge into \(task.base(in: project))")
+            } menu: {
+                Button("Open Pull Request") {
+                    isMerging = true
+                    Task {
+                        if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
+                        isMerging = false
+                    }
+                }
             }
-            .buttonStyle(.glassProminent)
             .disabled(isMerging)
         } else if task.status == .conflict {
             Button { model.resolveConflict(taskID: taskID) } label: {
-                Text("Resolve").frame(minHeight: Self.actionLabelHeight)
+                Text("Resolve")
             }
             .buttonStyle(.glassProminent).tint(TaskStatus.conflict.color)
         }

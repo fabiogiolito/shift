@@ -1640,4 +1640,12 @@ final class AppModelTests: XCTestCase {
             }
         }
     }
+
+    func testPullRequestURL() {
+        let expected = "https://github.com/owner/repo/compare/main...shift/1?expand=1"
+        for remote in ["git@github.com:owner/repo.git", "https://github.com/owner/repo.git", "https://github.com/owner/repo"] {
+            XCTAssertEqual(AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main")?.absoluteString, expected)
+        }
+        XCTAssertNil(AppModel.pullRequestURL(remoteURL: "git@gitlab.com:owner/repo.git", branch: "shift/1", base: "main"))
+    }
 }

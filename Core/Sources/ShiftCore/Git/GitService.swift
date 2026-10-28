@@ -356,6 +356,10 @@ public struct GitService: GitServicing {
         return remotes.contains("origin") ? "origin" : remotes.first
     }
 
+    public func remoteURL(repo: URL, remote: String) async -> String? {
+        try? await git(["remote", "get-url", remote], in: repo)
+    }
+
     public func unpushedCount(repo: URL, branch: String, remote: String) async throws -> Int {
         let range = await remoteHasBranch(repo: repo, branch: branch, remote: remote)
             ? "refs/remotes/\(remote)/\(branch)..refs/heads/\(branch)" : "refs/heads/\(branch)"
