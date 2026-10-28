@@ -211,19 +211,13 @@ struct TaskDetailView: View {
                         }
                     }
                     if let host = model.tailnetHost, let tailnet = URL(string: "https://\(host):\(port)") {
-                        Menu {
-                            Button("Copy Link") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(tailnet.absoluteString, forType: .string)
-                            }
-                        } label: {
-                            Label("Tailscale", systemImage: "network").frame(minHeight: Self.actionLabelHeight)
-                        } primaryAction: {
-                            apps.openInBrowser(tailnet)
+                        SplitButton(items: [("Copy Link", {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(tailnet.absoluteString, forType: .string)
+                        })], action: { apps.openInBrowser(tailnet) }) {
+                            Label("Tailscale", systemImage: "network")
                         }
-                        .menuStyle(.button)
                         .buttonStyle(.glass)
-                        .fixedSize()
                         .help("Open \(tailnet.absoluteString), reachable from any device on your tailnet")
                     }
                     // The port may still come up, so the button stays.
@@ -282,23 +276,19 @@ struct TaskDetailView: View {
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         if task.status == .completed {
-            Menu {
-                Button("Open Pull Request") {
-                    isMerging = true
-                    Task {
-                        if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
-                        isMerging = false
-                    }
+            SplitButton(items: [("Open Pull Request", {
+                isMerging = true
+                Task {
+                    if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
+                    isMerging = false
                 }
-            } label: {
-                Text("Merge into \(task.base(in: project))").frame(minHeight: Self.actionLabelHeight)
-            } primaryAction: {
+            })], action: {
                 isMerging = true
                 Task { await model.merge(taskID: taskID); isMerging = false }
+            }) {
+                Text("Merge into \(task.base(in: project))")
             }
-            .menuStyle(.button)
             .buttonStyle(.glassProminent)
-            .fixedSize()
             .disabled(isMerging)
         } else if task.status == .conflict {
             Button { model.resolveConflict(taskID: taskID) } label: {
