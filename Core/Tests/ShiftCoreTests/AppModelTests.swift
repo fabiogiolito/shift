@@ -606,6 +606,18 @@ final class AppModelTests: XCTestCase {
         await waitForStatus(id, .completed)
     }
 
+    func testSyncBaseConflictWaitsForTheUserThenGoesToTheAgent() async {
+        git.mergeBaseClean = false
+        let id = await createCompletedTask()
+        let conflicts = await model.syncBase(taskID: id)
+        XCTAssertTrue(git.calls.contains { $0.hasPrefix("merge main into") })
+        XCTAssertFalse(conflicts.isEmpty)
+        XCTAssertEqual(status(id), .completed, "nothing changes until the user picks")
+        model.fixSyncConflict(taskID: id)
+        XCTAssertEqual(model.task(id)?.isResolvingConflict, true)
+        await waitForStatus(id, .completed)
+    }
+
     func testMergeKeepsABranchWhoseWorkIsNotInBase() async {
         let id = await createCompletedTask()
         git.contained = false
