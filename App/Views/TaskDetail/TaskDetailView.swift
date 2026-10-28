@@ -282,13 +282,23 @@ struct TaskDetailView: View {
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         if task.status == .completed {
-            Button {
-                isMerging = true
-                Task { await model.merge(taskID: taskID); isMerging = false }
+            Menu {
+                Button("Open Pull Request") {
+                    isMerging = true
+                    Task {
+                        if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
+                        isMerging = false
+                    }
+                }
             } label: {
                 Text("Merge into \(task.base(in: project))").frame(minHeight: Self.actionLabelHeight)
+            } primaryAction: {
+                isMerging = true
+                Task { await model.merge(taskID: taskID); isMerging = false }
             }
+            .menuStyle(.button)
             .buttonStyle(.glassProminent)
+            .fixedSize()
             .disabled(isMerging)
         } else if task.status == .conflict {
             Button { model.resolveConflict(taskID: taskID) } label: {

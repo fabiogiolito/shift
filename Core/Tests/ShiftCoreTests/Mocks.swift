@@ -151,6 +151,7 @@ final class MockGit: GitServicing {
     var pushGate: Gate?
 
     func remote(repo: URL, branch: String) async -> String? { remoteName }
+    func remoteURL(repo: URL, remote: String) async -> String? { "git@github.com:owner/repo.git" }
     func unpushedCount(repo: URL, branch: String, remote: String) async throws -> Int { unpushed }
     func push(repo: URL, branch: String, remote: String) async throws {
         await pushGate?.wait()

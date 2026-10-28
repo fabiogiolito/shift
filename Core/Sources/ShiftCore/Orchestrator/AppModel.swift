@@ -519,6 +519,32 @@ public final class AppModel {
         }
     }
 
+    /// Pushes the task's branch and returns the page that opens a pull request for it into its base.
+    /// Nil (and `lastError`) if the push fails or the remote is not on GitHub.
+    public func pullRequestURL(taskID: TaskItem.ID) async -> URL? {
+        guard let services, let task = task(taskID), let project = project(task.projectID) else { return nil }
+        guard let remote = await services.git.remote(repo: project.repoURL, branch: task.branch),
+              let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
+              let url = Self.pullRequestURL(remoteURL: remoteURL, branch: task.branch, base: task.base(in: project)) else {
+            lastError = "Could not open a pull request for \(task.title): the project has no GitHub remote."
+            return nil
+        }
+        do {
+            try await services.git.push(repo: project.repoURL, branch: task.branch, remote: remote)
+        } catch {
+            lastError = "Could not push \(task.title): \(Self.firstLine(Self.describe(error)))"
+            return nil
+        }
+        await refreshPushState(projectID: project.id)
+        return url
+    }
+
+    /// GitHub's compare page for `branch` into `base`, from an https or ssh remote URL. Nil for other hosts.
+    static func pullRequestURL(remoteURL: String, branch: String, base: String) -> URL? {
+        guard let match = remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#) else { return nil }
+        return URL(string: "https://github.com/\(match.1)/compare/\(base)...\(branch)?expand=1")
+    }
+
     /// The project's base branch in the browser: its base server, started again first if it stopped, once it
     /// answers. Nil (and `lastError`) if it never does.
     public func baseServerURL(projectID: Project.ID) async -> URL? {
