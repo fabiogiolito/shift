@@ -945,6 +945,28 @@ final class AppModelTests: XCTestCase {
         model.updateProject(project)
     }
 
+    func testElectronProjectRunsTheAppOnDemandInItsOwnHome() async throws {
+        project.type = .electronApp
+        project.buildCommand = "pnpm run dev"
+        model.updateProject(project)
+        let id = await createCompletedTask()
+        XCTAssertTrue(servers.starts.isEmpty)
+        XCTAssertNil(model.task(id)?.port)
+
+        try FileManager.default.createDirectory(atPath: model.task(id)!.worktreePath, withIntermediateDirectories: true)
+        await model.runApp(taskID: id)
+        let command = try XCTUnwrap(servers.starts.last?.command)
+        XCTAssertTrue(command.hasPrefix("export CFFIXED_USER_HOME=\"\(ShiftPaths.build(taskID: id).path)\";"))
+        XCTAssertTrue(command.hasSuffix("; pnpm run dev"))
+        XCTAssertNotNil(model.task(id)?.serverPID)
+
+        // A settings change keeps the app open; stopping it closes it.
+        model.updateProject(project)
+        XCTAssertNotNil(model.task(id)?.serverPID)
+        await model.stopApp(taskID: id)
+        XCTAssertNil(model.task(id)?.serverPID)
+    }
+
     func testAppProjectBuildsInsteadOfRunningAServer() async {
         project.buildCommand = "scripts/build.sh"
         model.updateProject(project)

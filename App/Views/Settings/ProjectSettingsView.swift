@@ -8,7 +8,7 @@ struct ProjectSettingsView: View {
     @State private var draft: Project?
     @State private var branches: [String] = []
     @State private var creatingBranch = false
-    /// Chosen in the picker; nil follows the project (an app has a build command).
+    /// Other projects: chosen in the picker; nil follows the project (an app has a build command).
     @State private var isApp: Bool?
 
     init(projectID: Project.ID) {
@@ -33,15 +33,35 @@ struct ProjectSettingsView: View {
                     if let draft { model.updateProject(draft) }
                     dismiss()
                 }
-                // An app is a project with a build command: without one, App build would not stick.
+                // An app is a project with a build command: without one, it would not stay an app.
                 .disabled(draft?.name.trimmingCharacters(in: .whitespaces).isEmpty ?? true
-                          || (isApp == true && draft?.isApp == false))
+                          || (draft.map { usesBuild($0) && !$0.isApp } ?? false))
             }
         }
         .task {
             if draft == nil { draft = model.project(projectID) }
             branches = await model.branches(for: projectID)
             await model.refreshPushState(projectID: projectID)
+        }
+    }
+
+    /// Tested by building or running an app, not on a dev server.
+    private func usesBuild(_ project: Project) -> Bool {
+        switch project.type {
+        case .staticWebsite, .dynamicWebsite: false
+        case .nativeApp, .electronApp: true
+        case .other: isApp ?? project.isApp
+        }
+    }
+
+    /// A terminal command: its value is monospaced, its label is not.
+    private func commandField(_ label: String, text: Binding<String>, prompt: Text) -> some View {
+        LabeledContent(label) {
+            TextField(label, text: text, prompt: prompt)
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .fontDesign(.monospaced)
+                .autocorrectionDisabled()
         }
     }
 
@@ -54,7 +74,7 @@ struct ProjectSettingsView: View {
         return Form {
             Section("General") {
                 TextField("Name", text: project.name)
-                LabeledContent("Repository") {
+                LabeledContent("Folder") {
                     Text(current.repoPath).textSelection(.enabled).lineLimit(1).truncationMode(.head)
                     Button("Show in Finder") {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: current.repoPath)
@@ -111,37 +131,46 @@ struct ProjectSettingsView: View {
             }
 
             Section {
-                TextField("Setup", text: project.setupCommand,
-                          prompt: Text(verbatim: "pnpm install && cp \"$SHIFT_REPO/.env\" ."))
-                    .autocorrectionDisabled()
-                Picker("Test with", selection: Binding(
-                    get: { isApp ?? current.isApp },
-                    set: {
-                        isApp = $0
-                        if !$0 { project.wrappedValue.buildCommand = "" }
-                        else if !project.wrappedValue.isApp { project.wrappedValue.buildCommand = current.defaultBuildCommand }
+                Picker("Project type", selection: Binding(
+                    get: { current.type },
+                    set: { type in
+                        project.wrappedValue.type = type
+                        isApp = nil
+                        Task { draft = await model.project(current, as: type) }
                     })) {
-                    Text("Dev server").tag(false)
-                    Text("App build").tag(true)
+                    ForEach(ProjectType.allCases) { Text($0.displayName).tag($0) }
                 }
-                if isApp ?? current.isApp {
-                    TextField("Build", text: project.buildCommand, prompt: Text("Required, e.g. scripts/build.sh"))
-                        .autocorrectionDisabled()
-                } else {
-                    TextField("Start server", text: project.serverCommand, prompt: Text("pnpm dev --port $PORT"))
-                        .autocorrectionDisabled()
-                    LabeledContent("Port", value: "Automatic")
+                if current.type != .staticWebsite {
+                    commandField("Setup", text: project.setupCommand,
+                                 prompt: Text(verbatim: "pnpm install && cp \"$SHIFT_REPO/.env\" ."))
+                }
+                if current.type == .other {
+                    Picker("Test with", selection: Binding(
+                        get: { isApp ?? current.isApp },
+                        set: {
+                            isApp = $0
+                            if !$0 { project.wrappedValue.buildCommand = "" }
+                            else if !project.wrappedValue.isApp { project.wrappedValue.buildCommand = current.defaultBuildCommand }
+                        })) {
+                        Text("Dev server").tag(false)
+                        Text("App build").tag(true)
+                    }
+                }
+                if current.runsApp {
+                    commandField("Run", text: project.buildCommand, prompt: Text("Required, e.g. pnpm run dev"))
+                } else if usesBuild(current) {
+                    commandField("Build", text: project.buildCommand, prompt: Text("Required, e.g. scripts/build.sh"))
+                } else if current.type != .staticWebsite {
+                    commandField("Start server", text: project.serverCommand, prompt: Text("pnpm dev --port $PORT"))
                 }
             } header: {
                 Text("Development")
             } footer: {
-                Text(isApp ?? current.isApp ? """
-                    Setup runs once in each new task's worktree before the agent starts. \
-                    Build runs in the task's worktree when you click Build; if the last line it prints is the path of a .app, Shift opens it.
-                    """ : """
-                    Setup runs once in each new task's worktree before the agent starts. \
-                    The server runs in each task's worktree with PORT set; leave it empty if the project has no dev server.
-                    """)
+                Text(current.type == .staticWebsite ? "Each task's files are served on localhost, on a port of their own."
+                     : "Setup runs once in each new task's worktree before the agent starts. " + (
+                    current.runsApp ? "Run opens the task's copy of the app when you click Run, with its own empty data, so tasks can run side by side."
+                    : usesBuild(current) ? "Build runs in the task's worktree when you click Build; if the last line it prints is the path of a .app, Shift opens it."
+                    : "The server runs in each task's worktree with PORT set; leave it empty if the project has no dev server."))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
