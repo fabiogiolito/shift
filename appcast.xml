@@ -143,5 +143,19 @@
 - The branch name now shows next to the localhost button]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.9/Shift-0.1.9.zip" sparkle:edSignature="H2xteN72LJIAzE3DHvM4hpbnK3AWUBc/09GQZP9bjA16bdRFMk9ftPg/U8hquSwnaxali6NJbEbuAkxmuf8yBg==" length="3654136" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.10</title>
+      <pubDate>Fri, 30 Oct 2026 18:35:10 +0000</pubDate>
+      <sparkle:version>12</sparkle:version>
+      <sparkle:shortVersionString>0.1.10</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Choose a project type in Settings (static website, dynamic website, native app, Electron app, or other), detected automatically when you add a project
+- Run Electron apps from a task with a Run/Stop button, with copies from several tasks running side by side
+- Pick Localhost or Tailscale from a single server button that remembers your choice
+- See a task's branch in its top bar and click to copy it
+- Click anywhere on the chevron side of a split button to open its menu
+- Read command fields in Settings more easily in a monospaced font]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.10/Shift-0.1.10.zip" sparkle:edSignature="WfPeR3Z+PgbrWO3SPbfQBHgcT/V2kwe9qgreP1lhr7qcVrtLYXLvF3bq/lT++Bkw4YnOssMuCOI0Ku1FEqdBAA==" length="3688844" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
