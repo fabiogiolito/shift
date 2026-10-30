@@ -18,10 +18,14 @@ struct SplitButton<Label: View, MenuContent: View>: View {
             }
             .buttonStyle(.plain)
             Divider().padding(.vertical, 7)
-            Menu { menu } label: { Image(systemName: "chevron.down").imageScale(.small) }
-                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-                .padding(.leading, 8).padding(.trailing, 11)
-                .frame(maxHeight: .infinity).contentShape(.rect)
+            Menu {
+                menu
+            } label: {
+                Image(systemName: "chevron.down").imageScale(.small)
+                    .padding(.leading, 8).padding(.trailing, 11)
+                    .frame(maxHeight: .infinity).contentShape(.rect)
+            }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize(horizontal: true, vertical: false)
         }
         .foregroundStyle(prominent ? .white : .primary)
         .frame(height: 28)
