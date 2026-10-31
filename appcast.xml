@@ -171,5 +171,20 @@
 - Task actions now appear in a clearer order: merge, Tailscale, server, branch]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.11/Shift-0.1.11.zip" sparkle:edSignature="tZjNbt0Zsjj/5GqlOk/Wsa95Z83aLN3pfqAHjwntTPoN10KmXMBKerBRfAAYnENiLj6JrAcraMj+0T1WwAAsBA==" length="3896273" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.12</title>
+      <pubDate>Sat, 31 Oct 2026 17:57:53 +0000</pubDate>
+      <sparkle:version>14</sparkle:version>
+      <sparkle:shortVersionString>0.1.12</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Project chat can now edit files, use git and run scripts in the project's folder, following the project's permission setting, with Allow and Deny in the chat for manual projects
+- Open the agent's reply by clicking anywhere on a prompt, replacing the Prompts/Agent tabs
+- Push merges in what the remote has and pushes again instead of failing, and tells you if conflicts or uncommitted changes get in the way
+- Stop a running task from its button row
+- Change the base branch, re-sync it and push the task branch from the merge dropdown, including when a task has conflicts
+- Open the server log in its own window that follows the output, and restart the server from the server dropdown, now shown without Tailscale too
+- Launching Shift no longer starts every web project's server; a project's server starts only when you open it, and a project whose folder is gone says so plainly]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.12/Shift-0.1.12.zip" sparkle:edSignature="xDmwmF3La7XJ4zU9n+BdP7rtfn07r8U5MQP32Tycr952SPJ8AkO6KTc3Wv+IsorHIl2p5NH5i9YmTP88PTXoAw==" length="3915728" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
