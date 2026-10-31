@@ -1068,10 +1068,25 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(servers.runs.last?.command, "scripts/build.sh")
     }
 
-    func testBaseServerRunsOnTheRepoAndComesBackWhenOpened() async {
-        XCTAssertEqual(servers.baseStarts, [.init(taskID: -1, command: "pnpm dev", port: 3000)])
-        XCTAssertEqual(model.basePorts[project.id], 3000)
+    func testBaseServerStartsOnlyWhenOpenedAndComesBack() async {
+        // Neither launching nor adding a project runs its server command.
+        await relaunch(with: savedTask(7, status: .merged))
+        XCTAssertTrue(servers.baseStarts.isEmpty)
+        // Changing the command of a server that is not running does not start it either.
+        var edited = project!
+        edited.serverCommand = "pnpm dev --port $PORT"
+        model.updateProject(edited)
+        await Task.yield()
+        XCTAssertTrue(servers.baseStarts.isEmpty)
+        model.updateProject(project)
+
         model.baseServerPoll = .milliseconds(1)
+        async let first = model.baseServerURL(projectID: project.id)
+        await waitFor("the base server to start") { self.servers.baseStarts.count == 1 }
+        XCTAssertEqual(servers.baseStarts, [.init(taskID: -1, command: "pnpm dev", port: 3000)])
+        ports.taken = [3000]
+        _ = await first
+        ports.taken = []
         servers.crash(taskID: -1)
         // Opened only once the restarted server answers on its port.
         async let opened = model.baseServerURL(projectID: project.id)
@@ -1106,6 +1121,16 @@ final class AppModelTests: XCTestCase {
         model.updateProject(app)
         await waitFor("the base server to stop") { self.model.basePorts[self.project.id] == nil }
         XCTAssertTrue(servers.baseRunning.isEmpty)
+    }
+
+    func testOpeningABaseServerWhoseFolderIsGoneSaysSo() async {
+        var gone = project!
+        gone.repoPath = "/nonexistent/spot"
+        model.updateProject(gone)
+        let url = await model.baseServerURL(projectID: project.id)
+        XCTAssertNil(url)
+        XCTAssertTrue(servers.baseStarts.isEmpty)
+        XCTAssertEqual(model.lastError, "The folder for Spot no longer exists: /nonexistent/spot")
     }
 
     func testBecomingAnAppReleasesTaskPorts() async {
