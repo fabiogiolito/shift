@@ -76,6 +76,7 @@ struct ProjectsSidebar: View {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
+        panel.canCreateDirectories = true
         panel.prompt = "Add"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
