@@ -447,14 +447,7 @@ struct TaskDetailView: View {
 
     private func history(_ task: TaskItem) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("History", selection: $historyTab) {
-                ForEach(HistoryTab.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            // Otherwise the selected segment is accent blue. This is the gray macOS gives it in an inactive window.
-            .tint(Color(nsColor: .unemphasizedSelectedContentBackgroundColor))
-            .labelsHidden()
-            .fixedSize()
+            HistoryTabPicker(selection: $historyTab)
             switch historyTab {
             case .prompts: promptList(task)
             case .agent: agentTurn(task)
@@ -637,6 +630,40 @@ struct TaskDetailView: View {
 private enum HistoryTab: String, CaseIterable, Identifiable {
     case prompts = "Prompts", agent = "Agent"
     var id: Self { self }
+}
+
+/// Drawn by hand because the system's segmented picker can't raise its selected segment or make it white.
+/// White in light mode; controlColor is a lighter gray in dark mode.
+private struct HistoryTabPicker: View {
+    @Binding var selection: HistoryTab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var namespace
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(HistoryTab.allCases) { tab in
+                Button {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { selection = tab }
+                } label: {
+                    Text(tab.rawValue)
+                        .frame(width: 72, height: 20)
+                        .contentShape(.rect)
+                        .background {
+                            if selection == tab {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(nsColor: .controlColor))
+                                    .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+                                    .matchedGeometryEffect(id: "selection", in: namespace)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == tab ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(.quaternary, in: .rect(cornerRadius: 8))
+    }
 }
 
 /// The dev server, as the port link shows it.
