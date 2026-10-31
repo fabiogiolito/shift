@@ -17,6 +17,17 @@ enum OutcomeProtocol {
         outcome + "\n\n" + (firstTurn ? describeFirst : describeAgain) + "\n\n" + describeRules
     }
 
+    /// For the project chat, instead of everything above: it isn't a task, and the user is there.
+    static let readOnlyInstructions = """
+    This is a read-only planning conversation with the user about this project, inside the app Shift. \
+    The user is reading along and answers you, so asking questions is fine. Help them understand the code and work out \
+    plans. If the project has an AGENTS.md or CLAUDE.md, read it first when it's relevant.
+
+    You can't change anything here: writing files, git operations that write, and most network access are \
+    blocked at the operating system level, for you and for every command you run. Commands that only read work. Don't \
+    try to get around this. When something needs changing, say what you would change; the user starts a task for it.
+    """
+
     static let describeFirst = """
     Before doing any work, start your first message with these two lines, each on a line of its own. \
     If there were earlier messages in this conversation, describe the whole task, not only this message:
@@ -201,6 +212,14 @@ func approvalSummary(_ verb: String, _ code: String) -> String {
 func jsonObject(_ line: String) -> [String: Any]? {
     guard line.first == "{", let data = line.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+}
+
+/// `url`'s path with symlinks resolved, as the sandboxes see it. `URL.resolvingSymlinksInPath` won't do:
+/// it turns /private/tmp back into /tmp.
+func realPath(_ url: URL) -> String {
+    guard let resolved = realpath(url.path, nil) else { return url.path }
+    defer { free(resolved) }
+    return String(cString: resolved)
 }
 
 func fileName(_ path: String?) -> String? {

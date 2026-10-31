@@ -4,11 +4,14 @@ import ShiftCore
 // What an agent did, shared by a task's Agent tab and the project chat.
 
 /// A turn from top to bottom: the prompt, then what the agent did about it.
-struct TurnView: View {
+struct TurnView: View, Equatable {
     let turn: TranscriptTurn
     /// The prompts the turn answers. Empty for logs from before Shift recorded which.
     let prompts: [Prompt]
     let reader: TranscriptReader?
+
+    /// A conversation updates many times a second while a reply arrives, in only its last turn.
+    static func == (a: Self, b: Self) -> Bool { a.turn == b.turn && a.prompts == b.prompts && a.reader === b.reader }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

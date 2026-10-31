@@ -44,9 +44,9 @@ struct TaskDetailView: View {
     private let apps = ExternalApps()
 
     /// The detail's keyline: content and the toolbar title start this far from the column's leading edge.
-    private static let margin: CGFloat = 20
+    static let margin: CGFloat = 20
     /// Where the system places the first toolbar item of the detail column, measured from its leading edge.
-    private static let toolbarInset: CGFloat = 8
+    static let toolbarInset: CGFloat = 8
 
     var body: some View {
         if let task = model.task(taskID), let project = model.project(task.projectID) {
@@ -516,7 +516,7 @@ struct TaskDetailView: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.accessoryBar)
                 }
-                TurnView(turn: turn, prompts: task.prompts.filter { turn.promptIDs.contains($0.id) }, reader: reader)
+                TurnView(turn: turn, prompts: task.prompts.filter { turn.promptIDs.contains($0.id) }, reader: reader).equatable()
             }
         }
     }

@@ -364,6 +364,8 @@ final class MockStore: StateStoring {
     }
 
     private(set) var chatLogs: [UUID: String] = [:]
+    func appendChatLog(chatID: UUID, text: String) async { chatLogs[chatID, default: ""] += text }
+    func deleteChatLog(chatID: UUID) async { chatLogs[chatID] = nil }
     func logBytes(_ log: AgentLog, from offset: UInt64, length: Int) async -> Data {
         let text = switch log {
         case .task(let id): logs[id] ?? ""

@@ -46,8 +46,13 @@ public actor JSONStateStore: StateStoring {
         return root.appendingPathComponent("logs").appendingPathComponent(name)
     }
 
-    public func appendLog(taskID: Int, text: String) {
-        let url = logURL(taskID)
+    public func appendLog(taskID: Int, text: String) { append(text, to: logURL(taskID)) }
+
+    public func appendChatLog(chatID: UUID, text: String) { append(text, to: url(of: .chat(chatID))) }
+
+    public func deleteChatLog(chatID: UUID) { try? fm.removeItem(at: url(of: .chat(chatID))) }
+
+    private func append(_ text: String, to url: URL) {
         if !fm.fileExists(atPath: url.path) {
             try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             fm.createFile(atPath: url.path, contents: nil)
