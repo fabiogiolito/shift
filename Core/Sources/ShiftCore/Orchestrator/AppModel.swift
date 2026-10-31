@@ -240,7 +240,6 @@ public final class AppModel {
             await reconcile(task.id)
         }
         changed()
-        for project in projects { await startBaseServer(project.id) }
         Task { [weak self] in
             while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
         }
@@ -309,7 +308,6 @@ public final class AppModel {
                               serverCommand: suggested.server, setupCommand: suggested.setup, buildCommand: suggested.build)
         projects.append(project)
         changed()
-        Task { await startBaseServer(project.id) }
         return project
     }
 
@@ -317,7 +315,8 @@ public final class AppModel {
         guard let services, let index = projects.firstIndex(where: { $0.id == project.id }) else { return }
         let old = projects[index]
         projects[index] = project
-        if (old.serverCommand, old.buildCommand, old.isApp) != (project.serverCommand, project.buildCommand, project.isApp) {
+        if basePorts[project.id] != nil,
+           (old.serverCommand, old.buildCommand, old.isApp) != (project.serverCommand, project.buildCommand, project.isApp) {
             Task { await startBaseServer(project.id, restart: true) }
         }
         // Now an app: its tasks are tested by building, so their dev servers and ports go. A running app goes
@@ -630,8 +629,10 @@ public final class AppModel {
         await services?.ports.allocate(preferred: port, reserved: []) != port
     }
 
-    /// Keeps a web project's base server running (starting it if it is not), and stops it once the project
-    /// is gone or became an app. `restart`: start it again even if it runs, for a changed command.
+    /// Starts a web project's base server if it is not running, and stops it once the project is gone or
+    /// became an app. Only ever started by opening it: a project's server command can do anything (Facet's
+    /// opens its Electron app), so it must not run just because Shift launched.
+    /// `restart`: start it again even if it runs, for a changed command.
     /// ponytail: serves the repo folder, which shows base only while base is checked out there.
     private func startBaseServer(_ projectID: Project.ID, restart: Bool = false) async {
         guard let services else { return }
@@ -643,6 +644,12 @@ public final class AppModel {
             return
         }
         if !restart, basePorts[projectID] != nil, await services.servers.isRunning(taskID: id) { return }
+        guard FileManager.default.fileExists(atPath: project.repoPath) else {
+            basePorts[projectID] = nil
+            await services.servers.stop(taskID: id)
+            lastError = "The folder for \(project.name) no longer exists: \(project.repoPath)"
+            return
+        }
         let reserved = Set(tasks.filter { $0.status != .merged }.compactMap(\.port))
             .union(basePorts.filter { $0.key != projectID }.values)
         let port = await services.ports.allocate(preferred: basePorts[projectID] ?? 3000, reserved: reserved)
