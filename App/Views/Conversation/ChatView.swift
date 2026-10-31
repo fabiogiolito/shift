@@ -9,8 +9,13 @@ struct ChatRow: View {
     let replying: Bool
 
     var body: some View {
-        HStack {
-            Label("Chat", systemImage: "bubble.left.and.text.bubble.right")
+        // Same icon square and spacing as TaskRow's title line, so the icons and text line up down the list.
+        HStack(spacing: 6) {
+            Image(systemName: "bubble.left.and.text.bubble.right")
+                .resizable().scaledToFit()
+                .frame(width: 14, height: 14)
+                .foregroundStyle(.secondary)
+            Text("Chat")
             Spacer()
             if replying { ProgressView().controlSize(.small) }
         }
