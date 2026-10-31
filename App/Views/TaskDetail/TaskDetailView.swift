@@ -451,6 +451,8 @@ struct TaskDetailView: View {
                 ForEach(HistoryTab.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
+            // Otherwise the selected segment is accent blue. This is the gray macOS gives it in an inactive window.
+            .tint(Color(nsColor: .unemphasizedSelectedContentBackgroundColor))
             .labelsHidden()
             .fixedSize()
             switch historyTab {
