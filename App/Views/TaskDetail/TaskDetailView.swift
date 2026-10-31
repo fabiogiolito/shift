@@ -147,6 +147,7 @@ struct TaskDetailView: View {
         } label: {
             Label(task.branch, systemImage: "arrow.triangle.branch")
                 .labelStyle(.titleAndIcon)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
