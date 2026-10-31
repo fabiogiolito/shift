@@ -150,13 +150,12 @@ public struct AgentRequest: Sendable {
     public var needsDescription: Bool
     /// Manual permissions: where the answers to `.approvalRequested` come from.
     public var approvals: ApprovalChannel
-    /// The agent must not be able to change anything, whatever `permissions` says, and it gets the project
-    /// chat's instructions instead of the task ones.
-    public var readOnly: Bool
+    /// The project chat: it gets the chat's instructions instead of the task ones, and its reply as it's written.
+    public var chat: Bool
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
-                approvals: ApprovalChannel = ApprovalChannel(), readOnly: Bool = false) {
+                approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -165,7 +164,7 @@ public struct AgentRequest: Sendable {
         self.model = model
         self.needsDescription = needsDescription ?? (sessionID == nil)
         self.approvals = approvals
-        self.readOnly = readOnly
+        self.chat = chat
     }
 }
 

@@ -7,6 +7,8 @@ struct ChatRow: View {
     static let id: TaskItem.ID = -1
 
     let replying: Bool
+    /// The agent waits for the user to allow something.
+    var waiting = false
 
     var body: some View {
         // Same icon square and spacing as TaskRow's title line, so the icons and text line up down the list.
@@ -17,7 +19,11 @@ struct ChatRow: View {
                 .foregroundStyle(.secondary)
             Text("Chat")
             Spacer()
-            if replying { ProgressView().controlSize(.small) }
+            if waiting {
+                Image(systemName: "hand.raised.fill").foregroundStyle(.blue)
+            } else if replying {
+                ProgressView().controlSize(.small)
+            }
         }
     }
 }
@@ -28,7 +34,7 @@ struct ChatView: View {
     let project: Project
     @State private var reader: TranscriptReader?
     @State private var turns: [TranscriptTurn] = []
-    /// What the project's folder has checked out, which is what the agent reads.
+    /// What the project's folder has checked out, which is what the agent works on.
     @State private var branch: String?
     @State private var confirmingNew = false
 
@@ -64,18 +70,21 @@ struct ChatView: View {
             .onChange(of: chat?.prompts.count) { proxy.scrollTo(bottom, anchor: .bottom) }
             .overlay {
                 if chat == nil {
-                    ContentUnavailableView("Ask About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
-                                           description: Text("Ask questions and plan against the code. The agent can read this project but can't change it."))
+                    ContentUnavailableView("Chat About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
+                                           description: Text("Ask questions, plan, or have the agent do something in the project's folder, like pull, push or release. It has the project's permissions."))
                 }
             }
         }
         .safeAreaBar(edge: .top) { branchNote }
         .safeAreaBar(edge: .bottom) {
             VStack(alignment: .trailing, spacing: 8) {
+                if let request = model.chatApprovalRequest(projectID: project.id) {
+                    approval(request)
+                }
                 if replying {
                     Button("Stop", systemImage: "stop.fill") { model.stopChat(projectID: project.id) }.buttonStyle(.glass)
                 }
-                PromptField(placeholder: "Ask about this project…", draftKey: "chat \(project.id)") {
+                PromptField(placeholder: "Ask or tell the agent anything…", draftKey: "chat \(project.id)") {
                     model.sendChat(projectID: project.id, text: $0, attachments: $1)
                 }
             }
@@ -94,7 +103,7 @@ struct ChatView: View {
                     Label(branch, systemImage: "arrow.triangle.branch").labelStyle(.titleAndIcon)
                         .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                         .padding(.horizontal, 8)
-                        .help("The branch checked out in the project's folder, which the agent reads")
+                        .help("The branch checked out in the project's folder, which the agent works on")
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
@@ -127,10 +136,27 @@ struct ChatView: View {
         .onAppearAndActivate(id: "\(project.id)\(replying)") { branch = await model.checkedOutBranch(projectID: project.id) }
     }
 
-    /// The agent reads the folder as it is: it matters when that isn't the project's base.
+    /// What the agent wants to do, like a task's response panel.
+    private func approval(_ request: String) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("The agent wants to").font(.subheadline).foregroundStyle(.secondary)
+                Text((try? AttributedString(markdown: request, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+                     ?? AttributedString(request))
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Deny") { model.answerChatApproval(projectID: project.id, allow: false) }.buttonStyle(.glass)
+            Button("Allow") { model.answerChatApproval(projectID: project.id, allow: true) }.buttonStyle(.glassProminent)
+        }
+        .padding(16)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+
+    /// The agent works in the folder as it is: it matters when that isn't the project's base.
     @ViewBuilder private var branchNote: some View {
         if let branch, branch != project.baseBranch {
-            Label("The project's folder is on \(branch), not \(project.baseBranch). The agent answers from \(branch).", systemImage: "exclamationmark.triangle")
+            Label("The project's folder is on \(branch), not \(project.baseBranch). The agent works on \(branch).", systemImage: "exclamationmark.triangle")
                 .font(.callout)
                 .foregroundStyle(.orange)
                 .padding(.horizontal, TaskDetailView.margin)

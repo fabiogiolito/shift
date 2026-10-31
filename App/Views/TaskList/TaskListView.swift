@@ -22,7 +22,8 @@ struct TaskListView: View {
         // new task field would lose what is being typed in it, and its focus.
         ZStack {
             List(selection: $selection) {
-                ChatRow(replying: model.replyingChats.contains(project.id)).tag(ChatRow.id)
+                ChatRow(replying: model.replyingChats.contains(project.id),
+                        waiting: model.chatApprovalRequest(projectID: project.id) != nil).tag(ChatRow.id)
                 ForEach(sections, id: \.0) { section($0.0, $0.1) }
             }
             .id(sections.map { "\($0.0):\($0.1.map(\.id))" }.joined())

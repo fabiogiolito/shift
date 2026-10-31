@@ -1833,14 +1833,18 @@ final class ChatTests: XCTestCase {
         await waitFor("the reply to end") { self.model.replyingChats.isEmpty }
     }
 
-    func testRunsReadOnlyInTheProjectsFolderWhateverItsPermissions() async {
+    func testRunsInTheProjectsFolderWithItsPermissions() async {
+        var manual = project!
+        manual.permissions = .manual
+        model.updateProject(manual)
         claude.scripts = [reply("s1")]
         model.sendChat(projectID: project.id, text: " Why? ")
         XCTAssertEqual(model.replyingChats, [project.id])
         await waitForReply()
 
         let request = claude.requests[0]
-        XCTAssertTrue(request.readOnly)
+        XCTAssertTrue(request.chat)
+        XCTAssertEqual(request.permissions, .manual)
         XCTAssertEqual(request.worktree.path, project.repoPath)
         XCTAssertEqual(request.prompt, "Why?")
         XCTAssertEqual(request.model, "opus")
@@ -1848,6 +1852,22 @@ final class ChatTests: XCTestCase {
         XCTAssertNil(request.sessionID)
         XCTAssertEqual(model.chat(projectID: project.id)?.sessionID, "s1")
         XCTAssertEqual(model.chat(projectID: project.id)?.agent, .claudeCode)
+    }
+
+    func testAsksTheUserInManualAndStopsAsking() async {
+        claude.scripts = [[.ask(id: "a1", summary: "Run `git push`"), .ask(id: "a2", summary: "Run `git tag`"),
+                           .emit(.finished(.completed(summary: "Done")))]]
+        model.sendChat(projectID: project.id, text: "Push")
+        await waitFor("the request") { self.model.chatApprovalRequest(projectID: self.project.id) != nil }
+        XCTAssertEqual(model.chatApprovalRequest(projectID: project.id), "Run `git push`")
+
+        model.answerChatApproval(projectID: project.id, allow: true)
+        await waitFor("the next request") { self.model.chatApprovalRequest(projectID: self.project.id) == "Run `git tag`" }
+        model.sendChat(projectID: project.id, text: "Not that")
+        XCTAssertNil(model.chatApprovalRequest(projectID: project.id))
+        await waitForReply()
+        XCTAssertEqual(claude.answers, [.init(id: "a1", allow: true), .init(id: "a2", allow: false, message: "Not that")])
+        XCTAssertEqual(model.chat(projectID: project.id)?.prompts.map(\.isPending), [false, false])
     }
 
     func testResumesTheSession() async {

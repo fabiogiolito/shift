@@ -345,8 +345,9 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var serverURL: URL? { port.flatMap { URL(string: "http://localhost:\($0)") } }
 }
 
-/// A project's one conversation with its agent, for asking questions and planning against its code.
-/// Not a task: no worktree, branch, server, merge or status. It runs read-only in the project's own folder.
+/// A project's one conversation with its agent, for questions, plans and whatever the user asks it to do.
+/// Not a task: no worktree, branch, server, merge or status. It runs in the project's own folder, with the
+/// project's permissions.
 public struct ProjectChat: Codable, Identifiable, Hashable, Sendable {
     /// Names its log. New Chat makes a new one.
     public var id: UUID
