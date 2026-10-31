@@ -294,7 +294,7 @@ public final class AppModel {
         guard let services, let index = projects.firstIndex(where: { $0.id == project.id }) else { return }
         let old = projects[index]
         projects[index] = project
-        if (old.serverCommand, old.buildCommand) != (project.serverCommand, project.buildCommand) {
+        if (old.serverCommand, old.buildCommand, old.isApp) != (project.serverCommand, project.buildCommand, project.isApp) {
             Task { await startBaseServer(project.id, restart: true) }
         }
         // Now an app: its tasks are tested by building, so their dev servers and ports go. A running app goes
@@ -858,8 +858,12 @@ public final class AppModel {
             builds[taskID] = .failed("The task's folder is recreated the next time the agent runs.")
             return nil
         }
+        let command = ProjectSetup.buildCommand(for: project, in: task.worktreeURL)
+        guard !command.isEmpty else {
+            builds[taskID] = .failed("Nothing to build yet. Add a build command in the project's settings.")
+            return nil
+        }
         builds[taskID] = .building
-        let command = project.buildCommand
         let run = Task {
             try await services.servers.run(command: command, directory: task.worktreeURL, environment: [
                 "SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath, "SHIFT_TASK": String(taskID)])

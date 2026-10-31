@@ -33,7 +33,8 @@ struct ProjectSettingsView: View {
                     if let draft { model.updateProject(draft) }
                     dismiss()
                 }
-                // An app is a project with a build command: without one, it would not stay an app.
+                // Other than a native app (its command can come later), an app is a project with a build command:
+                // without one, it would not stay an app.
                 .disabled(draft?.name.trimmingCharacters(in: .whitespaces).isEmpty ?? true
                           || (draft.map { usesBuild($0) && !$0.isApp } ?? false))
             }
@@ -159,7 +160,8 @@ struct ProjectSettingsView: View {
                 if current.runsApp {
                     commandField("Run", text: project.buildCommand, prompt: Text("Required, e.g. pnpm run dev"))
                 } else if usesBuild(current) {
-                    commandField("Build", text: project.buildCommand, prompt: Text("Required, e.g. scripts/build.sh"))
+                    commandField("Build", text: project.buildCommand,
+                                 prompt: Text(current.type == .nativeApp ? "Detected when you build, e.g. scripts/build.sh" : "Required, e.g. scripts/build.sh"))
                 } else if current.type != .staticWebsite {
                     commandField("Start server", text: project.serverCommand, prompt: Text("pnpm dev --port $PORT"))
                 }

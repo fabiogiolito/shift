@@ -87,6 +87,13 @@ enum ProjectSetup {
         return detected.isEmpty ? staticServer : detected
     }
 
+    /// What builds a task's worktree: the project's own build command, else the one guessed from `directory`
+    /// (an app the agent created after the project was added). Empty when there is nothing to build yet.
+    static func buildCommand(for project: Project, in directory: URL) -> String {
+        guard project.buildCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return project.buildCommand }
+        return Project(name: "", repoPath: directory.path, baseBranch: "").defaultBuildCommand
+    }
+
     /// The install to run before a detected dev script when the project has no commands of its own
     /// (it was empty when added) and nothing installed its dependencies yet.
     static func installStep(for project: Project, in directory: URL) -> String? {
