@@ -157,5 +157,19 @@
 - Read command fields in Settings more easily in a monospaced font]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.10/Shift-0.1.10.zip" sparkle:edSignature="WfPeR3Z+PgbrWO3SPbfQBHgcT/V2kwe9qgreP1lhr7qcVrtLYXLvF3bq/lT++Bkw4YnOssMuCOI0Ku1FEqdBAA==" length="3688844" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.11</title>
+      <pubDate>Sat, 31 Oct 2026 16:28:23 +0000</pubDate>
+      <sparkle:version>13</sparkle:version>
+      <sparkle:shortVersionString>0.1.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Chat with each project in a new pinned Chat row: one read-only conversation for questions and planning that picks up where you left off
+- See what the agent did on each task with the new Agent view, which shows one turn at a time with tool steps collapsed into a short summary
+- Set up a native app project before it has a build command; Build works out what to run, or tells you there's nothing to build yet
+- Create a new folder when adding a project
+- Click the branch on a task to copy its name
+- Task actions now appear in a clearer order: merge, Tailscale, server, branch]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.11/Shift-0.1.11.zip" sparkle:edSignature="tZjNbt0Zsjj/5GqlOk/Wsa95Z83aLN3pfqAHjwntTPoN10KmXMBKerBRfAAYnENiLj6JrAcraMj+0T1WwAAsBA==" length="3896273" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
