@@ -532,7 +532,8 @@ public final class AppModel {
         }
     }
 
-    /// Pushes every base of the project that has commits to push. Never forced.
+    /// Pushes every base of the project that has commits to push, merging in what the remote has that
+    /// they lack. Never forced.
     public func push(projectID: Project.ID) async {
         guard let services, let project = project(projectID), let state = pushStates[projectID],
               !state.isPushing, state.unpushed > 0 else { return }
@@ -546,6 +547,8 @@ public final class AppModel {
         }
         pushStates[projectID]?.isPushing = false
         await refreshPushState(projectID: projectID)
+        // The remote's changes may have moved a base: other tasks may not merge cleanly any more.
+        await refreshMergeability()
     }
 
     /// Pushes the task's branch to the project's remote. Never forced.
