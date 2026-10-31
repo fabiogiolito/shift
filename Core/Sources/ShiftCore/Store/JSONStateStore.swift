@@ -36,8 +36,14 @@ public actor JSONStateStore: StateStoring {
         }
     }
 
-    private func logURL(_ taskID: Int) -> URL {
-        root.appendingPathComponent("logs").appendingPathComponent("agent-\(taskID).log")
+    private func logURL(_ taskID: Int) -> URL { url(of: .task(taskID)) }
+
+    private func url(of log: AgentLog) -> URL {
+        let name = switch log {
+        case .task(let id): "agent-\(id).log"
+        case .chat(let id): "chat-\(id.uuidString).log"
+        }
+        return root.appendingPathComponent("logs").appendingPathComponent(name)
     }
 
     public func appendLog(taskID: Int, text: String) {
@@ -57,8 +63,20 @@ public actor JSONStateStore: StateStoring {
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
         try? handle.seek(toOffset: size > Self.maxLogRead ? size - Self.maxLogRead : 0)
-        // Lossy decoding: the cut may land inside a multi-byte character.
-        return String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+        let data = (try? handle.readToEnd()) ?? Data()
+        guard size > Self.maxLogRead else { return String(decoding: data, as: UTF8.self) }
+        // The cut lands inside a line: what's before the first newline is half a line of JSON.
+        let lines = data.firstIndex(of: 0x0A).map { data[($0 + 1)...] } ?? Data()
+        return Self.omitted + String(decoding: lines, as: UTF8.self)
+    }
+
+    static let omitted = "[Earlier output not shown]\n"
+
+    public func logBytes(_ log: AgentLog, from offset: UInt64, length: Int) -> Data {
+        guard let handle = try? FileHandle(forReadingFrom: url(of: log)) else { return Data() }
+        defer { try? handle.close() }
+        try? handle.seek(toOffset: offset)
+        return (try? handle.read(upToCount: length)) ?? Data()
     }
 
     public func deleteLog(taskID: Int) {

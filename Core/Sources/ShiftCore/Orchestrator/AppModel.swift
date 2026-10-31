@@ -394,7 +394,7 @@ public final class AppModel {
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
             prompts: [first], workingSince: Date()))
         changed()
-        startRun(id, prompt: first.agentText)
+        startRun(id, prompt: first.agentText, promptIDs: [first.id])
         return id
     }
 
@@ -409,7 +409,7 @@ public final class AppModel {
             let prompt = Prompt(text: text, attachments: attachments)
             update(taskID) { $0.prompts.append(prompt) }
             beginWorking(taskID)
-            startRun(taskID, prompt: prompt.agentText)
+            startRun(taskID, prompt: prompt.agentText, promptIDs: [prompt.id])
             return
         }
         let prompt = Prompt(text: text, isPending: true, attachments: attachments)
@@ -421,6 +421,7 @@ public final class AppModel {
             resumeWorking(taskID)
             pending.dropFirst().forEach { channel.answer(id: $0.id, allow: false) }
             if channel.answer(id: first.id, allow: false, message: prompt.agentText) {
+                logDelivered(taskID, [prompt.id])
                 markDelivered(taskID)
                 return
             }
@@ -969,6 +970,12 @@ public final class AppModel {
         return Transcript.readable(await rawOutput(taskID: taskID), agent: agent)
     }
 
+    /// Reads the task's log as a conversation. nil for the preview model.
+    public func transcript(taskID: TaskItem.ID) -> TranscriptReader? {
+        guard let services, let agent = task(taskID)?.agent else { return nil }
+        return TranscriptReader(log: .task(taskID), store: services.store, agent: agent)
+    }
+
     // MARK: - Runs
 
     private func isCurrent(_ id: TaskItem.ID, _ token: UUID) -> Bool {
@@ -1017,19 +1024,20 @@ public final class AppModel {
     }
 
     /// `prompt` nil: only set the worktree up (Restart Server), unless prompts arrive meanwhile.
-    private func startRun(_ id: TaskItem.ID, prompt: String?) {
+    /// `promptIDs`: the `Prompt`s that `prompt` is, if it's the user's and not Shift's own instructions.
+    private func startRun(_ id: TaskItem.ID, prompt: String?, promptIDs: [Prompt.ID] = []) {
         let previous = runs[id]?.task
         previous?.cancel()
         let token = UUID()
         let task = Task { [weak self] in
             // Never two runs in one worktree: the one before has to be completely gone first.
             await previous?.value
-            await self?.run(id, token: token, prompt: prompt)
+            await self?.run(id, token: token, prompt: prompt, promptIDs: promptIDs)
         }
         runs[id] = Run(token: token, task: task)
     }
 
-    private func run(_ id: TaskItem.ID, token: UUID, prompt: String?) async {
+    private func run(_ id: TaskItem.ID, token: UUID, prompt: String?, promptIDs: [Prompt.ID]) async {
         defer { if runs[id]?.token == token { runs[id] = nil } }
         do {
             try check(id, token)
@@ -1037,14 +1045,15 @@ public final class AppModel {
             if let task = task(id), !FileManager.default.fileExists(atPath: task.worktreePath) {
                 try await setUp(id, token: token)
             }
-            var prompt = prompt
+            var prompt = prompt, promptIDs = promptIDs
             if prompt == nil {
+                promptIDs = pendingIDs(id)
                 let pending = takePending(id)
                 guard !pending.isEmpty else { return }
                 beginWorking(id)
                 prompt = pending
             }
-            try await converse(id, token: token, prompt: prompt ?? "")
+            try await converse(id, token: token, prompt: prompt ?? "", promptIDs: promptIDs)
         } catch {
             // Not current any more: whoever cancelled this run has already decided the status.
             guard isCurrent(id, token) else { return }
@@ -1134,15 +1143,16 @@ public final class AppModel {
     }
 
     /// Runs agent turns until one ends with nothing pending, then settles the task.
-    private func converse(_ id: TaskItem.ID, token: UUID, prompt: String) async throws {
+    private func converse(_ id: TaskItem.ID, token: UUID, prompt: String, promptIDs: [Prompt.ID]) async throws {
         guard let services else { return }
-        var prompt = prompt
+        var prompt = prompt, promptIDs = promptIDs
         while true {
             let adapter = try adapter(for: id)
             guard let task = task(id) else { throw CancellationError() }
             // Without a session there is nothing to resume, so the agent needs the whole story.
             let replay = task.sessionID == nil && !task.isResolvingConflict
             // Prompts sent while it was being set up go in with this turn's prompt.
+            let delivered = promptIDs + pendingIDs(id)
             let text = replay ? task.prompts.map(\.agentText).joined(separator: "\n\n")
                 : [prompt, takePending(id)].filter { !$0.isEmpty }.joined(separator: "\n\n")
             markDelivered(id)
@@ -1154,6 +1164,8 @@ public final class AppModel {
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        approvals: channel)
             approvalChannels[id] = channel
+            await services.store.appendLog(taskID: id, text: RunMarker.line(
+                agent: adapter.kind, promptIDs: delivered, text: delivered.isEmpty ? prompt : nil))
             defer {
                 // Whatever this agent run asked is moot once it is over.
                 if approvalChannels[id] === channel {
@@ -1200,9 +1212,11 @@ public final class AppModel {
 
             // From here to the end of the iteration there is no await: a prompt sent now either
             // is pending already, or finds the task settled and starts a run of its own.
+            let moreIDs = pendingIDs(id)
             let more = takePending(id)
             if !more.isEmpty {
                 prompt = more
+                promptIDs = moreIDs
                 continue
             }
             finish(id, settled)
@@ -1216,10 +1230,21 @@ public final class AppModel {
         guard let channel = approvalChannels[id], let task = task(id) else { return }
         for prompt in task.prompts where prompt.isPending {
             guard channel.send(prompt.agentText) else { return }
+            logDelivered(id, [prompt.id])
             update(id) {
                 if let index = $0.prompts.firstIndex(where: { $0.id == prompt.id }) { $0.prompts[index].isPending = false }
             }
         }
+    }
+
+    private func pendingIDs(_ id: TaskItem.ID) -> [Prompt.ID] {
+        (task(id)?.prompts ?? []).filter(\.isPending).map(\.id)
+    }
+
+    /// Prompts that reached the agent in the middle of a run: what it does from here on answers them.
+    private func logDelivered(_ id: TaskItem.ID, _ promptIDs: [Prompt.ID]) {
+        guard let services, let agent = task(id)?.agent else { return }
+        Task { await services.store.appendLog(taskID: id, text: RunMarker.line(agent: agent, promptIDs: promptIDs)) }
     }
 
     private func markDelivered(_ id: TaskItem.ID) {

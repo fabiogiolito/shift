@@ -116,7 +116,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(agent.requests[0].sessionID)
         XCTAssertEqual(agent.requests[0].prompt, "Set the gap to 4px. Thanks!")
         XCTAssertEqual(agent.requests[0].environment["PORT"], "3001")
-        XCTAssertEqual(store.logs[3001], "raw\n")
+        XCTAssertEqual(store.output(3001), "raw\n")
         XCTAssertEqual(notifier.notifications, [.init(title: "Set the gap to 4px is ready", body: "Gap is 4px", taskID: 3001)])
         XCTAssertEqual(notifier.badges.last, 1)
         XCTAssertEqual(store.state.tasks, model.tasks)
@@ -249,7 +249,7 @@ final class AppModelTests: XCTestCase {
 
         gate.open()
         await waitForStatus(id, .completed)
-        XCTAssertEqual(store.logs[id], "$ pnpm install\nDone in 2s\n")
+        XCTAssertEqual(store.output(id), "$ pnpm install\nDone in 2s\n")
         XCTAssertEqual(servers.starts.count, 1)
         XCTAssertEqual(agent.requests.count, 1)
         XCTAssertNil(model.task(id)?.activity)
@@ -415,7 +415,7 @@ final class AppModelTests: XCTestCase {
         let id = model.createTask(projectID: project.id, prompt: "Do it")!
         await waitForStatus(id, .completed)
         XCTAssertNil(model.task(id)?.serverPID)
-        XCTAssertEqual(store.logs[id], "Dev server failed to start: pnpm: command not found\n")
+        XCTAssertEqual(store.output(id), "Dev server failed to start: pnpm: command not found\n")
         let running = await model.isServerRunning(taskID: id)
         XCTAssertFalse(running)
         let log = await model.serverLog(taskID: id)
@@ -509,6 +509,61 @@ final class AppModelTests: XCTestCase {
         gate.open()
         await waitForStatus(id, .completed)
         XCTAssertEqual(agent.requests.count, 1, "no second turn: the agent already had it")
+    }
+
+    func testRunMarkersNameTheDeliveredPrompts() async {
+        agent.takesFollowUps = true
+        let (id, gate) = await createPausedTask()
+        model.sendPrompt(taskID: id, text: "Also create b.txt")
+        gate.open()
+        await waitForStatus(id, .completed)
+        await model.flush()
+        let prompts = model.task(id)?.prompts.map(\.id) ?? []
+        await waitFor("both markers") { self.store.markedPrompts(id).count == 2 }
+        XCTAssertEqual(store.markedPrompts(id), [[prompts[0]], [prompts[1]]])
+
+        // A new run of the same task.
+        model.sendPrompt(taskID: id, text: "One more")
+        await waitForStatus(id, .completed)
+        XCTAssertEqual(store.markedPrompts(id).last, model.task(id)?.prompts.last.map { [$0.id] })
+    }
+
+    func testPromptsThatWaitedForTheNextTurnAreMarkedThere() async {
+        let gate = Gate()
+        agent.scripts = [[.emit(.sessionStarted(id: "s1")), .pause(gate), .emit(.finished(.completed(summary: "A")))]]
+        guard let id = model.createTask(projectID: project.id, prompt: "First") else { return XCTFail("No task") }
+        await waitFor("agent running") { gate.waiting == 1 }
+        model.sendPrompt(taskID: id, text: "Second")
+        model.sendPrompt(taskID: id, text: "Third")
+        gate.open()
+        await waitForStatus(id, .completed)
+        let prompts = model.task(id)?.prompts.map(\.id) ?? []
+        XCTAssertEqual(store.markedPrompts(id), [[prompts[0]], [prompts[1], prompts[2]]])
+    }
+
+    func testResumeMarkerCarriesShiftsOwnWords() async throws {
+        let gate = Gate()
+        agent.scripts = [[.pause(gate)]]
+        guard let id = model.createTask(projectID: project.id, prompt: "First") else { return XCTFail("No task") }
+        await waitFor("agent running") { gate.waiting == 1 }
+        model.stop(taskID: id)
+        gate.open()
+        await waitFor("stopped") { self.model.task(id)?.status == .blocked }
+        model.resume(taskID: id)
+        await waitForStatus(id, .completed)
+        var parser = TranscriptParser(agent: .claudeCode)
+        _ = parser.feed(Data((store.logs[id] ?? "").utf8))
+        XCTAssertEqual(parser.turns.last?.text, AppModel.continuePrompt)
+    }
+
+    func testTranscriptReaderReadsTheTasksLog() async {
+        agent.scripts = [[.emit(.rawOutput(#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hi."}]},"parent_tool_use_id":null}"#)),
+                          .emit(.finished(.completed(summary: "Hi.")))]]
+        guard let id = model.createTask(projectID: project.id, prompt: "First") else { return XCTFail("No task") }
+        await waitForStatus(id, .completed)
+        let turns = await model.transcript(taskID: id)?.update()
+        XCTAssertEqual(turns?.map(\.blocks), [[.message("Hi.")]])
+        XCTAssertEqual(turns?.first?.promptIDs, model.task(id)?.prompts.map(\.id))
     }
 
     func testPendingPromptIsDeliveredOnceTheAgentCanTakeIt() async {

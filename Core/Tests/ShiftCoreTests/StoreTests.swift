@@ -78,8 +78,21 @@ final class StoreTests: XCTestCase {
     func testReadLogReturnsOnlyTheTail() async {
         await store.appendLog(taskID: 1, text: String(repeating: "a", count: 300_000))
         await store.appendLog(taskID: 1, text: "END")
-        let log = await store.readLog(taskID: 1)
-        XCTAssertEqual(log.utf8.count, Int(JSONStateStore.maxLogRead))
-        XCTAssertTrue(log.hasSuffix("END"))
+        var log = await store.readLog(taskID: 1)
+        XCTAssertEqual(log, JSONStateStore.omitted, "All of what's left is half a line.")
+
+        await store.appendLog(taskID: 1, text: "\n{\"whole\":1}\nEND")
+        log = await store.readLog(taskID: 1)
+        XCTAssertEqual(log, JSONStateStore.omitted + "{\"whole\":1}\nEND")
+    }
+
+    func testLogBytes() async {
+        await store.appendLog(taskID: 1, text: "one\ntwo\n")
+        var bytes = await store.logBytes(.task(1), from: 4, length: 2)
+        XCTAssertEqual(bytes, Data("tw".utf8))
+        bytes = await store.logBytes(.task(1), from: 100, length: 2)
+        XCTAssertEqual(bytes, Data())
+        bytes = await store.logBytes(.chat(UUID()), from: 0, length: 2)
+        XCTAssertEqual(bytes, Data())
     }
 }

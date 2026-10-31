@@ -245,12 +245,21 @@ public struct AppState: Codable, Equatable, Sendable {
     }
 }
 
+/// One agent log: a task's, or a project chat's.
+public enum AgentLog: Hashable, Sendable {
+    case task(Int)
+    case chat(UUID)
+}
+
 public protocol StateStoring: Sendable {
     func load() async -> AppState
     func save(_ state: AppState) async
     func appendLog(taskID: Int, text: String) async
+    /// The end of the log, starting at a whole line.
     func readLog(taskID: Int) async -> String
     func deleteLog(taskID: Int) async
+    /// Up to `length` bytes of the log from `offset`. Empty past its end or if there is no log.
+    func logBytes(_ log: AgentLog, from offset: UInt64, length: Int) async -> Data
 }
 
 public struct Services: Sendable {
