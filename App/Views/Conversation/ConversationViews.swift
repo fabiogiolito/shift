@@ -1,7 +1,7 @@
 import SwiftUI
 import ShiftCore
 
-// What an agent did, shared by a task's Agent tab and the project chat.
+// What an agent did, shared by a task's prompts and the project chat.
 
 /// A turn from top to bottom: the prompt, then what the agent did about it.
 struct TurnView: View, Equatable {
