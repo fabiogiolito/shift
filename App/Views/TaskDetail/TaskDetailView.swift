@@ -45,8 +45,9 @@ struct TaskDetailView: View {
     static let margin: CGFloat = 20
     /// Where the system places the first toolbar item of the detail column, measured from its leading edge.
     static let toolbarInset: CGFloat = 8
-    /// How far a disclosure group's chevron pushes its label in, to line up prompts that don't have one yet.
-    private static let chevronWidth: CGFloat = 12
+    private static let chevronWidth: CGFloat = 10
+    /// Where a prompt's text starts, with or without a chevron.
+    private static let promptIndent: CGFloat = 17
 
     var body: some View {
         if let task = model.task(taskID), let project = model.project(task.projectID) {
@@ -459,29 +460,41 @@ struct TaskDetailView: View {
     }
 
     /// A prompt, closed on what the agent did about it once there's something to show.
-    @ViewBuilder private func promptRow(_ prompt: Prompt) -> some View {
+    private func promptRow(_ prompt: Prompt) -> some View {
         let replies = turns.filter { $0.promptIDs.contains(prompt.id) && (!$0.sections.isEmpty || $0.note != nil) }
-        if replies.isEmpty {
-            promptContent(prompt).padding(.leading, Self.chevronWidth)
-        } else {
-            DisclosureGroup(isExpanded: Binding(
-                get: { openPrompts.contains(prompt.id) },
-                set: { if $0 { openPrompts.insert(prompt.id) } else { openPrompts.remove(prompt.id) } }
-            )) {
-                VStack(alignment: .leading, spacing: 12) {
-                    // The prompt is already right above.
-                    ForEach(replies) { TurnView(turn: $0, prompts: [], reader: reader).equatable() }
+        let isOpen = !replies.isEmpty && openPrompts.contains(prompt.id)
+        return VStack(alignment: .leading, spacing: 6) {
+            if replies.isEmpty {
+                if !prompt.text.isEmpty {
+                    promptText(prompt).textSelection(.enabled).padding(.leading, Self.promptIndent)
                 }
-                .padding(.top, 8)
-            } label: {
-                promptContent(prompt)
+            } else {
+                // The whole row toggles, so its text can't be selected: Copy is in its context menu.
+                Button {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+                        if isOpen { openPrompts.remove(prompt.id) } else { openPrompts.insert(prompt.id) }
+                    }
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: Self.promptIndent - Self.chevronWidth) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(isOpen ? 90 : 0))
+                            .frame(width: Self.chevronWidth)
+                        promptText(prompt).multilineTextAlignment(.leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
+                .contextMenu {
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(prompt.text, forType: .string)
+                    }
+                }
             }
-        }
-    }
-
-    private func promptContent(_ prompt: Prompt) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !prompt.text.isEmpty { promptText(prompt).textSelection(.enabled) }
             if !prompt.attachments.isEmpty {
                 ScrollView(.horizontal) {
                     HStack(spacing: 6) {
@@ -489,6 +502,15 @@ struct TaskDetailView: View {
                     }
                 }
                 .scrollIndicators(.never)
+                .padding(.leading, Self.promptIndent)
+            }
+            if isOpen {
+                VStack(alignment: .leading, spacing: 12) {
+                    // The prompt is already right above.
+                    ForEach(replies) { TurnView(turn: $0, prompts: [], reader: reader).equatable() }
+                }
+                .padding(.top, 2)
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -497,11 +519,11 @@ struct TaskDetailView: View {
     /// A pending prompt (not yet handed to the agent) pulses between secondary and tertiary.
     @ViewBuilder private func promptText(_ prompt: Prompt) -> some View {
         if !prompt.isPending {
-            Text(prompt.text).foregroundStyle(.secondary)
+            Text(prompt.text).foregroundStyle(.primary.opacity(0.7))
         } else if reduceMotion {
             Text(prompt.text).foregroundStyle(.tertiary)
         } else {
-            Text(prompt.text).foregroundStyle(.secondary)
+            Text(prompt.text).foregroundStyle(.primary.opacity(0.7))
                 .phaseAnimator([1, 0.5]) { $0.opacity($1) } animation: { _ in .easeInOut(duration: 0.75) }
         }
     }
