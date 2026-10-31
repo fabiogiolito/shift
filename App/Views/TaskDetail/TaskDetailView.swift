@@ -221,7 +221,7 @@ struct TaskDetailView: View {
     /// The status's main action first, then the server button (the Build button for an app) and the branch. Hidden when there is neither.
     /// Every task with a port has a preview server, whether or not the project has a server command.
     @ViewBuilder private func actions(_ task: TaskItem, _ project: Project) -> some View {
-        let hasPrimary = task.status == .completed || task.status == .conflict
+        let hasPrimary = task.status == .completed || task.status == .conflict || task.status == .working || task.approvalRequest != nil
         let canBuild = project.isApp && task.status != .merged
         if task.serverURL != nil || hasPrimary || canBuild {
             HStack {
@@ -401,6 +401,12 @@ struct TaskDetailView: View {
             } menu: {
                 branchItems(task, project)
             }
+        } else if task.status == .working || task.approvalRequest != nil {
+            // Says "Task": beside an app's Run button there can be another Stop, for the app.
+            Button { model.stop(taskID: taskID) } label: {
+                Label("Stop Task", systemImage: "stop.fill")
+            }
+            .buttonStyle(.glass)
         }
     }
 
