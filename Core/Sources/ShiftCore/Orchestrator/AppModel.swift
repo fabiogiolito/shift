@@ -61,6 +61,8 @@ public final class AppModel {
     public private(set) var replyingChats: Set<Project.ID> = []
     /// Why the chat's last reply failed, until the next message.
     public private(set) var chatErrors: [Project.ID: String] = [:]
+    /// Manual permissions: what each chat's agent waits to be allowed to do, oldest first.
+    private var chatApprovals: [Project.ID: [(id: String, summary: String)]] = [:]
 
     private let services: Services?
 
@@ -1029,6 +1031,18 @@ public final class AppModel {
         return TranscriptReader(log: .chat(chat.id), store: services.store, agent: chat.agent ?? project.defaultAgent)
     }
 
+    /// Manual permissions: what the chat's agent is asking to do right now.
+    public func chatApprovalRequest(projectID: Project.ID) -> String? {
+        chatApprovals[projectID]?.first?.summary
+    }
+
+    /// Manual permissions: allow or deny `chatApprovalRequest`; the agent continues either way.
+    public func answerChatApproval(projectID: Project.ID, allow: Bool) {
+        guard let channel = chatRuns[projectID]?.channel, let answered = chatApprovals[projectID]?.first else { return }
+        chatApprovals[projectID]?.removeFirst()
+        channel.answer(id: answered.id, allow: allow)
+    }
+
     /// Sends a message to the project's chat. While the agent replies it goes into the running session as
     /// soon as it can take it, or else into a next turn.
     public func sendChat(projectID: Project.ID, text: String, attachments: [String] = []) {
@@ -1041,7 +1055,18 @@ public final class AppModel {
             startChatRun(projectID, prompt: prompt)
             return
         }
-        updateChat(projectID) { $0.prompts.append(Prompt(text: text, isPending: true, attachments: attachments)) }
+        let prompt = Prompt(text: text, isPending: true, attachments: attachments)
+        updateChat(projectID) { $0.prompts.append(prompt) }
+        // A message instead of an answer to an approval request denies it, and goes to the agent
+        // with the denial if the agent takes a message.
+        if let pending = chatApprovals.removeValue(forKey: projectID), let first = pending.first,
+           let channel = chatRuns[projectID]?.channel {
+            pending.dropFirst().forEach { channel.answer(id: $0.id, allow: false) }
+            if channel.answer(id: first.id, allow: false, message: prompt.agentText) {
+                markChatDelivered(projectID, prompt)
+                return
+            }
+        }
         deliverChatPending(projectID)
     }
 
@@ -1051,6 +1076,7 @@ public final class AppModel {
         // The entry stays (inactive) until the run has wound down, so that the next one can wait for it.
         chatRuns[projectID]?.active = false
         chatRuns[projectID]?.task.cancel()
+        chatApprovals[projectID] = nil
         replyingChats.remove(projectID)
     }
 
@@ -1101,12 +1127,18 @@ public final class AppModel {
         replyingChats.insert(projectID)
     }
 
-    /// Runs agent turns until one ends with nothing pending. Touches no git and no task.
+    /// Runs agent turns until one ends with nothing pending. The agent can do anything to the project's
+    /// repository, so what Shift knows about it is read again afterwards.
     private func runChat(_ projectID: Project.ID, token: UUID, prompt: String, promptIDs: [Prompt.ID]) async {
         defer {
             if chatRuns[projectID]?.token == token {
                 chatRuns[projectID] = nil
+                chatApprovals[projectID] = nil
                 replyingChats.remove(projectID)
+            }
+            Task { [weak self] in
+                await self?.refreshPushState(projectID: projectID)
+                await self?.refreshMergeability()
             }
         }
         guard let services else { return }
@@ -1138,7 +1170,8 @@ public final class AppModel {
             let channel = ApprovalChannel()
             chatRuns[projectID]?.channel = channel
             let request = AgentRequest(prompt: text, sessionID: chat(projectID: projectID)?.sessionID, worktree: project.repoURL,
-                                       model: project.models[kind], needsDescription: false, approvals: channel, readOnly: true)
+                                       permissions: project.permissions, model: project.models[kind], needsDescription: false,
+                                       approvals: channel, chat: true)
             var failure: String?
             events: for await event in adapter.run(request) {
                 guard isChatCurrent(projectID, token) else { return }
@@ -1148,13 +1181,15 @@ public final class AppModel {
                 case .finished(let outcome):
                     if case .blocked(let reason, _) = outcome { failure = reason }
                     break events
-                case .activity, .described, .approvalRequested: break
+                case .approvalRequested(let id, let summary): chatApprovals[projectID, default: []].append((id, summary))
+                case .activity, .described: break
                 }
                 guard isChatCurrent(projectID, token) else { return }
                 deliverChatPending(projectID)
             }
             guard isChatCurrent(projectID, token) else { return }
             chatRuns[projectID]?.channel = nil
+            chatApprovals[projectID] = nil
             chatErrors[projectID] = failure
 
             // From here to the end of the iteration there is no await: a message sent now either
@@ -1173,13 +1208,18 @@ public final class AppModel {
     }
 
     private func deliverChatPending(_ projectID: Project.ID) {
-        guard let services, let channel = chatRuns[projectID]?.channel, let chat = chat(projectID: projectID), let agent = chat.agent else { return }
+        guard let channel = chatRuns[projectID]?.channel, let chat = chat(projectID: projectID) else { return }
         for prompt in chat.prompts where prompt.isPending {
             guard channel.send(prompt.agentText) else { return }
-            Task { await services.store.appendChatLog(chatID: chat.id, text: RunMarker.line(agent: agent, promptIDs: [prompt.id])) }
-            updateChat(projectID) {
-                if let index = $0.prompts.firstIndex(where: { $0.id == prompt.id }) { $0.prompts[index].isPending = false }
-            }
+            markChatDelivered(projectID, prompt)
+        }
+    }
+
+    private func markChatDelivered(_ projectID: Project.ID, _ prompt: Prompt) {
+        guard let services, let chat = chat(projectID: projectID), let agent = chat.agent else { return }
+        Task { await services.store.appendChatLog(chatID: chat.id, text: RunMarker.line(agent: agent, promptIDs: [prompt.id])) }
+        updateChat(projectID) {
+            if let index = $0.prompts.firstIndex(where: { $0.id == prompt.id }) { $0.prompts[index].isPending = false }
         }
     }
 

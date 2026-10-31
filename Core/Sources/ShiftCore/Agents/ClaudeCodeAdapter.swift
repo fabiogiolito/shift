@@ -28,37 +28,16 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         }
     }
 
-    /// The project chat, whatever the project's permissions say. Each part was tested against the real CLI
-    /// (2.1.316) with a model made to attempt the writes:
-    /// Plan mode denies Write and Edit but runs Bash commands as they are, `rm` and `git commit` included.
-    /// So Bash goes in the OS sandbox, with no way out of it and no network. It already can't write outside
-    /// the folder and the temp directory; `denyWrite` takes the folder too (an absolute path: "." doesn't
-    /// mean the folder there, and a symlink-free one, or it doesn't match).
-    /// Without the project's and the user's settings: a project's `SessionStart` hook wrote to the folder,
-    /// outside the sandbox, and their `excludedCommands` would let commands out of it.
-    /// Only the tools that read are there, and no MCP servers, whose tools no sandbox covers.
-    static func readOnlyArguments(folder: URL) -> [String] {
-        let sandbox: [String: Any] = ["sandbox": [
-            "enabled": true, "failIfUnavailable": true, "allowUnsandboxedCommands": false, "autoAllowBashIfSandboxed": true,
-            "filesystem": ["denyWrite": [realPath(folder)]],
-            "network": ["allowedDomains": [String]()],
-        ] as [String: Any]]
-        return ["--permission-mode", "plan", "--permission-prompts", "none",
-                "--setting-sources", "", "--strict-mcp-config",
-                "--tools", "Read,Bash,Grep,Glob,WebFetch,WebSearch",
-                "--settings", jsonLine(sandbox).trimmingCharacters(in: .newlines)]
-    }
-
     static func arguments(for request: AgentRequest) -> [String] {
         // The prompt goes in on stdin as a user message, and stdin stays open for follow-ups: Claude Code
         // takes a user message that arrives mid-turn into that turn, and one that arrives after
         // the turn's result as a new turn before it exits.
         var arguments = ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
         // The chat's reply arrives as it's written; for tasks the whole messages will do.
-        arguments += request.readOnly ? ["--include-partial-messages"] + readOnlyArguments(folder: request.worktree)
-            : autonomyArguments(request.permissions)
+        if request.chat { arguments.append("--include-partial-messages") }
+        arguments += autonomyArguments(request.permissions)
         if let model = request.model { arguments += ["--model", model] }
-        arguments += ["--append-system-prompt", request.readOnly ? OutcomeProtocol.readOnlyInstructions
+        arguments += ["--append-system-prompt", request.chat ? OutcomeProtocol.chatInstructions
             : OutcomeProtocol.instructions(firstTurn: request.needsDescription)]
         if let sessionID = request.sessionID { arguments += ["--resume", sessionID] }
         return arguments
@@ -77,7 +56,7 @@ public struct ClaudeCodeAdapter: AgentAdapter {
     public func run(_ request: AgentRequest) -> AsyncStream<AgentEvent> {
         runAgentProcess(kind: kind, request: request, arguments: { Self.arguments(for: $0) },
                         stdin: Self.userMessage(request.prompt), parse: Self.parse,
-                        reply: request.permissions == .manual && !request.readOnly ? Self.reply : nil, send: Self.send)
+                        reply: request.permissions == .manual ? Self.reply : nil, send: Self.send)
     }
 
     static func userMessage(_ text: String) -> String {
