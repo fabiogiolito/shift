@@ -654,23 +654,62 @@ final class GitServiceTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
-    func testRejectedPushSaysToPullFirst() async throws {
+    /// Someone else pushes to main first, from a clone of the returned remote.
+    func pushFromElsewhere(change: (URL) throws -> Void) async throws -> URL {
         let bare = try addRemote()
         try await service.push(repo: repo, branch: "main", remote: "origin")
-        // Someone else pushes first.
         let other = root.appendingPathComponent("other")
         try sh("clone", bare.path, other.path, in: root)
         try sh("config", "user.name", "Other", in: other)
         try sh("config", "user.email", "other@example.com", in: other)
-        try commit("theirs", in: other)
+        try change(other)
+        try sh("add", "-A", in: other)
+        try sh("commit", "-m", "theirs", in: other)
         try sh("push", "origin", "main", in: other)
+        return bare
+    }
 
-        try commit("mine")
-        let count = try await service.unpushedCount(repo: repo, branch: "main", remote: "origin")
-        XCTAssertEqual(count, 1)
+    func testPushMergesInWhatTheRemoteHas() async throws {
+        let bare = try await pushFromElsewhere { try write("theirs.txt", "theirs\n", in: $0) }
+        try write("mine.txt", "mine\n")
+        try sh("add", "-A")
+        try sh("commit", "-m", "mine")
+        let mine = try sh("rev-parse", "main")
+
         let message = await pushError()
-        XCTAssertEqual(message, "The remote has changes that aren't in your main. Pull them in your usual Git tool, then push again.")
-        XCTAssertNotEqual(try sh("rev-parse", "main", in: bare), try sh("rev-parse", "main"))
+        XCTAssertNil(message)
+        XCTAssertEqual(try sh("rev-parse", "main", in: bare), try sh("rev-parse", "main"))
+        XCTAssertEqual(try sh("rev-parse", "main^1"), mine, "local commits are kept as they were")
+        // The checkout follows.
+        XCTAssertEqual(read("theirs.txt"), "theirs\n")
+        XCTAssertEqual(read("mine.txt"), "mine\n")
+    }
+
+    func testPushThatConflictsLeavesEverythingAsItWas() async throws {
+        let bare = try await pushFromElsewhere { try write("same.txt", "theirs\n", in: $0) }
+        let theirs = try sh("rev-parse", "main", in: bare)
+        try write("same.txt", "mine\n")
+        try sh("add", "-A")
+        try sh("commit", "-m", "mine")
+        let mine = try sh("rev-parse", "main")
+
+        let message = await pushError()
+        XCTAssertEqual(message, "origin has changes that conflict with your main. Merge them in your usual Git tool, then push again.")
+        XCTAssertEqual(try sh("rev-parse", "main"), mine)
+        XCTAssertEqual(try sh("rev-parse", "main", in: bare), theirs)
+    }
+
+    func testPushWithUncommittedChangesInTheWaySaysSo() async throws {
+        let bare = try await pushFromElsewhere { try write("theirs.txt", "theirs\n", in: $0) }
+        let theirs = try sh("rev-parse", "main", in: bare)
+        try commit("mine")
+        try write("theirs.txt", "uncommitted\n")
+
+        let message = await pushError()
+        XCTAssertNotNil(message)
+        XCTAssertEqual(message?.hasSuffix("then push again."), true, message ?? "")
+        XCTAssertEqual(read("theirs.txt"), "uncommitted\n")
+        XCTAssertEqual(try sh("rev-parse", "main", in: bare), theirs)
     }
 
     func testMissingRemoteFailsWithoutHanging() async throws {
@@ -707,7 +746,7 @@ final class GitServiceTests: XCTestCase {
         XCTAssertEqual(message("ssh: Could not resolve hostname github.com: nodename nor servname provided"),
                        "Couldn't reach github.com. Check your internet connection and try again.")
         XCTAssertEqual(message("To github.com:me/spot.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs"),
-                       "The remote has changes that aren't in your main. Pull them in your usual Git tool, then push again.")
+                       "main changed on origin while pushing. Try again.")
         XCTAssertEqual(message("remote: Internal Server Error\n ! [remote rejected] main -> main (Internal Server Error)\n"
                                + "error: failed to push some refs to 'https://github.com/me/spot.git'"),
                        "github.com refused the push: Internal Server Error")

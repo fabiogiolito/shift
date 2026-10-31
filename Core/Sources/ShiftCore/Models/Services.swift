@@ -70,6 +70,8 @@ public protocol GitServicing: Sendable {
     /// the branch's commits if the remote does not have it yet.
     func unpushedCount(repo: URL, branch: String, remote: String) async throws -> Int
     /// `git push <remote> <branch>`, never forced, publishing the branch (`-u`) if the remote lacks it.
+    /// If the remote has commits the branch lacks, merges them in and pushes again; on a conflict the
+    /// branch is left as it was and it throws.
     /// Never waits for a password and gives up after a timeout. Throws a plain-language message.
     func push(repo: URL, branch: String, remote: String) async throws
 }
