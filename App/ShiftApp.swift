@@ -38,6 +38,15 @@ struct ShiftApp: App {
             }
             #endif
         }
+
+        // One per task: asking again brings its window forward. Not restored: the model only starts with the main window.
+        WindowGroup(id: "server-log", for: TaskItem.ID.self) { $taskID in
+            if let taskID {
+                ServerLogWindow(taskID: taskID).environment(delegate.model)
+            }
+        }
+        .defaultSize(width: 720, height: 480)
+        .restorationBehavior(.disabled)
     }
 }
 

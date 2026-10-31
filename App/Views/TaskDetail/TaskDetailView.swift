@@ -5,6 +5,7 @@ struct TaskDetailView: View {
     @Environment(AppModel.self) private var model
     let taskID: TaskItem.ID
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openWindow) private var openWindow
     @State private var showingDiff = false
     /// True once the diff has finished sliding in.
     @State private var diffSettled = false
@@ -85,7 +86,7 @@ struct TaskDetailView: View {
             .sheet(item: $output) { output in
                 OutputSheet(title: output.rawValue, hasRaw: output == .agentOutput) { raw in
                     switch output {
-                    case .serverLog, .appLog: await model.serverLog(taskID: taskID)
+                    case .appLog: await model.serverLog(taskID: taskID)
                     case .buildLog: model.buildLog(taskID: taskID)
                     case .agentOutput: raw ? await model.rawOutput(taskID: taskID) : await model.readableOutput(taskID: taskID)
                     }
@@ -248,7 +249,7 @@ struct TaskDetailView: View {
                     if let state = self.server, state != .up {
                         Text(state.label).foregroundStyle(state == .starting ? .secondary : state.color)
                         if state != .starting {
-                            Button("Log") { output = .serverLog }.buttonStyle(.glass).controlSize(.small)
+                            Button("Log") { openWindow(id: "server-log", value: taskID) }.buttonStyle(.glass).controlSize(.small)
                             Button("Restart") {
                                 self.server = .starting
                                 Task { await model.restartServer(taskID: taskID) }
@@ -275,9 +276,9 @@ struct TaskDetailView: View {
         }
     }
 
-    /// Opens the server in the browser. With Tailscale on, a dropdown chooses between localhost and the tailnet:
-    /// the choice opens and stays as the main button, for every task.
-    @ViewBuilder private func serverButton(local: URL, tailnet: URL?, port: Int) -> some View {
+    /// Opens the server in the browser. The dropdown restarts it, shows its log and, with Tailscale on, chooses between
+    /// localhost and the tailnet: the choice opens and stays as the main button, for every task.
+    private func serverButton(local: URL, tailnet: URL?, port: Int) -> some View {
         let opened = opensTailnet ? tailnet ?? local : local
         let help = self.server == .up || self.server == nil
             ? (opened == tailnet ? "Open \(opened.absoluteString), reachable from any device on your tailnet" : "Open in browser")
@@ -288,8 +289,8 @@ struct TaskDetailView: View {
             Text(opened == tailnet ? "Tailscale" : "localhost:\(String(port))")
             Image(systemName: "arrow.up.right").imageScale(.small)
         }
-        if let tailnet {
-            SplitButton { apps.openInBrowser(opened) } label: { label } menu: {
+        return SplitButton { apps.openInBrowser(opened) } label: { label } menu: {
+            if let tailnet {
                 // A toggle for its checkmark. It fires on the chosen one too, which opens it again.
                 Toggle("Localhost", isOn: Binding(get: { !opensTailnet }, set: { _ in
                     opensTailnet = false
@@ -299,13 +300,15 @@ struct TaskDetailView: View {
                     opensTailnet = true
                     apps.openInBrowser(tailnet)
                 }))
+                Divider()
             }
-            .help(help)
-        } else {
-            Button { apps.openInBrowser(local) } label: { label }
-                .buttonStyle(.glass)
-                .help(help)
+            Button("Restart Server") {
+                self.server = .starting
+                Task { await model.restartServer(taskID: taskID) }
+            }
+            Button("Server Log") { openWindow(id: "server-log", value: taskID) }
         }
+        .help(help)
     }
 
     /// Opens the task's copy of the app, or stops it. Says so when the app ends without being stopped: it may have
@@ -558,12 +561,6 @@ struct TaskDetailView: View {
                     Button("App Log") { output = .appLog }
                 } else if project.isApp {
                     Button("Build Log") { output = .buildLog }
-                } else if task.port != nil {
-                    Button("Restart Server") {
-                        server = .starting
-                        Task { await model.restartServer(taskID: taskID) }
-                    }
-                    Button("Server Log") { output = .serverLog }
                 }
                 Button("Agent Output") { output = .agentOutput }
                 // The current base is always offered, so the picker is valid before branches load.
@@ -656,7 +653,7 @@ private enum ServerState {
 
 /// Debugging text, from the ••• menu.
 private enum Output: String, Identifiable {
-    case serverLog = "Server Log", appLog = "App Log", buildLog = "Build Log", agentOutput = "Agent Output"
+    case appLog = "App Log", buildLog = "Build Log", agentOutput = "Agent Output"
     var id: Self { self }
 }
 
