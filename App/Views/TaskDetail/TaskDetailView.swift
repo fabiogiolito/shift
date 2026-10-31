@@ -34,12 +34,10 @@ struct TaskDetailView: View {
     @State private var windowHeight: CGFloat = 0
     /// Height of the changed files' rows, for capping the list.
     @State private var changesHeight: CGFloat = 0
-    /// Prompts or Agent, remembered across tasks and launches.
-    @AppStorage("taskHistoryTab") private var historyTab = HistoryTab.prompts
     @State private var reader: TranscriptReader?
     @State private var turns: [TranscriptTurn] = []
-    /// The turn the Agent tab shows, by position. nil: the latest one, including any that come next.
-    @State private var shownTurn: Int?
+    /// The prompts showing what the agent did about them.
+    @State private var openPrompts: Set<Prompt.ID> = []
 
     private let apps = ExternalApps()
 
@@ -47,6 +45,8 @@ struct TaskDetailView: View {
     static let margin: CGFloat = 20
     /// Where the system places the first toolbar item of the detail column, measured from its leading edge.
     static let toolbarInset: CGFloat = 8
+    /// How far a disclosure group's chevron pushes its label in, to line up prompts that don't have one yet.
+    private static let chevronWidth: CGFloat = 12
 
     var body: some View {
         if let task = model.task(taskID), let project = model.project(task.projectID) {
@@ -59,7 +59,7 @@ struct TaskDetailView: View {
                         VStack(alignment: .leading, spacing: 28) {
                             header(task, project)
                             if task.status == .completed { changesSection }
-                            if !task.prompts.isEmpty || !turns.isEmpty { history(task) }
+                            if !task.prompts.isEmpty { promptList(task) }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Self.margin)
@@ -445,47 +445,12 @@ struct TaskDetailView: View {
         }
     }
 
-    private func history(_ task: TaskItem) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HistoryTabPicker(selection: $historyTab)
-            switch historyTab {
-            case .prompts: promptList(task)
-            case .agent: agentTurn(task)
-            }
-        }
-    }
-
     private func promptList(_ task: TaskItem) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(task.prompts.reversed()) { prompt in
-                    VStack(alignment: .leading, spacing: 6) {
-                        if !prompt.text.isEmpty {
-                            if let turn = turns.firstIndex(where: { $0.promptIDs.contains(prompt.id) }) {
-                                // Opens what the agent did about it. A button, so it can't also be selected: its turn has it.
-                                Button {
-                                    shownTurn = turn == turns.count - 1 ? nil : turn
-                                    historyTab = .agent
-                                } label: {
-                                    promptText(prompt).frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
-                                }
-                                .buttonStyle(.plain)
-                                .help("Show what the agent did")
-                            } else {
-                                promptText(prompt).textSelection(.enabled)
-                            }
-                        }
-                        if !prompt.attachments.isEmpty {
-                            ScrollView(.horizontal) {
-                                HStack(spacing: 6) {
-                                    ForEach(prompt.attachments, id: \.self) { AttachmentChip(url: URL(fileURLWithPath: $0)) }
-                                }
-                            }
-                            .scrollIndicators(.never)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
+                    promptRow(prompt)
+                        .padding(.vertical, 8)
                     if prompt != task.prompts.first { Divider() }
                 }
             }
@@ -493,28 +458,40 @@ struct TaskDetailView: View {
         }
     }
 
-    /// One turn at a time, the latest unless the user went back.
-    @ViewBuilder private func agentTurn(_ task: TaskItem) -> some View {
-        if turns.isEmpty {
-            Text(task.status == .working ? "Waiting for the agent…" : "The agent hasn't said anything yet.").foregroundStyle(.secondary)
+    /// A prompt, closed on what the agent did about it once there's something to show.
+    @ViewBuilder private func promptRow(_ prompt: Prompt) -> some View {
+        let replies = turns.filter { $0.promptIDs.contains(prompt.id) && (!$0.sections.isEmpty || $0.note != nil) }
+        if replies.isEmpty {
+            promptContent(prompt).padding(.leading, Self.chevronWidth)
         } else {
-            let index = min(shownTurn ?? turns.count - 1, turns.count - 1)
-            let turn = turns[index]
-            VStack(alignment: .leading, spacing: 16) {
-                if turns.count > 1 {
-                    HStack(spacing: 4) {
-                        Button { shownTurn = index - 1 } label: { Label("Previous Turn", systemImage: "chevron.left") }
-                            .disabled(index == 0)
-                        Text("\(index + 1) of \(turns.count)").monospacedDigit().foregroundStyle(.secondary)
-                        Button { shownTurn = index + 1 == turns.count - 1 ? nil : index + 1 } label: { Label("Next Turn", systemImage: "chevron.right") }
-                            .disabled(index == turns.count - 1)
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.accessoryBar)
+            DisclosureGroup(isExpanded: Binding(
+                get: { openPrompts.contains(prompt.id) },
+                set: { if $0 { openPrompts.insert(prompt.id) } else { openPrompts.remove(prompt.id) } }
+            )) {
+                VStack(alignment: .leading, spacing: 12) {
+                    // The prompt is already right above.
+                    ForEach(replies) { TurnView(turn: $0, prompts: [], reader: reader).equatable() }
                 }
-                TurnView(turn: turn, prompts: task.prompts.filter { turn.promptIDs.contains($0.id) }, reader: reader).equatable()
+                .padding(.top, 8)
+            } label: {
+                promptContent(prompt)
             }
         }
+    }
+
+    private func promptContent(_ prompt: Prompt) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !prompt.text.isEmpty { promptText(prompt).textSelection(.enabled) }
+            if !prompt.attachments.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(prompt.attachments, id: \.self) { AttachmentChip(url: URL(fileURLWithPath: $0)) }
+                    }
+                }
+                .scrollIndicators(.never)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// A pending prompt (not yet handed to the agent) pulses between secondary and tertiary.
@@ -624,45 +601,6 @@ struct TaskDetailView: View {
         case .completed: "Ask for changes…"
         case .conflict, .merged: nil
         }
-    }
-}
-
-private enum HistoryTab: String, CaseIterable, Identifiable {
-    case prompts = "Prompts", agent = "Agent"
-    var id: Self { self }
-}
-
-/// Drawn by hand because the system's segmented picker can't raise its selected segment or make it white.
-/// White in light mode; controlColor is a lighter gray in dark mode.
-private struct HistoryTabPicker: View {
-    @Binding var selection: HistoryTab
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var namespace
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(HistoryTab.allCases) { tab in
-                Button {
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { selection = tab }
-                } label: {
-                    Text(tab.rawValue)
-                        .frame(width: 72, height: 20)
-                        .contentShape(.rect)
-                        .background {
-                            if selection == tab {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color(nsColor: .controlColor))
-                                    .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
-                                    .matchedGeometryEffect(id: "selection", in: namespace)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == tab ? .isSelected : [])
-            }
-        }
-        .padding(2)
-        .background(.quaternary, in: .rect(cornerRadius: 8))
     }
 }
 
