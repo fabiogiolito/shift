@@ -117,11 +117,28 @@ public enum AgentPermissions: String, Codable, CaseIterable, Identifiable, Senda
     }
 }
 
+/// What a project is: picks the commands suggested for it and how its tasks are tested.
+public enum ProjectType: String, Codable, CaseIterable, Identifiable, Sendable {
+    case staticWebsite, dynamicWebsite, nativeApp, electronApp, other
+
+    public var id: Self { self }
+    public var displayName: String {
+        switch self {
+        case .staticWebsite: "Static website"
+        case .dynamicWebsite: "Dynamic website"
+        case .nativeApp: "Native app"
+        case .electronApp: "Electron app"
+        case .other: "Other"
+        }
+    }
+}
+
 public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var name: String
     public var repoPath: String
     public var baseBranch: String
+    public var type: ProjectType
     public var defaultAgent: AgentKind
     /// Shell command that starts the dev server, e.g. `pnpm dev`. Empty = no server.
     /// Run with `PORT=<port>` in the environment; `$PORT` in the command is expanded by the shell.
@@ -140,7 +157,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// Push each task's branch to the remote when the task completes.
     public var pushTaskBranches: Bool
 
-    public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String,
+    public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
                 pushTaskBranches: Bool = false) {
@@ -148,6 +165,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.name = name
         self.repoPath = repoPath
         self.baseBranch = baseBranch
+        self.type = type
         self.defaultAgent = defaultAgent
         self.serverCommand = serverCommand
         self.setupCommand = setupCommand
@@ -171,11 +189,16 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
         models = try values.decodeIfPresent([AgentKind: String].self, forKey: .models) ?? [:]
         pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
+        type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
+            ?? (!buildCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
+                : setupCommand.isEmpty ? .staticWebsite : .other)
     }
 
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }
     /// An app is tested by building it, not on a dev server: its tasks get no server and no port.
     public var isApp: Bool { !buildCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    /// The app's `buildCommand` keeps running while the app is open, so it is started and stopped, not awaited.
+    public var runsApp: Bool { type == .electronApp }
 
     /// A build command guessed from the repo: its build script, else a Debug `xcodebuild` of its Xcode project
     /// (generated first when it comes from XcodeGen) that prints the .app it built. Empty when there is nothing to guess.

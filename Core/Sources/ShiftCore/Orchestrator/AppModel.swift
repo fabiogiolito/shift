@@ -281,9 +281,9 @@ public final class AppModel {
         }
         let suggested = await ProjectSetup.suggest(repo: url, git: services.git)
         if let existing = projects.first(where: { $0.repoPath == path }) { return existing }
-        let project = Project(name: url.lastPathComponent, repoPath: path, baseBranch: base,
+        let project = Project(name: url.lastPathComponent, repoPath: path, baseBranch: base, type: suggested.type,
                               defaultAgent: AgentKind.allCases.first { installedAgents[$0] != nil } ?? .claudeCode,
-                              serverCommand: suggested.server, setupCommand: suggested.setup)
+                              serverCommand: suggested.server, setupCommand: suggested.setup, buildCommand: suggested.build)
         projects.append(project)
         changed()
         Task { await startBaseServer(project.id) }
@@ -297,8 +297,9 @@ public final class AppModel {
         if (old.serverCommand, old.buildCommand) != (project.serverCommand, project.buildCommand) {
             Task { await startBaseServer(project.id, restart: true) }
         }
-        // Now an app: its tasks are tested by building, so their dev servers and ports go.
-        if project.isApp {
+        // Now an app: its tasks are tested by building, so their dev servers and ports go. A running app goes
+        // when the project stops being one, but not on any other change to its settings.
+        if project.isApp ? !old.isApp : old.runsApp && !project.runsApp {
             for task in tasks(in: project.id) where task.serverPID != nil || task.port != nil {
                 update(task.id) { $0.serverPID = nil; $0.port = nil }
                 Task {
@@ -308,6 +309,18 @@ public final class AppModel {
             }
         }
         changed()
+    }
+
+    /// The project as `type`, with the commands guessed from the repo. Other keeps the commands it has.
+    public func project(_ project: Project, as type: ProjectType) async -> Project {
+        var project = project
+        project.type = type
+        guard let services, type != .other else { return project }
+        let suggested = await ProjectSetup.suggest(repo: project.repoURL, git: services.git, as: type)
+        project.setupCommand = suggested.setup
+        project.serverCommand = suggested.server
+        project.buildCommand = suggested.build
+        return project
     }
 
     public func moveProjects(from source: IndexSet, to destination: Int) {
@@ -873,6 +886,36 @@ public final class AppModel {
             builds[taskID] = .failed("Build could not start: \(Self.describe(error))")
             return nil
         }
+    }
+
+    /// Electron projects: opens the task's app. It gets a home folder of its own, so copies from different tasks
+    /// run side by side: no shared data and no single-instance lock. It starts with empty data, kept between runs.
+    /// Runs as the task's server, for its log and to be stopped with the task, but it has no port.
+    // ponytail: macOS only hook (CoreFoundation's home override), fine while Shift is a Mac app.
+    public func runApp(taskID: TaskItem.ID) async {
+        guard let services, let task = task(taskID), task.status != .merged,
+              let project = project(task.projectID), project.runsApp else { return }
+        guard FileManager.default.fileExists(atPath: task.worktreePath) else {
+            builds[taskID] = .failed("The task's folder is recreated the next time the agent runs.")
+            return
+        }
+        builds[taskID] = nil
+        let command = "export CFFIXED_USER_HOME=\"\(ShiftPaths.build(taskID: taskID).path)\"; \(project.buildCommand)"
+        do {
+            let pid = try await services.servers.start(taskID: taskID, command: command, directory: task.worktreeURL, port: 0)
+            guard self.task(taskID)?.status != .merged else {
+                await services.servers.stop(taskID: taskID)
+                return
+            }
+            update(taskID) { $0.serverPID = pid }
+        } catch {
+            builds[taskID] = .failed("The app could not start: \(Self.firstLine(Self.describe(error)))")
+        }
+    }
+
+    public func stopApp(taskID: TaskItem.ID) async {
+        await services?.servers.stop(taskID: taskID)
+        update(taskID) { $0.serverPID = nil }
     }
 
     /// The output of the task's last build.

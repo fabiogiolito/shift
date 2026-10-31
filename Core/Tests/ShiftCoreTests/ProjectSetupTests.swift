@@ -61,4 +61,26 @@ final class ProjectSetupTests: XCTestCase {
         XCTAssertEqual(ProjectSetup.failure(CommandResult(exitCode: 1, output: "Packages: +372\n+++++++\n ERR_PNPM_NO_OFFLINE_TARBALL  missing\n")),
                        "Setup failed (exit code 1).\nPackages: +372\nERR_PNPM_NO_OFFLINE_TARBALL  missing")
     }
+
+    func testElectronProjectRunsAnAppWithNoServer() {
+        func package(_ scripts: String) -> Data { Data(#"{"devDependencies": {"electron": "44.0.0"}, "scripts": {\#(scripts)}}"#.utf8) }
+        let vite = ProjectSetup.suggest(rootFiles: ["pnpm-lock.yaml", ".env"], packageJSON: package(#""dev": "electron-vite dev", "start": "electron-vite preview""#))
+        XCTAssertEqual(vite.type, .electronApp)
+        XCTAssertEqual(vite.setup, #"pnpm install && node node_modules/electron/install.js && cp "$SHIFT_REPO/.env" ."#)
+        XCTAssertEqual(vite.server, "")
+        XCTAssertEqual(vite.build, "pnpm run dev")
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: [], packageJSON: package(#""start": "electron-forge start""#)).build, "npm run start")
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: [], packageJSON: package("")).build, "node_modules/.bin/electron .")
+    }
+
+    func testTypeIsDetectedFromTheRepo() {
+        let dev = Data(#"{"scripts": {"dev": "next dev"}}"#.utf8)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["package.json"], packageJSON: dev).type, .dynamicWebsite)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["App.xcodeproj"]).type, .nativeApp)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["project.yml"]).type, .nativeApp)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["index.html"]).type, .staticWebsite)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["index.html", "pnpm-lock.yaml"]).type, .other)
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: ["pnpm-lock.yaml", ".env"], as: .staticWebsite).setup, "")
+        XCTAssertEqual(ProjectSetup.suggest(rootFiles: [], packageJSON: dev, as: .electronApp).build, "npm run dev")
+    }
 }

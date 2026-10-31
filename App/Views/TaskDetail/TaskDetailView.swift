@@ -25,6 +25,10 @@ struct TaskDetailView: View {
     @State private var changes: Result<DiffSummary, Error>?
     /// nil until first checked.
     @State private var server: ServerState?
+    /// Whether the server button opens the tailnet link instead of localhost, when Tailscale is on.
+    @AppStorage("opensTailnet") private var opensTailnet = false
+    /// The "Copied" popover on the branch button.
+    @State private var branchCopied = false
     @State private var output: Output?
     /// For capping the response panel's height.
     @State private var windowHeight: CGFloat = 0
@@ -74,7 +78,7 @@ struct TaskDetailView: View {
             .sheet(item: $output) { output in
                 OutputSheet(title: output.rawValue, hasRaw: output == .agentOutput) { raw in
                     switch output {
-                    case .serverLog: await model.serverLog(taskID: taskID)
+                    case .serverLog, .appLog: await model.serverLog(taskID: taskID)
                     case .buildLog: model.buildLog(taskID: taskID)
                     case .agentOutput: raw ? await model.rawOutput(taskID: taskID) : await model.readableOutput(taskID: taskID)
                     }
@@ -129,23 +133,33 @@ struct TaskDetailView: View {
         ToolbarItem { Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset) }
             .sharedBackgroundVisibility(.hidden)
         ToolbarSpacer(.flexible)
-        ToolbarItem { status(task).font(.subheadline).foregroundStyle(.secondary).padding(.trailing, 12) }
+        ToolbarItem { branchButton(task) }
             .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .primaryAction) { moreMenu(task, project) }
     }
 
-    private func status(_ task: TaskItem) -> some View {
-        HStack(spacing: 6) {
-            // Working already shows a spinner under the headline and in the list.
-            if task.status != .working { StatusIcon(status: task.status).controlSize(.mini) }
-            if task.status == .working, let since = task.workingSince {
-                TimelineView(.periodic(from: since, by: 60)) { context in
-                    Text("\(task.isResolvingConflict ? "Resolving conflict" : "Working") · \(max(0, Int(context.date.timeIntervalSince(since) / 60)))m")
-                }
-            } else {
-                Text(task.status.label)
-            }
-            TaskNumber(task: task)
+    /// The task's branch: click to copy its name.
+    private func branchButton(_ task: TaskItem) -> some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(task.branch, forType: .string)
+            branchCopied = true
+        } label: {
+            Label(task.branch, systemImage: "arrow.triangle.branch")
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .buttonStyle(.accessoryBar)
+        .help("This task's branch. Click to copy it.")
+        .popover(isPresented: $branchCopied, arrowEdge: .bottom) {
+            Text("Copied").padding(.horizontal, 10).padding(.vertical, 6)
+        }
+        .task(id: branchCopied) {
+            guard branchCopied else { return }
+            try? await Task.sleep(for: .seconds(1.2))
+            if !Task.isCancelled { branchCopied = false }
         }
     }
 
@@ -187,7 +201,7 @@ struct TaskDetailView: View {
         }
     }
 
-    /// The status's main action first, then Tailscale, the server button (the Build button for an app) and the branch. Hidden when there is neither.
+    /// The status's main action first, then the server button (the Build button for an app) and the branch. Hidden when there is neither.
     /// Every task with a port has a preview server, whether or not the project has a server command.
     @ViewBuilder private func actions(_ task: TaskItem, _ project: Project) -> some View {
         let hasPrimary = task.status == .completed || task.status == .conflict
@@ -195,30 +209,13 @@ struct TaskDetailView: View {
         if task.serverURL != nil || hasPrimary || canBuild {
             HStack {
                 primaryAction(task, project)
-                if canBuild {
+                if canBuild && project.runsApp {
+                    runButton
+                } else if canBuild {
                     buildButton
                 } else if let server = task.serverURL, let port = task.port {
-                    if let host = model.tailnetHost, let tailnet = URL(string: "https://\(host):\(port)") {
-                        SplitButton { apps.openInBrowser(tailnet) } label: {
-                            Label("Tailscale", systemImage: "network")
-                        } menu: {
-                            Button("Copy Link") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(tailnet.absoluteString, forType: .string)
-                            }
-                        }
-                        .help("Open \(tailnet.absoluteString), reachable from any device on your tailnet")
-                    }
-                    Button { apps.openInBrowser(server) } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "circle.fill").imageScale(.small)
-                                .foregroundStyle(self.server?.color ?? .secondary)
-                            Text("localhost:\(String(port))")
-                            Image(systemName: "arrow.up.right").imageScale(.small)
-                        }
-                    }
-                    .buttonStyle(.glass)
-                    .help(self.server == .up ? "Open in browser" : self.server?.label ?? "")
+                    let tailnet = model.tailnetHost.flatMap { URL(string: "https://\($0):\(port)") }
+                    Group { serverButton(local: server, tailnet: tailnet, port: port) }
                     .task(id: task.port) {
                         while !Task.isCancelled {
                             let alive = await model.isServerRunning(taskID: taskID)
@@ -258,6 +255,75 @@ struct TaskDetailView: View {
             }
             .controlSize(.large)
             .buttonBorderShape(.roundedRectangle)
+        }
+    }
+
+    /// Opens the server in the browser. With Tailscale on, a dropdown chooses between localhost and the tailnet:
+    /// the choice opens and stays as the main button, for every task.
+    @ViewBuilder private func serverButton(local: URL, tailnet: URL?, port: Int) -> some View {
+        let opened = opensTailnet ? tailnet ?? local : local
+        let help = self.server == .up || self.server == nil
+            ? (opened == tailnet ? "Open \(opened.absoluteString), reachable from any device on your tailnet" : "Open in browser")
+            : self.server?.label ?? ""
+        let label = HStack(spacing: 6) {
+            Image(systemName: "circle.fill").imageScale(.small)
+                .foregroundStyle(self.server?.color ?? .secondary)
+            Text(opened == tailnet ? "Tailscale" : "localhost:\(String(port))")
+            Image(systemName: "arrow.up.right").imageScale(.small)
+        }
+        if let tailnet {
+            SplitButton { apps.openInBrowser(opened) } label: { label } menu: {
+                // A toggle for its checkmark. It fires on the chosen one too, which opens it again.
+                Toggle("Localhost", isOn: Binding(get: { !opensTailnet }, set: { _ in
+                    opensTailnet = false
+                    apps.openInBrowser(local)
+                }))
+                Toggle("Tailscale", isOn: Binding(get: { opensTailnet }, set: { _ in
+                    opensTailnet = true
+                    apps.openInBrowser(tailnet)
+                }))
+            }
+            .help(help)
+        } else {
+            Button { apps.openInBrowser(local) } label: { label }
+                .buttonStyle(.glass)
+                .help(help)
+        }
+    }
+
+    /// Opens the task's copy of the app, or stops it. Says so when the app ends without being stopped: it may have
+    /// crashed on launch.
+    @ViewBuilder private var runButton: some View {
+        let running = server == .up
+        Button {
+            Task {
+                if running {
+                    await model.stopApp(taskID: taskID)
+                    server = nil
+                } else {
+                    await model.runApp(taskID: taskID)
+                    if await model.isServerRunning(taskID: taskID) { server = .up }
+                }
+            }
+        } label: {
+            Label(running ? "Stop" : "Run", systemImage: running ? "stop.fill" : "play.fill")
+        }
+        .buttonStyle(.glass)
+        .help(running ? "Close this task's version of the app" : "Open this task's version of the app")
+        .task(id: taskID) {
+            server = await model.isServerRunning(taskID: taskID) ? .up : nil
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                let alive = await model.isServerRunning(taskID: taskID)
+                if alive != (server == .up), server != nil || alive { server = alive ? .up : .stopped }
+            }
+        }
+        if server == .stopped {
+            Text("Stopped").foregroundStyle(.secondary)
+            Button("Log") { output = .appLog }.buttonStyle(.glass).controlSize(.small)
+        }
+        if case .failed(let reason) = model.builds[taskID] {
+            Text(reason).foregroundStyle(.secondary).lineLimit(1)
         }
     }
 
@@ -428,7 +494,9 @@ struct TaskDetailView: View {
                 }
                 .disabled(!folderExists)
                 .help(folderExists ? "" : "The task's folder is recreated the next time the agent runs.")
-                if project.isApp {
+                if project.runsApp {
+                    Button("App Log") { output = .appLog }
+                } else if project.isApp {
                     Button("Build Log") { output = .buildLog }
                 } else if task.port != nil {
                     Button("Restart Server") {
@@ -528,7 +596,7 @@ private enum ServerState {
 
 /// Debugging text, from the ••• menu.
 private enum Output: String, Identifiable {
-    case serverLog = "Server Log", buildLog = "Build Log", agentOutput = "Agent Output"
+    case serverLog = "Server Log", appLog = "App Log", buildLog = "Build Log", agentOutput = "Agent Output"
     var id: Self { self }
 }
 

@@ -23,6 +23,17 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(project.defaultAgent, .codex)
     }
 
+    func testTypeOfAProjectSavedBeforeThereWereTypes() throws {
+        func decoded(_ commands: String) throws -> ProjectType {
+            let json = #"{"id": "00000000-0000-0000-0000-000000000000", "name": "A", "repoPath": "/a", "baseBranch": "main", "defaultAgent": "codex", \#(commands)}"#
+            return try JSONDecoder().decode(Project.self, from: Data(json.utf8)).type
+        }
+        XCTAssertEqual(try decoded(#""serverCommand": """#), .staticWebsite)
+        XCTAssertEqual(try decoded(#""serverCommand": "pnpm dev""#), .dynamicWebsite)
+        XCTAssertEqual(try decoded(#""serverCommand": "", "buildCommand": "make""#), .nativeApp)
+        XCTAssertEqual(try decoded(#""serverCommand": "", "setupCommand": "pnpm install""#), .other)
+    }
+
     func testDefaultBuildCommandComesFromTheRepo() throws {
         let repo = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
