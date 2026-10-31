@@ -479,7 +479,7 @@ final class AgentAdapterTests: XCTestCase {
             XCTAssertTrue(arguments.contains("features.hooks=false"))
             XCTAssertFalse(arguments.contains(where: { $0.contains("danger-full-access") || $0.contains("workspace-write") || $0.contains("writable_roots") }))
         }
-        XCTAssertTrue(CodexAdapter.readOnlyArguments(servers: ["node_repl"]).contains(#"mcp_servers."node_repl".enabled=false"#))
+        XCTAssertTrue(CodexAdapter.readOnlyArguments(servers: ["node_repl"]).contains("mcp_servers.node_repl.enabled=false"))
     }
 
     func testChatInstructionsAreNotTheTaskOnes() {

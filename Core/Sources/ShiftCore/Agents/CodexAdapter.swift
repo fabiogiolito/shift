@@ -39,17 +39,17 @@ public struct CodexAdapter: AgentAdapter {
     /// made to attempt the writes: the read-only sandbox stops them, in commands and in subagents, with no way to
     /// ask for more. What the sandbox doesn't cover goes: hooks, image generation, and the MCP servers and plugin
     /// tools, which run outside of it. `servers` are the ones configured: each is turned off by name, as
-    /// `mcp_servers={}` leaves them on, and `enabled=false` alone is refused for those a plugin provides.
-    /// `code_mode_host` is what keeps a `node_repl` server running even when it's turned off.
-    /// ponytail: features are by name, and a Codex that adds a new way out isn't covered until it's listed here.
+    /// `mcp_servers={}` leaves them on, and `enabled=false` alone is refused for those a plugin provides. Codex
+    /// splits `-c` keys on dots and keeps quotes, so a quoted name would turn nothing off.
+    /// ponytail: features are by name, and a Codex that adds a new way out isn't covered until it's listed here;
+    /// a server with a dot in its name can't be turned off this way.
     static func readOnlyArguments(servers: [String]) -> [String] {
         var arguments = ["-c", #"approval_policy="never""#, "-c", #"sandbox_mode="read-only""#]
-        for feature in ["apps", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "plugins", "hooks", "image_generation", "code_mode_host"] {
+        for feature in ["apps", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "plugins", "hooks", "image_generation"] {
             arguments += ["-c", "features.\(feature)=false"]
         }
         for server in servers {
-            guard let name = try? tomlEncoder.encode(server) else { continue }
-            let key = "mcp_servers." + String(decoding: name, as: UTF8.self)
+            let key = "mcp_servers." + server
             arguments += ["-c", key + #".command="/usr/bin/false""#, "-c", key + ".enabled=false"]
         }
         return arguments
