@@ -201,7 +201,7 @@ struct TaskDetailView: View {
         }
     }
 
-    /// The status's main action first, then the server button (the Build button for an app). Hidden when there is neither.
+    /// The status's main action first, then the server button (the Build button for an app) and the branch. Hidden when there is neither.
     /// Every task with a port has a preview server, whether or not the project has a server command.
     @ViewBuilder private func actions(_ task: TaskItem, _ project: Project) -> some View {
         let hasPrimary = task.status == .completed || task.status == .conflict
@@ -239,6 +239,17 @@ struct TaskDetailView: View {
                             .buttonStyle(.glass).controlSize(.small)
                         }
                     }
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(task.branch, forType: .string)
+                    } label: {
+                        Label(task.branch, systemImage: "arrow.triangle.branch")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("The branch this server runs. Click to copy.")
                 }
                 Spacer()
             }
