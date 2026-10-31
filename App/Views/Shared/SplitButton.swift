@@ -5,6 +5,8 @@ import SwiftUI
 /// As tall as a large glass button.
 struct SplitButton<Label: View, MenuContent: View>: View {
     var prominent = false
+    /// The background when prominent.
+    var tint: Color = .accentColor
     let action: () -> Void
     @ViewBuilder let label: Label
     @ViewBuilder let menu: MenuContent
@@ -29,6 +31,6 @@ struct SplitButton<Label: View, MenuContent: View>: View {
         }
         .foregroundStyle(prominent ? .white : .primary)
         .frame(height: 28)
-        .glassEffect(prominent ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .rect(cornerRadius: 8))
+        .glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive(), in: .rect(cornerRadius: 8))
     }
 }

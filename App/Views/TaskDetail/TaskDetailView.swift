@@ -12,7 +12,7 @@ struct TaskDetailView: View {
     /// The file the diff opens at, when opened from a row of the changed files.
     @State private var diffPath: String?
     @State private var confirmingDelete = false
-    /// The base picked in the More menu, waiting for confirmation.
+    /// The base picked in the merge dropdown, waiting for confirmation.
     @State private var newBase: String?
     @State private var branches: [String] = []
     @State private var creatingBranch = false
@@ -391,13 +391,37 @@ struct TaskDetailView: View {
                         isMerging = false
                     }
                 }
+                Divider()
+                branchItems(task, project)
             }
             .disabled(isMerging)
         } else if task.status == .conflict {
-            Button { model.resolveConflict(taskID: taskID) } label: {
+            SplitButton(prominent: true, tint: TaskStatus.conflict.color) { model.resolveConflict(taskID: taskID) } label: {
                 Text("Resolve")
+            } menu: {
+                branchItems(task, project)
             }
-            .buttonStyle(.glassProminent).tint(TaskStatus.conflict.color)
+        }
+    }
+
+    /// What can be done with the task's branch, in the dropdown of its main action.
+    @ViewBuilder private func branchItems(_ task: TaskItem, _ project: Project) -> some View {
+        // The current base is always offered, so the picker is valid before branches load.
+        let base = task.base(in: project)
+        Menu("Base Branch") {
+            Picker("Base Branch", selection: Binding(get: { base }, set: { if $0 != base { newBase = $0 } })) {
+                ForEach(branches.contains(base) ? branches : [base] + branches, id: \.self) { Text($0) }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Button("New Branch…") { creatingBranch = true }
+        }
+        .help("The branch this task merges into")
+        Button("Re-sync Base Branch") { Task { syncConflicts = await model.syncBase(taskID: taskID) } }
+            .help("Merge the latest \(base) into this task")
+        if let remote = model.pushStates[project.id]?.remote {
+            Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
+                .help("Push \(task.branch) to \(remote)")
         }
     }
 
@@ -569,25 +593,6 @@ struct TaskDetailView: View {
                     Button("Build Log") { output = .buildLog }
                 }
                 Button("Agent Output") { output = .agentOutput }
-                // The current base is always offered, so the picker is valid before branches load.
-                let base = task.base(in: project)
-                Menu("Base Branch") {
-                    Picker("Base Branch", selection: Binding(get: { base }, set: { if $0 != base { newBase = $0 } })) {
-                        ForEach(branches.contains(base) ? branches : [base] + branches, id: \.self) { Text($0) }
-                    }
-                    .pickerStyle(.inline)
-                    Divider()
-                    Button("New Branch…") { creatingBranch = true }
-                }
-                .disabled(task.status == .working)
-                .help(task.status == .working ? "Stop the task to change its base." : "The branch this task merges into")
-                Button("Re-sync Base Branch") { Task { syncConflicts = await model.syncBase(taskID: taskID) } }
-                    .disabled(task.status == .working)
-                    .help(task.status == .working ? "Stop the task to re-sync it." : "Merge the latest \(base) into this task")
-                if let remote = model.pushStates[project.id]?.remote {
-                    Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
-                        .help("Push \(task.branch) to \(remote)")
-                }
                 if task.status == .working || task.approvalRequest != nil {
                     Button("Stop Task") { model.stop(taskID: taskID) }
                 }
