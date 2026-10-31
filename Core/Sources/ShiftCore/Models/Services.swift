@@ -150,10 +150,13 @@ public struct AgentRequest: Sendable {
     public var needsDescription: Bool
     /// Manual permissions: where the answers to `.approvalRequested` come from.
     public var approvals: ApprovalChannel
+    /// The agent must not be able to change anything, whatever `permissions` says, and it gets the project
+    /// chat's instructions instead of the task ones.
+    public var readOnly: Bool
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
-                approvals: ApprovalChannel = ApprovalChannel()) {
+                approvals: ApprovalChannel = ApprovalChannel(), readOnly: Bool = false) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -162,6 +165,7 @@ public struct AgentRequest: Sendable {
         self.model = model
         self.needsDescription = needsDescription ?? (sessionID == nil)
         self.approvals = approvals
+        self.readOnly = readOnly
     }
 }
 
@@ -237,20 +241,42 @@ public struct AppState: Codable, Equatable, Sendable {
     public var projects: [Project]
     public var tasks: [TaskItem]
     public var nextTaskID: Int
+    /// Absent in state saved before project chats existed.
+    public var chats: [ProjectChat]
 
-    public init(projects: [Project] = [], tasks: [TaskItem] = [], nextTaskID: Int = 3001) {
+    public init(projects: [Project] = [], tasks: [TaskItem] = [], nextTaskID: Int = 3001, chats: [ProjectChat] = []) {
         self.projects = projects
         self.tasks = tasks
         self.nextTaskID = nextTaskID
+        self.chats = chats
     }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        projects = try values.decode([Project].self, forKey: .projects)
+        tasks = try values.decode([TaskItem].self, forKey: .tasks)
+        nextTaskID = try values.decode(Int.self, forKey: .nextTaskID)
+        chats = try values.decodeIfPresent([ProjectChat].self, forKey: .chats) ?? []
+    }
+}
+
+/// One agent log: a task's, or a project chat's.
+public enum AgentLog: Hashable, Sendable {
+    case task(Int)
+    case chat(UUID)
 }
 
 public protocol StateStoring: Sendable {
     func load() async -> AppState
     func save(_ state: AppState) async
     func appendLog(taskID: Int, text: String) async
+    /// The end of the log, starting at a whole line.
     func readLog(taskID: Int) async -> String
     func deleteLog(taskID: Int) async
+    func appendChatLog(chatID: UUID, text: String) async
+    func deleteChatLog(chatID: UUID) async
+    /// Up to `length` bytes of the log from `offset`. Empty past its end or if there is no log.
+    func logBytes(_ log: AgentLog, from offset: UInt64, length: Int) async -> Data
 }
 
 public struct Services: Sendable {

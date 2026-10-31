@@ -345,6 +345,26 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var serverURL: URL? { port.flatMap { URL(string: "http://localhost:\($0)") } }
 }
 
+/// A project's one conversation with its agent, for asking questions and planning against its code.
+/// Not a task: no worktree, branch, server, merge or status. It runs read-only in the project's own folder.
+public struct ProjectChat: Codable, Identifiable, Hashable, Sendable {
+    /// Names its log. New Chat makes a new one.
+    public var id: UUID
+    public var projectID: Project.ID
+    /// The agent `sessionID` belongs to.
+    public var agent: AgentKind?
+    public var sessionID: String?
+    public var prompts: [Prompt]
+
+    public init(id: UUID = UUID(), projectID: Project.ID, agent: AgentKind? = nil, sessionID: String? = nil, prompts: [Prompt] = []) {
+        self.id = id
+        self.projectID = projectID
+        self.agent = agent
+        self.sessionID = sessionID
+        self.prompts = prompts
+    }
+}
+
 // MARK: - Diff
 
 public enum ChangeKind: String, Codable, Sendable { case added, modified, deleted, renamed }

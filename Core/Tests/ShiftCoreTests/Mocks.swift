@@ -350,6 +350,29 @@ final class MockStore: StateStoring {
     func appendLog(taskID: Int, text: String) async { logs[taskID, default: ""] += text }
     func readLog(taskID: Int) async -> String { logs[taskID] ?? "" }
     func deleteLog(taskID: Int) async { logs[taskID] = nil }
+
+    /// What was logged besides Shift's own run markers.
+    func output(_ id: Int) -> String? {
+        logs[id]?.components(separatedBy: "\n").filter { !$0.contains(RunMarker.type) }.joined(separator: "\n")
+    }
+    /// The prompts each run marker of the task's log names.
+    func markedPrompts(_ id: Int) -> [[Prompt.ID]] {
+        (logs[id] ?? "").components(separatedBy: "\n").compactMap { line in
+            guard let marker = jsonObject(line), marker["type"] as? String == RunMarker.type else { return nil }
+            return (marker["prompts"] as? [String] ?? []).compactMap(UUID.init)
+        }
+    }
+
+    private(set) var chatLogs: [UUID: String] = [:]
+    func appendChatLog(chatID: UUID, text: String) async { chatLogs[chatID, default: ""] += text }
+    func deleteChatLog(chatID: UUID) async { chatLogs[chatID] = nil }
+    func logBytes(_ log: AgentLog, from offset: UInt64, length: Int) async -> Data {
+        let text = switch log {
+        case .task(let id): logs[id] ?? ""
+        case .chat(let id): chatLogs[id] ?? ""
+        }
+        return Data(Data(text.utf8).dropFirst(Int(offset)).prefix(length))
+    }
 }
 
 // MARK: - Waiting

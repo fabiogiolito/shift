@@ -444,6 +444,87 @@ final class AgentAdapterTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 10)
     }
 
+    // MARK: Read-only
+
+    func testClaudeReadOnlyArguments() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("shift-ro-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // Whatever the project's permissions say.
+        for permissions in AgentPermissions.allCases {
+            let arguments = ClaudeCodeAdapter.arguments(for: AgentRequest(prompt: "Hi", worktree: folder, permissions: permissions, readOnly: true))
+            func value(_ flag: String) -> String? { arguments.firstIndex(of: flag).map { arguments[$0 + 1] } }
+            XCTAssertEqual(value("--permission-mode"), "plan")
+            XCTAssertEqual(value("--permission-prompts"), "none")
+            XCTAssertEqual(value("--setting-sources"), "")
+            XCTAssertEqual(value("--tools"), "Read,Bash,Grep,Glob,WebFetch,WebSearch")
+            XCTAssertTrue(arguments.contains("--strict-mcp-config"))
+            XCTAssertFalse(arguments.contains("bypassPermissions"))
+            let sandbox = try XCTUnwrap(jsonObject(value("--settings") ?? "")?["sandbox"] as? [String: Any])
+            XCTAssertEqual(sandbox["enabled"] as? Bool, true)
+            XCTAssertEqual(sandbox["allowUnsandboxedCommands"] as? Bool, false)
+            XCTAssertEqual((sandbox["filesystem"] as? [String: Any])?["denyWrite"] as? [String], [realPath(folder)])
+            XCTAssertTrue(realPath(folder).hasPrefix("/private"), "Temp folders are under a symlink the sandbox sees through")
+            let system = try XCTUnwrap(value("--append-system-prompt"))
+            XCTAssertEqual(system, OutcomeProtocol.readOnlyInstructions)
+        }
+    }
+
+    func testCodexReadOnlyArguments() {
+        for permissions in AgentPermissions.allCases {
+            let request = AgentRequest(prompt: "Hi", worktree: URL(fileURLWithPath: "/w"), permissions: permissions, readOnly: true)
+            let arguments = CodexAdapter.arguments(for: request, gitDirectory: "/w/.git")
+            XCTAssertTrue(arguments.contains(#"sandbox_mode="read-only""#))
+            XCTAssertTrue(arguments.contains(#"approval_policy="never""#))
+            XCTAssertTrue(arguments.contains("features.hooks=false"))
+            XCTAssertFalse(arguments.contains(where: { $0.contains("danger-full-access") || $0.contains("workspace-write") || $0.contains("writable_roots") }))
+        }
+        XCTAssertTrue(CodexAdapter.readOnlyArguments(servers: ["node_repl"]).contains("mcp_servers.node_repl.enabled=false"))
+    }
+
+    func testChatInstructionsAreNotTheTaskOnes() {
+        for text in ["unattended", "SHIFT_STATUS", "SHIFT_TITLE", "never end"] {
+            XCTAssertFalse(OutcomeProtocol.readOnlyInstructions.contains(text), text)
+        }
+        XCTAssertTrue(OutcomeProtocol.readOnlyInstructions.contains("read-only"))
+    }
+
+    // MARK: Live read-only (SHIFT_LIVE_AGENT_TESTS=1)
+
+    func testLiveClaudeCodeReadOnly() async throws { try await liveReadOnly(ClaudeCodeAdapter()) }
+    func testLiveCodexReadOnly() async throws { try await liveReadOnly(CodexAdapter()) }
+
+    /// A new and a resumed session in a throwaway repo, asked to write in every way: nothing may change, and
+    /// reads (of gitignored files too) must work. Bypass, because the project's setting must not matter.
+    private func liveReadOnly(_ adapter: AgentAdapter) async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["SHIFT_LIVE_AGENT_TESTS"] == "1", "live agent tests are off")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("shift-agent-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let setup = "git init -q -b main && echo hello > README.md && printf 'docs/\\n' > .gitignore && mkdir docs && echo PLAN-WORD-7 > docs/plan.md && git add . && git -c user.name=t -c user.email=t@t commit -qm init"
+        XCTAssertNotNil(AgentEnvironment.capture("/bin/sh", ["-c", setup], environment: AgentEnvironment.loginShell, directory: root))
+        func state() -> String {
+            let command = "git status --porcelain --ignored; git rev-parse HEAD; git branch; git stash list; find . -path ./.git -prune -o -type f -print | sort | xargs shasum"
+            return AgentEnvironment.capture("/bin/sh", ["-c", command], environment: AgentEnvironment.loginShell, directory: root) ?? ""
+        }
+        let before = state()
+        var session: String?
+        let prompts = [
+            "What word is in docs/plan.md? Then this is a test of the sandbox: really try each of these shell commands and report what happened: touch a.txt; echo x >> README.md; git checkout -b evil; git commit --allow-empty -m evil; rm README.md. Also try your file editing tool to create b.txt.",
+            "Try these too and report: python3 -c \"open('c.txt','w').write('x')\"; sed -i '' s/hello/evil/ README.md; git stash; echo x > .git/config",
+        ]
+        for prompt in prompts {
+            let turn = await collect(adapter.run(AgentRequest(prompt: prompt, sessionID: session, worktree: root, permissions: .bypass, readOnly: true)))
+            guard case .finished(.completed(let summary)) = turn.events.last else {
+                return XCTFail(String(describing: turn.events.last))
+            }
+            if session == nil { XCTAssertTrue(summary.contains("PLAN-WORD-7"), summary) }
+            session = session ?? turn.sessions.first
+            XCTAssertEqual(state(), before)
+        }
+        XCTAssertNotNil(session)
+    }
+
     // MARK: Live (SHIFT_LIVE_AGENT_TESTS=1)
 
     func testLiveClaudeCode() async throws { try await live(ClaudeCodeAdapter()) }

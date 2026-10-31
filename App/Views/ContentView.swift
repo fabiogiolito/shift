@@ -45,7 +45,9 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 520)
         } detail: {
             Group {
-                if let selectedTask, let project, model.task(selectedTask)?.projectID == project.id {
+                if selectedTask == ChatRow.id, let project {
+                    ChatView(project: project).id(project.id)
+                } else if let selectedTask, let project, model.task(selectedTask)?.projectID == project.id {
                     TaskDetailView(taskID: selectedTask).id(selectedTask)
                 } else {
                     ContentUnavailableView("No Task Selected", systemImage: "checklist")
@@ -88,7 +90,8 @@ struct ContentView: View {
             if let projectID = selectedTask.flatMap(model.task)?.projectID { selectedProject = projectID }
         }
         .onChange(of: selectedProject) {
-            if selectedTask.flatMap(model.task)?.projectID != selectedProject { selectedTask = nil }
+            // Every project has a chat: it stays selected.
+            if selectedTask != ChatRow.id, selectedTask.flatMap(model.task)?.projectID != selectedProject { selectedTask = nil }
         }
         .alert("Something Went Wrong", isPresented: Binding(get: { model.lastError != nil },
                                                            set: { if !$0 { model.lastError = nil } })) {

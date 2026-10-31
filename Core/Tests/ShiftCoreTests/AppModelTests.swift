@@ -116,7 +116,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(agent.requests[0].sessionID)
         XCTAssertEqual(agent.requests[0].prompt, "Set the gap to 4px. Thanks!")
         XCTAssertEqual(agent.requests[0].environment["PORT"], "3001")
-        XCTAssertEqual(store.logs[3001], "raw\n")
+        XCTAssertEqual(store.output(3001), "raw\n")
         XCTAssertEqual(notifier.notifications, [.init(title: "Set the gap to 4px is ready", body: "Gap is 4px", taskID: 3001)])
         XCTAssertEqual(notifier.badges.last, 1)
         XCTAssertEqual(store.state.tasks, model.tasks)
@@ -249,7 +249,7 @@ final class AppModelTests: XCTestCase {
 
         gate.open()
         await waitForStatus(id, .completed)
-        XCTAssertEqual(store.logs[id], "$ pnpm install\nDone in 2s\n")
+        XCTAssertEqual(store.output(id), "$ pnpm install\nDone in 2s\n")
         XCTAssertEqual(servers.starts.count, 1)
         XCTAssertEqual(agent.requests.count, 1)
         XCTAssertNil(model.task(id)?.activity)
@@ -415,7 +415,7 @@ final class AppModelTests: XCTestCase {
         let id = model.createTask(projectID: project.id, prompt: "Do it")!
         await waitForStatus(id, .completed)
         XCTAssertNil(model.task(id)?.serverPID)
-        XCTAssertEqual(store.logs[id], "Dev server failed to start: pnpm: command not found\n")
+        XCTAssertEqual(store.output(id), "Dev server failed to start: pnpm: command not found\n")
         let running = await model.isServerRunning(taskID: id)
         XCTAssertFalse(running)
         let log = await model.serverLog(taskID: id)
@@ -509,6 +509,61 @@ final class AppModelTests: XCTestCase {
         gate.open()
         await waitForStatus(id, .completed)
         XCTAssertEqual(agent.requests.count, 1, "no second turn: the agent already had it")
+    }
+
+    func testRunMarkersNameTheDeliveredPrompts() async {
+        agent.takesFollowUps = true
+        let (id, gate) = await createPausedTask()
+        model.sendPrompt(taskID: id, text: "Also create b.txt")
+        gate.open()
+        await waitForStatus(id, .completed)
+        await model.flush()
+        let prompts = model.task(id)?.prompts.map(\.id) ?? []
+        await waitFor("both markers") { self.store.markedPrompts(id).count == 2 }
+        XCTAssertEqual(store.markedPrompts(id), [[prompts[0]], [prompts[1]]])
+
+        // A new run of the same task.
+        model.sendPrompt(taskID: id, text: "One more")
+        await waitForStatus(id, .completed)
+        XCTAssertEqual(store.markedPrompts(id).last, model.task(id)?.prompts.last.map { [$0.id] })
+    }
+
+    func testPromptsThatWaitedForTheNextTurnAreMarkedThere() async {
+        let gate = Gate()
+        agent.scripts = [[.emit(.sessionStarted(id: "s1")), .pause(gate), .emit(.finished(.completed(summary: "A")))]]
+        guard let id = model.createTask(projectID: project.id, prompt: "First") else { return XCTFail("No task") }
+        await waitFor("agent running") { gate.waiting == 1 }
+        model.sendPrompt(taskID: id, text: "Second")
+        model.sendPrompt(taskID: id, text: "Third")
+        gate.open()
+        await waitForStatus(id, .completed)
+        let prompts = model.task(id)?.prompts.map(\.id) ?? []
+        XCTAssertEqual(store.markedPrompts(id), [[prompts[0]], [prompts[1], prompts[2]]])
+    }
+
+    func testResumeMarkerCarriesShiftsOwnWords() async throws {
+        let gate = Gate()
+        agent.scripts = [[.pause(gate)]]
+        guard let id = model.createTask(projectID: project.id, prompt: "First") else { return XCTFail("No task") }
+        await waitFor("agent running") { gate.waiting == 1 }
+        model.stop(taskID: id)
+        gate.open()
+        await waitFor("stopped") { self.model.task(id)?.status == .blocked }
+        model.resume(taskID: id)
+        await waitForStatus(id, .completed)
+        var parser = TranscriptParser(agent: .claudeCode)
+        _ = parser.feed(Data((store.logs[id] ?? "").utf8))
+        XCTAssertEqual(parser.turns.last?.text, AppModel.continuePrompt)
+    }
+
+    func testTranscriptReaderReadsTheTasksLog() async {
+        agent.scripts = [[.emit(.rawOutput(#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hi."}]},"parent_tool_use_id":null}"#)),
+                          .emit(.finished(.completed(summary: "Hi.")))]]
+        guard let id = model.createTask(projectID: project.id, prompt: "First") else { return XCTFail("No task") }
+        await waitForStatus(id, .completed)
+        let turns = await model.transcript(taskID: id)?.update()
+        XCTAssertEqual(turns?.map(\.blocks), [[.message("Hi.")]])
+        XCTAssertEqual(turns?.first?.promptIDs, model.task(id)?.prompts.map(\.id))
     }
 
     func testPendingPromptIsDeliveredOnceTheAgentCanTakeIt() async {
@@ -1704,5 +1759,279 @@ final class AppModelTests: XCTestCase {
             XCTAssertEqual(AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main")?.absoluteString, expected)
         }
         XCTAssertNil(AppModel.pullRequestURL(remoteURL: "git@gitlab.com:owner/repo.git", branch: "shift/1", base: "main"))
+    }
+}
+
+// MARK: - Project chat
+
+@MainActor
+final class ChatTests: XCTestCase {
+    var git: MockGit!
+    var claude: MockAgent!
+    var codex: MockAgent!
+    var servers: MockServers!
+    var notifier: MockNotifier!
+    var store: MockStore!
+    var model: AppModel!
+    var project: Project!
+    var temp: URL!
+
+    override func setUp() async throws {
+        git = MockGit()
+        claude = MockAgent()
+        codex = MockAgent(kind: .codex)
+        servers = MockServers()
+        notifier = MockNotifier()
+        store = MockStore()
+        temp = FileManager.default.temporaryDirectory.appendingPathComponent("shift-chat-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        project = Project(name: "Spot", repoPath: temp.path, baseBranch: "main", permissions: .bypass, models: [.claudeCode: "opus"])
+        store.state = AppState(projects: [project])
+        model = makeModel()
+        await model.start()
+    }
+
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: temp)
+    }
+
+    func makeModel() -> AppModel {
+        AppModel(services: Services(git: git, agents: [.claudeCode: claude, .codex: codex], servers: servers, ports: MockPorts(),
+                                    notifier: notifier, store: store), worktrees: temp.appendingPathComponent("worktrees"))
+    }
+
+    private func reply(_ session: String) -> [MockAgent.Step] {
+        [.emit(.sessionStarted(id: session)), .emit(.rawOutput("raw")), .emit(.finished(.completed(summary: "Answer")))]
+    }
+
+    private func waitForReply() async {
+        await waitFor("the reply to end") { self.model.replyingChats.isEmpty }
+    }
+
+    func testRunsReadOnlyInTheProjectsFolderWhateverItsPermissions() async {
+        claude.scripts = [reply("s1")]
+        model.sendChat(projectID: project.id, text: " Why? ")
+        XCTAssertEqual(model.replyingChats, [project.id])
+        await waitForReply()
+
+        let request = claude.requests[0]
+        XCTAssertTrue(request.readOnly)
+        XCTAssertEqual(request.worktree.path, project.repoPath)
+        XCTAssertEqual(request.prompt, "Why?")
+        XCTAssertEqual(request.model, "opus")
+        XCTAssertFalse(request.needsDescription)
+        XCTAssertNil(request.sessionID)
+        XCTAssertEqual(model.chat(projectID: project.id)?.sessionID, "s1")
+        XCTAssertEqual(model.chat(projectID: project.id)?.agent, .claudeCode)
+    }
+
+    func testResumesTheSession() async {
+        claude.scripts = [reply("s1"), reply("s1")]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitForReply()
+        model.sendChat(projectID: project.id, text: "Two")
+        await waitForReply()
+        XCTAssertEqual(claude.requests.map(\.sessionID), [nil, "s1"])
+        XCTAssertEqual(claude.requests[1].prompt, "Two", "The agent has the rest in its session.")
+    }
+
+    func testPersistsAcrossRelaunches() async {
+        claude.scripts = [reply("s1"), reply("s1")]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitForReply()
+        await model.flush()
+        let chat = model.chat(projectID: project.id)
+        XCTAssertEqual(store.state.chats, chat.map { [$0] })
+
+        model = makeModel()
+        await model.start()
+        XCTAssertEqual(model.chat(projectID: project.id), chat)
+        model.sendChat(projectID: project.id, text: "Two")
+        await waitForReply()
+        XCTAssertEqual(claude.requests[1].sessionID, "s1")
+    }
+
+    func testStateFromBeforeChatsStillDecodes() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let state = try decoder.decode(AppState.self, from: Data(#"{"projects":[],"tasks":[],"nextTaskID":3005}"#.utf8))
+        XCTAssertEqual(state.chats, [])
+        XCTAssertEqual(state.nextTaskID, 3005)
+    }
+
+    func testStopEndsTheReplyAndDropsWhatWasNotSent() async {
+        let gate = Gate()
+        claude.scripts = [[.emit(.sessionStarted(id: "s1")), .pause(gate)], reply("s1")]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitFor("agent running") { gate.waiting == 1 }
+        model.sendChat(projectID: project.id, text: "Not taken")
+        XCTAssertEqual(model.chat(projectID: project.id)?.prompts.map(\.isPending), [false, true])
+
+        model.stopChat(projectID: project.id)
+        XCTAssertEqual(model.replyingChats, [])
+        XCTAssertEqual(model.chat(projectID: project.id)?.prompts.map(\.text), ["One"])
+        gate.open()
+        await waitFor("agent terminated") { self.claude.terminated == 1 }
+
+        model.sendChat(projectID: project.id, text: "Two")
+        await waitForReply()
+        XCTAssertEqual(claude.requests.map(\.prompt), ["One", "Two"])
+        XCTAssertEqual(claude.requests[1].sessionID, "s1", "Stopping keeps the session.")
+    }
+
+    func testMessageWhileReplyingGoesIntoTheRunningSession() async {
+        let gate = Gate()
+        claude.takesFollowUps = true
+        claude.scripts = [[.pause(gate), .emit(.finished(.completed(summary: "A")))]]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitFor("agent running") { gate.waiting == 1 }
+        model.sendChat(projectID: project.id, text: "And two")
+        XCTAssertEqual(claude.followUps, ["And two"])
+        gate.open()
+        await waitForReply()
+        XCTAssertEqual(claude.requests.count, 1)
+        let chat = model.chat(projectID: project.id)
+        await waitFor("the marker") { (self.store.chatLogs[chat?.id ?? UUID()] ?? "").components(separatedBy: RunMarker.type).count == 3 }
+    }
+
+    func testMessageTheAgentCouldNotTakeBecomesTheNextTurn() async {
+        let gate = Gate()
+        claude.scripts = [[.pause(gate), .emit(.sessionStarted(id: "s1")), .emit(.finished(.completed(summary: "A")))], reply("s1")]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitFor("agent running") { gate.waiting == 1 }
+        model.sendChat(projectID: project.id, text: "Two")
+        gate.open()
+        await waitForReply()
+        XCTAssertEqual(claude.requests.map(\.prompt), ["One", "Two"])
+        XCTAssertEqual(claude.requests[1].sessionID, "s1")
+        XCTAssertEqual(model.chat(projectID: project.id)?.prompts.map(\.isPending), [false, false])
+    }
+
+    func testNewChatStartsAFreshSessionAndDeletesTheOldLog() async throws {
+        claude.scripts = [reply("s1"), reply("s2")]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitForReply()
+        let old = try XCTUnwrap(model.chat(projectID: project.id))
+        XCTAssertNotNil(store.chatLogs[old.id])
+
+        await model.newChat(projectID: project.id)
+        XCTAssertNil(model.chat(projectID: project.id))
+        XCTAssertNil(store.chatLogs[old.id])
+
+        model.sendChat(projectID: project.id, text: "Two")
+        await waitForReply()
+        XCTAssertEqual(claude.requests[1].sessionID, nil)
+        XCTAssertNotEqual(model.chat(projectID: project.id)?.id, old.id)
+        XCTAssertEqual(model.chat(projectID: project.id)?.prompts.map(\.text), ["Two"])
+    }
+
+    func testNewChatWhileReplyingStopsTheAgent() async {
+        let gate = Gate()
+        claude.scripts = [[.emit(.sessionStarted(id: "s1")), .pause(gate)]]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitFor("agent running") { gate.waiting == 1 }
+        gate.open()
+        await model.newChat(projectID: project.id)
+        XCTAssertEqual(model.replyingChats, [])
+        XCTAssertNil(model.chat(projectID: project.id))
+    }
+
+    func testChangedDefaultAgentStartsANewSessionAndSaysSo() async throws {
+        claude.scripts = [reply("s1")]
+        codex.scripts = [reply("t1"), reply("t1")]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitForReply()
+        project.defaultAgent = .codex
+        model.updateProject(project)
+        model.sendChat(projectID: project.id, text: "Two")
+        await waitForReply()
+        XCTAssertNil(codex.requests[0].sessionID)
+        let chat = try XCTUnwrap(model.chat(projectID: project.id))
+        XCTAssertEqual(chat.agent, .codex)
+        XCTAssertEqual(chat.sessionID, "t1")
+        let turns = await model.chatTranscript(projectID: project.id)?.update()
+        XCTAssertNil(turns?.first?.note)
+        XCTAssertEqual(turns?.last?.note?.contains("new session"), true)
+        // The same agent from then on: no new session, no note.
+        model.sendChat(projectID: project.id, text: "Three")
+        await waitForReply()
+        XCTAssertEqual(codex.requests[1].sessionID, "t1")
+    }
+
+    func testAgentNotInstalledIsSaid() async {
+        project.defaultAgent = .codex
+        model.updateProject(project)
+        codex.installation = nil
+        await model.flush()
+        model = makeModel()
+        await model.start()
+        model.sendChat(projectID: project.id, text: "One")
+        await waitForReply()
+        XCTAssertEqual(model.chatErrors[project.id], "Codex is not installed.")
+        XCTAssertEqual(codex.requests.count, 0)
+    }
+
+    func testFailedReplyIsShownUntilTheNextMessage() async {
+        claude.scripts = [[.emit(.finished(.blocked(reason: "Rate limited")))], reply("s1")]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitForReply()
+        XCTAssertEqual(model.chatErrors[project.id], "Rate limited")
+        model.sendChat(projectID: project.id, text: "Two")
+        XCTAssertNil(model.chatErrors[project.id])
+        await waitForReply()
+        XCTAssertNil(model.chatErrors[project.id])
+    }
+
+    func testShutdownTerminatesTheRun() async {
+        let gate = Gate()
+        claude.scripts = [[.emit(.sessionStarted(id: "s1")), .pause(gate)]]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitFor("agent running") { gate.waiting == 1 }
+        gate.open()
+        await model.shutdown()
+        XCTAssertEqual(model.replyingChats, [])
+        await waitFor("agent terminated") { self.claude.terminated == 1 }
+        XCTAssertEqual(store.state.chats.first?.sessionID, "s1", "Persisted, to resume after the relaunch.")
+    }
+
+    func testRemovingTheProjectTerminatesTheRunAndRemovesTheChat() async throws {
+        let gate = Gate()
+        claude.scripts = [[.emit(.sessionStarted(id: "s1")), .emit(.rawOutput("raw")), .pause(gate)]]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitFor("agent running") { gate.waiting == 1 }
+        let id = try XCTUnwrap(model.chat(projectID: project.id)?.id)
+        gate.open()
+        await model.removeProject(project.id)
+        XCTAssertEqual(model.replyingChats, [])
+        XCTAssertNil(model.chat(projectID: project.id))
+        XCTAssertNil(store.chatLogs[id])
+        await model.flush()
+        XCTAssertEqual(store.state.chats, [])
+        await waitFor("agent terminated") { self.claude.terminated == 1 }
+    }
+
+    func testNoEffectOnTasksOrTheirCounts() async {
+        let gate = Gate()
+        claude.scripts = [[.pause(gate), .emit(.finished(.blocked(reason: "Oops")))]]
+        model.sendChat(projectID: project.id, text: "One")
+        await waitFor("agent running") { gate.waiting == 1 }
+        XCTAssertEqual(model.tasks, [])
+        XCTAssertEqual(model.attentionCount, 0)
+
+        // A task runs alongside and finishes while the chat is replying.
+        let taskID = model.createTask(projectID: project.id, prompt: "Task")
+        await waitFor("the task") { taskID.flatMap { self.model.task($0)?.status } == .completed }
+        XCTAssertEqual(model.tasks.count, 1)
+        XCTAssertEqual(model.tasks.first?.prompts.map(\.text), ["Task"])
+        XCTAssertEqual(model.tasks.first?.id, 3001)
+        let notified = notifier.notifications.count
+
+        gate.open()
+        await waitForReply()
+        await model.flush()
+        XCTAssertEqual(notifier.notifications.count, notified, "No notification when a reply ends, even a failed one.")
+        XCTAssertEqual(model.attentionCount, 1)
+        XCTAssertEqual(git.calls.filter { $0.contains(temp.lastPathComponent) }, [], "It never touches git.")
+        XCTAssertEqual(servers.starts.count, 1, "Only the task's server.")
     }
 }
