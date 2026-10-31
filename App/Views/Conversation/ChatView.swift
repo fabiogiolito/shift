@@ -88,6 +88,7 @@ struct ChatView: View {
                 ToolbarItem {
                     Label(branch, systemImage: "arrow.triangle.branch").labelStyle(.titleAndIcon)
                         .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        .padding(.horizontal, 8)
                         .help("The branch checked out in the project's folder, which the agent reads")
                 }
                 .sharedBackgroundVisibility(.hidden)
