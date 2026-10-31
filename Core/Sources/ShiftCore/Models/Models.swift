@@ -147,7 +147,8 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// e.g. `pnpm install && cp "$SHIFT_REPO/.env" .`. Empty = nothing to prepare.
     /// Run with `SHIFT_REPO`, `SHIFT_WORKTREE` and `PORT` in the environment.
     public var setupCommand: String
-    /// Shell command that builds the app, for app projects (they have no dev server). Empty = a web project.
+    /// Shell command that builds the app, for app projects (they have no dev server). Empty = a web project,
+    /// except a native app, whose command is then guessed from the task's files when it builds.
     /// If the last line of its output is the path of a `.app`, Shift opens it. Run with `SHIFT_REPO`,
     /// `SHIFT_WORKTREE` and `SHIFT_TASK` in the environment.
     public var buildCommand: String
@@ -196,7 +197,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
 
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }
     /// An app is tested by building it, not on a dev server: its tasks get no server and no port.
-    public var isApp: Bool { !buildCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    public var isApp: Bool { type == .nativeApp || !buildCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     /// The app's `buildCommand` keeps running while the app is open, so it is started and stopped, not awaited.
     public var runsApp: Bool { type == .electronApp }
 

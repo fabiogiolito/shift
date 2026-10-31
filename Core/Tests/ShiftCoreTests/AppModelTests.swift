@@ -990,6 +990,29 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.buildLog(taskID: id).hasSuffix("error: nope\n"))
     }
 
+    func testNativeAppWithoutABuildCommandDetectsItWhenBuilding() async throws {
+        project.type = .nativeApp
+        project.serverCommand = ""
+        model.updateProject(project)
+        await waitFor("the base server to stop") { self.model.basePorts[self.project.id] == nil }
+        let id = await createCompletedTask()
+        XCTAssertTrue(servers.starts.isEmpty)
+        XCTAssertNil(model.task(id)?.port)
+
+        let nothing = await model.build(taskID: id)
+        XCTAssertNil(nothing)
+        XCTAssertEqual(model.builds[id], .failed("Nothing to build yet. Add a build command in the project's settings."))
+        XCTAssertTrue(servers.runs.isEmpty)
+
+        // The agent added a build script to the task.
+        let worktree = try XCTUnwrap(model.task(id)).worktreeURL
+        let script = worktree.appendingPathComponent("scripts/build.sh")
+        try FileManager.default.createDirectory(at: script.deletingLastPathComponent(), withIntermediateDirectories: true)
+        XCTAssertTrue(FileManager.default.createFile(atPath: script.path, contents: nil, attributes: [.posixPermissions: 0o755]))
+        _ = await model.build(taskID: id)
+        XCTAssertEqual(servers.runs.last?.command, "scripts/build.sh")
+    }
+
     func testBaseServerRunsOnTheRepoAndComesBackWhenOpened() async {
         XCTAssertEqual(servers.baseStarts, [.init(taskID: -1, command: "pnpm dev", port: 3000)])
         XCTAssertEqual(model.basePorts[project.id], 3000)
