@@ -25,12 +25,15 @@ struct RootView: View {
             if model.pairing == nil {
                 PairingView()
             } else {
-                NavigationStack {
-                    ProjectsView()
-                        .navigationDestination(for: UUID.self) { TaskListView(projectID: $0) }
-                        .navigationDestination(for: Int.self) { TaskDetailView(taskID: $0) }
+                // A stack, not a safe area inset: the navigation bar ignores an inset and ends up under the banner.
+                VStack(spacing: 0) {
+                    LinkBanner()
+                    NavigationStack {
+                        ProjectsView()
+                            .navigationDestination(for: UUID.self) { TaskListView(projectID: $0) }
+                            .navigationDestination(for: Int.self) { TaskDetailView(taskID: $0) }
+                    }
                 }
-                .safeAreaInset(edge: .top, spacing: 0) { LinkBanner() }
             }
         }
         .alert("Pair with this Mac?", isPresented: Binding(get: { model.proposedPairing != nil }, set: { if !$0 { model.proposedPairing = nil } })) {
