@@ -186,5 +186,21 @@
 - Launching Shift no longer starts every web project's server; a project's server starts only when you open it, and a project whose folder is gone says so plainly]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.12/Shift-0.1.12.zip" sparkle:edSignature="xDmwmF3La7XJ4zU9n+BdP7rtfn07r8U5MQP32Tycr952SPJ8AkO6KTc3Wv+IsorHIl2p5NH5i9YmTP88PTXoAw==" length="3915728" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.1.13</title>
+      <pubDate>Mon, 02 Nov 2026 13:04:47 +0000</pubDate>
+      <sparkle:version>15</sparkle:version>
+      <sparkle:shortVersionString>0.1.13</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Chat with your project to start, follow, message, stop, merge and delete tasks, and to read or change project settings
+- Follow a task's pull request: view it, push new work to it, and finish the task when it's merged
+- Pre-fill pull request titles and descriptions, and optionally open pull requests from a task's main button
+- Add optional before and after screenshots of your changes for web projects
+- Rename tasks from the More menu or the task list, and keep a running description of each task's changes
+- Open the latest prompt's output automatically as you work through a conversation
+- Render markdown tables as tables in conversations
+- Stop showing routine step failures as red warnings in conversations]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.13/Shift-0.1.13.zip" sparkle:edSignature="W5XYD7rP2qWqHjkM9snTe5SUvtIWuN01D5XCXX7sji16DxEgR6o6RK0fCbT93a/KUlIme7d++GGJgfeFhM/aDw==" length="4086569" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
