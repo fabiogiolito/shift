@@ -32,10 +32,10 @@ struct ContentView: View {
                         }
                         .id(project.id)
                 } else if model.projects.isEmpty {
-                    ContentUnavailableView("No Projects", systemImage: "folder",
-                                           description: Text("Add a Git repository with New Project."))
+                    EmptyState("No Projects", systemImage: "folder",
+                               description: Text("Add a Git repository with New Project."))
                 } else {
-                    ContentUnavailableView("No Project Selected", systemImage: "sidebar.left")
+                    EmptyState("No Project Selected", systemImage: "sidebar.left")
                 }
             }
             // Full column size, so the bar's width is right whatever the column shows.
@@ -50,7 +50,7 @@ struct ContentView: View {
                 } else if let selectedTask, let project, model.task(selectedTask)?.projectID == project.id {
                     TaskDetailView(taskID: selectedTask).id(selectedTask)
                 } else {
-                    ContentUnavailableView("No Task Selected", systemImage: "checklist")
+                    EmptyState("No Task Selected", systemImage: "checklist")
                         // An empty detail column gives the toolbar nothing to anchor, and the task list's
                         // toolbar items (the push button) spread to the window's edge. Hold its place.
                         .toolbar {

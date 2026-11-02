@@ -35,7 +35,7 @@ struct TaskListView: View {
         .scrollEdgeEffectStyle(.hard, for: .top)
         .overlay {
             if tasks.isEmpty {
-                ContentUnavailableView("No Tasks", systemImage: "tray", description: Text("Describe a task below to start one."))
+                EmptyState("No Tasks", systemImage: "tray", description: Text("Describe a task below to start one."))
             }
         }
         .safeAreaBar(edge: .bottom) { footer }

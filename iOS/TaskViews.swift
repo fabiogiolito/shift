@@ -12,7 +12,7 @@ struct ProjectsView: View {
             if !model.hasState {
                 ProgressView()
             } else if model.state.projects.isEmpty {
-                ContentUnavailableView("No Projects", systemImage: "folder", description: Text("Add a project in Shift on your Mac."))
+                EmptyState("No Projects", systemImage: "folder", description: Text("Add a project in Shift on your Mac."))
             } else {
                 List(model.state.projects) { project in
                     NavigationLink(value: project.id) {
@@ -64,9 +64,7 @@ struct TaskListView: View {
         }
         .overlay {
             if tasks.isEmpty {
-                ContentUnavailableView {
-                    Label("No Tasks", systemImage: "checklist")
-                } actions: {
+                EmptyState(title: "No Tasks", systemImage: "tray", description: Text("Start one here or in Shift on your Mac.")) {
                     Button("New Task") { isCreating = true }.buttonStyle(.borderedProminent)
                 }
             }
@@ -151,8 +149,8 @@ private struct ChatView: View {
         .scrollDismissesKeyboard(.interactively)
         .overlay {
             if chat == nil {
-                ContentUnavailableView("Chat About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
-                                       description: Text("Ask about any task and plan with the agent. It can start tasks, follow them and merge them when you ask."))
+                EmptyState("Chat About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
+                           description: Text("Ask about any task and plan with the agent. It can start tasks, follow them and merge them when you ask."))
             }
         }
         .safeAreaBar(edge: .bottom) {
@@ -268,7 +266,7 @@ struct TaskDetailView: View {
             }
             .onDisappear { model.closeLog(.task(taskID)) }
         } else {
-            ContentUnavailableView("Task Not Found", systemImage: "questionmark.folder", description: Text("It was deleted on your Mac."))
+            EmptyState("Task Not Found", systemImage: "questionmark.folder", description: Text("It was deleted on your Mac."))
         }
     }
 }
