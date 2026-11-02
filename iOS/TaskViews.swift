@@ -45,11 +45,16 @@ struct ProjectsView: View {
 struct TaskListView: View {
     @Environment(RemoteModel.self) private var model
     let projectID: UUID
+    @State private var isCreating = false
+    @State private var isOpeningSite = false
+    @State private var site: URL?
 
     var body: some View {
         let tasks = model.tasks(in: projectID).sorted { $0.id > $1.id }
         let active = tasks.filter { $0.status != .merged }, merged = tasks.filter { $0.status == .merged }
+        let project = model.state.projects.first { $0.id == projectID }
         List {
+            if let project { ChatRow(project: project) }
             ForEach(active) { TaskRow(task: $0) }
             if !merged.isEmpty {
                 Section("Merged") {
@@ -58,9 +63,148 @@ struct TaskListView: View {
             }
         }
         .overlay {
-            if tasks.isEmpty { EmptyState("No Tasks", systemImage: "tray", description: Text("Start a task in Shift on your Mac.")) }
+            if tasks.isEmpty {
+                EmptyState(title: "No Tasks", systemImage: "tray", description: Text("Start one here or in Shift on your Mac.")) {
+                    Button("New Task") { isCreating = true }.buttonStyle(.borderedProminent)
+                }
+            }
         }
-        .navigationTitle(model.state.projects.first { $0.id == projectID }?.name ?? "Tasks")
+        .navigationTitle(project?.name ?? "Tasks")
+        .toolbar {
+            if let project, !project.isApp {
+                Button(action: openSite) {
+                    if isOpeningSite { ProgressView() } else { Label("Open \(project.baseBranch)", systemImage: "globe") }
+                }
+                .disabled(isOpeningSite)
+            }
+            Button("New Task", systemImage: "plus") { isCreating = true }
+        }
+        .sheet(isPresented: Binding(get: { site != nil }, set: { if !$0 { site = nil } })) {
+            if let site { SafariView(url: site).ignoresSafeArea() }
+        }
+        .navigationDestination(isPresented: $isCreating) { NewTaskView(projectID: projectID) }
+    }
+
+    private func openSite() {
+        isOpeningSite = true
+        Task {
+            site = await model.baseURL(projectID: projectID)
+            isOpeningSite = false
+        }
+    }
+}
+
+/// Pinned to the top of the list, like on the Mac.
+private struct ChatRow: View {
+    @Environment(RemoteModel.self) private var model
+    let project: Project
+
+    var body: some View {
+        NavigationLink {
+            ChatView(project: project)
+        } label: {
+            LabeledContent {
+                if model.state.chatApprovals[project.id] != nil {
+                    Image(systemName: "hand.raised.fill").foregroundStyle(.blue).accessibilityLabel("Waiting for you")
+                } else if model.state.replyingChats.contains(project.id) {
+                    ProgressView()
+                }
+            } label: {
+                Label("Chat", systemImage: "bubble.left.and.text.bubble.right")
+            }
+        }
+    }
+}
+
+/// The project's one conversation with its agent. Not a task.
+private struct ChatView: View {
+    @Environment(RemoteModel.self) private var model
+    let project: Project
+    @State private var stream: LogStream?
+    @State private var confirmingNew = false
+
+    var body: some View {
+        let chat = model.chat(projectID: project.id)
+        let replying = model.state.replyingChats.contains(project.id)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Conversation(prompts: chat?.prompts ?? [], turns: stream?.turns ?? [])
+                if let request = model.state.chatApprovals[project.id] {
+                    Label { Text(.init("Wants to \(request)")) } icon: { Image(systemName: "hand.raised.fill") }
+                        .foregroundStyle(.blue)
+                    HStack {
+                        Button("Allow") { Task { await model.answerChatApproval(projectID: project.id, allow: true) } }
+                            .buttonStyle(.borderedProminent)
+                        Button("Deny", role: .destructive) { Task { await model.answerChatApproval(projectID: project.id, allow: false) } }
+                            .buttonStyle(.bordered)
+                    }
+                } else if replying {
+                    Label { Text("Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .defaultScrollAnchor(.bottom)
+        .scrollDismissesKeyboard(.interactively)
+        .overlay {
+            if chat == nil {
+                EmptyState("Chat About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
+                           description: Text("Ask about any task and plan with the agent. It can start tasks, follow them and merge them when you ask."))
+            }
+        }
+        .safeAreaBar(edge: .bottom) {
+            PromptBar(placeholder: "Ask or tell the agent anything…") {
+                await model.sendChat(projectID: project.id, text: $0, attachments: $1)
+            }
+        }
+        .navigationTitle("Chat")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if replying {
+                Button("Stop", systemImage: "stop.fill") { Task { await model.stopChat(projectID: project.id) } }
+            }
+            Button("New Chat", systemImage: "square.and.pencil") { confirmingNew = true }.disabled(chat == nil)
+        }
+        .confirmationDialog("Start a new chat?", isPresented: $confirmingNew) {
+            Button("New Chat", role: .destructive) { Task { await model.newChat(projectID: project.id) } }
+        } message: {
+            Text("This conversation is deleted, and the agent won't remember it.")
+        }
+        // A first message and New Chat both change which log this is.
+        .task(id: chat?.id) {
+            stream = chat.map { model.openLog(.chat($0.id), agent: $0.agent ?? project.defaultAgent) }
+        }
+        .onChange(of: chat?.id) { old, _ in
+            if let old { model.closeLog(.chat(old)) }
+        }
+        .onDisappear {
+            if let chat { model.closeLog(.chat(chat.id)) }
+        }
+    }
+}
+
+/// The first prompt, and then the task it started, in place: going back from it leads to the list.
+private struct NewTaskView: View {
+    @Environment(RemoteModel.self) private var model
+    let projectID: UUID
+    @State private var taskID: Int?
+
+    var body: some View {
+        // The Mac's reply can come just ahead of the task itself.
+        if let taskID, model.task(taskID) != nil {
+            TaskDetailView(taskID: taskID)
+        } else {
+            Color.clear
+                .safeAreaBar(edge: .bottom) {
+                    PromptBar(placeholder: "What should it do?", focusesOnAppear: true) { text, attachments in
+                        taskID = await model.createTask(projectID: projectID, prompt: text, attachments: attachments)
+                        return taskID != nil
+                    }
+                }
+                .navigationTitle("New Task")
+                .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 
@@ -91,7 +235,7 @@ struct TaskDetailView: View {
         if let task = model.task(taskID) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Conversation(task: task, turns: stream?.turns ?? [])
+                    Conversation(prompts: task.prompts, turns: stream?.turns ?? [])
                     TaskStatusView(task: task)
                 }
                 .padding()
@@ -99,8 +243,10 @@ struct TaskDetailView: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) {
-                if task.status != .merged { PromptBar(taskID: taskID) }
+            .safeAreaBar(edge: .bottom) {
+                if task.status != .merged {
+                    PromptBar { await model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
+                }
             }
             .navigationTitle(task.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -167,24 +313,44 @@ private struct TaskStatusView: View {
 
 private struct PromptBar: View {
     @Environment(RemoteModel.self) private var model
-    let taskID: Int
+    var placeholder = "Message"
+    var focusesOnAppear = false
+    /// False if it didn't go through: what was written stays.
+    let onSend: (_ text: String, _ attachments: [String]) async -> Bool
     @State private var text = ""
+    @FocusState private var isFocused: Bool
     @State private var pictures: [PhotosPickerItem] = []
     @State private var isSending = false
+
+    private static let controlSize: CGFloat = 30
 
     private var canSend: Bool { (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pictures.isEmpty) && !isSending && model.link == .online }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
+        HStack(alignment: .bottom, spacing: 8) {
             PhotosPicker(selection: $pictures, matching: .images) {
-                Image(systemName: pictures.isEmpty ? "photo" : "photo.badge.checkmark").accessibilityLabel("Attach pictures")
+                Image(systemName: pictures.isEmpty ? "photo" : "photo.badge.checkmark")
+                    .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
+                    .frame(width: Self.controlSize, height: Self.controlSize)
+                    .accessibilityLabel("Attach pictures")
             }
-            TextField("Message", text: $text, axis: .vertical).lineLimit(1...6)
-            Button("Send", systemImage: isSending ? "ellipsis" : "arrow.up.circle.fill", action: send)
-                .labelStyle(.iconOnly).disabled(!canSend)
+            TextField(placeholder, text: $text, axis: .vertical)
+                .lineLimit(1...6)
+                .focused($isFocused)
+                .padding(.vertical, 4)
+            Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
+                .labelStyle(.iconOnly)
+                .font(.system(size: Self.controlSize - 2))
+                .frame(width: Self.controlSize, height: Self.controlSize)
+                .disabled(!canSend)
         }
-        .padding(10)
-        .background(.bar)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .onAppear { if focusesOnAppear { isFocused = true } }
     }
 
     private func send() {
@@ -199,10 +365,10 @@ private struct PromptBar: View {
                           let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.8) else { continue }
                     paths.append(try await model.upload(jpeg, name: "photo.jpg"))
                 }
-                await model.sendPrompt(taskID: taskID, text: text, attachments: paths)
-                // ponytail: a command that fails after this clears the field; keep the draft if that loses work.
-                text = ""
-                pictures = []
+                if await onSend(text, paths) {
+                    text = ""
+                    pictures = []
+                }
             } catch {
                 model.lastError = "Couldn't send the pictures to your Mac: \(error.localizedDescription)"
             }
@@ -212,7 +378,7 @@ private struct PromptBar: View {
 
 /// The prompts in order, each with what the agent did about it.
 private struct Conversation: View {
-    let task: TaskItem
+    let prompts: [Prompt]
     let turns: [TranscriptTurn]
 
     var body: some View {
@@ -220,13 +386,13 @@ private struct Conversation: View {
         ForEach(turns) { turn in
             VStack(alignment: .leading, spacing: 12) {
                 if let note = turn.note { Label(note, systemImage: "info.circle").font(.footnote).foregroundStyle(.secondary) }
-                ForEach(task.prompts.filter { turn.promptIDs.contains($0.id) }) { PromptBubble(prompt: $0) }
+                ForEach(prompts.filter { turn.promptIDs.contains($0.id) }) { PromptBubble(prompt: $0) }
                 if let text = turn.text { Text(text).font(.footnote).foregroundStyle(.secondary).lineLimit(3) }
                 ForEach(turn.sections) { SectionView(section: $0) }
             }
         }
         // Not reached the agent yet, or from a log that doesn't say.
-        ForEach(task.prompts.filter { !answered.contains($0.id) }) { PromptBubble(prompt: $0).opacity($0.isPending ? 0.6 : 1) }
+        ForEach(prompts.filter { !answered.contains($0.id) }) { PromptBubble(prompt: $0).opacity($0.isPending ? 0.6 : 1) }
     }
 }
 
@@ -242,7 +408,7 @@ private struct PromptBubble: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary, in: .rect(cornerRadius: 12))
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 12)) // What a group box has here.
     }
 }
 

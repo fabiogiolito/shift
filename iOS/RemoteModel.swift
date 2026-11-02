@@ -185,13 +185,38 @@ final class RemoteModel {
         return result
     }
 
-    func sendPrompt(taskID: Int, text: String, attachments: [String] = []) async {
-        await perform(.sendPrompt(taskID: taskID, text: text, attachments: attachments))
+    /// The new task, with the project's default agent. nil if it couldn't be started, having said why.
+    func createTask(projectID: UUID, prompt: String, attachments: [String]) async -> Int? {
+        guard case .taskID(let id)? = await perform(.createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: nil)) else { return nil }
+        if id == nil { lastError = "Your Mac couldn't start this task." }
+        return id
+    }
+
+    /// False if it didn't get through.
+    @discardableResult
+    func sendPrompt(taskID: Int, text: String, attachments: [String] = []) async -> Bool {
+        await perform(.sendPrompt(taskID: taskID, text: text, attachments: attachments)) != nil
     }
 
     func answerApproval(taskID: Int, allow: Bool) async { await perform(.answerApproval(taskID: taskID, allow: allow)) }
     func stop(taskID: Int) async { await perform(.stop(taskID: taskID)) }
     func resume(taskID: Int) async { await perform(.resume(taskID: taskID)) }
+
+    /// False if it didn't get through.
+    @discardableResult
+    func sendChat(projectID: UUID, text: String, attachments: [String] = []) async -> Bool {
+        await perform(.sendChat(projectID: projectID, text: text, attachments: attachments)) != nil
+    }
+
+    func answerChatApproval(projectID: UUID, allow: Bool) async { await perform(.answerChatApproval(projectID: projectID, allow: allow)) }
+    func stopChat(projectID: UUID) async { await perform(.stopChat(projectID: projectID)) }
+    func newChat(projectID: UUID) async { await perform(.newChat(projectID: projectID)) }
+
+    /// The project's base branch as this phone reaches it, once its server answers on the Mac.
+    func baseURL(projectID: UUID) async -> URL? {
+        guard case .url(let url?)? = await perform(.baseServerURL(projectID: projectID)), let port = url.port else { return nil }
+        return pairing?.preview(port: port)
+    }
 
     /// Saves an image on the Mac. Its path there goes in a prompt's `attachments`.
     func upload(_ data: Data, name: String) async throws -> String {
@@ -210,6 +235,7 @@ final class RemoteModel {
 
     func tasks(in projectID: UUID) -> [TaskItem] { state.tasks.filter { $0.projectID == projectID } }
     func task(_ id: Int) -> TaskItem? { state.tasks.first { $0.id == id } }
+    func chat(projectID: UUID) -> ProjectChat? { state.chats.first { $0.projectID == projectID } }
 
     /// The task's dev server, while it runs.
     func previewURL(_ task: TaskItem) -> URL? {

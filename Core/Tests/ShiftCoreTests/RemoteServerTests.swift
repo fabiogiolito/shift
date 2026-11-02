@@ -48,7 +48,7 @@ final class WireTests: XCTestCase {
             .answerApproval(taskID: 1, allow: false), .stop(taskID: 1), .resume(taskID: 1), .rename(taskID: 1, title: "t"), .merge(taskID: 1),
             .delete(taskID: 1), .resolveConflict(taskID: 1), .conflictedFiles(taskID: 1), .pushBranch(taskID: 1), .pullRequestURL(taskID: 1),
             .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1, target: id), .buildLog(taskID: 1, target: id),
-            .sendChat(projectID: id, text: "t", attachments: []), .answerChatApproval(projectID: id, allow: true), .stopChat(projectID: id), .newChat(projectID: id),
+            .sendChat(projectID: id, text: "t", attachments: []), .answerChatApproval(projectID: id, allow: true), .stopChat(projectID: id), .newChat(projectID: id), .baseServerURL(projectID: id),
         ]
         commands.forEach { roundTrip(ClientMessage.command(CommandRequest(id: 1, command: $0))) }
         roundTrip(ClientMessage.hello(version: 1, device: "iPhone"))
@@ -308,6 +308,15 @@ final class RemoteServerTests: XCTestCase {
     }
 
     // MARK: Command dispatch
+
+    func testBaseServerURLSaysWhyItCouldNotStart() async {
+        var gone = project!
+        gone.repoPath = "/nonexistent/spot"
+        model.updateProject(gone)
+        let reply = await server.perform(.baseServerURL(projectID: project.id))
+        XCTAssertNil(reply.0)
+        XCTAssertEqual(reply.1, "The folder for Spot no longer exists: /nonexistent/spot")
+    }
 
     func testCommandsReachTheModel() async throws {
         let created = await server.perform(.createTask(projectID: project.id, prompt: "Build it", attachments: [], agent: nil))
