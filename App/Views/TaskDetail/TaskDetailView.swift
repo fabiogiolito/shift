@@ -60,6 +60,13 @@ struct TaskDetailView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             header(task, project)
+                            if task.status == .working {
+                                HStack(spacing: 8) {
+                                    ProgressView().controlSize(.small)
+                                    Text(task.activity ?? (task.isResolvingConflict ? "Resolving conflict…" : "Working…"))
+                                }
+                                .foregroundStyle(.secondary)
+                            }
                             if task.status == .completed { changesSection }
                             if !task.prompts.isEmpty { promptList(task) }
                         }
@@ -182,7 +189,7 @@ struct TaskDetailView: View {
     }
 
     /// The same structure for every status, directly on the window background: the task's own text,
-    /// a status line, the action row, then what the agent is doing. What the task needs from the user is in the bottom bar.
+    /// a status line, then the action row. What the task needs from the user is in the bottom bar.
     private func header(_ task: TaskItem, _ project: Project) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             if let headline = headline(task) {
@@ -190,13 +197,6 @@ struct TaskDetailView: View {
             }
             statusLine(task, project)
             actions(task, project)
-            if task.status == .working {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(task.activity ?? (task.isResolvingConflict ? "Resolving conflict…" : "Working…"))
-                }
-                .foregroundStyle(.secondary)
-            }
         }
     }
 
