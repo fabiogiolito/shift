@@ -33,7 +33,6 @@ struct TaskDetailView: View {
     /// Whether the server button opens the tailnet link instead of localhost, when Tailscale is on.
     @AppStorage("opensTailnet") private var opensTailnet = false
     /// The "Copied" popover on the branch button.
-    @State private var branchCopied = false
     @State private var output: Output?
     /// For capping the response panel's height.
     @State private var windowHeight: CGFloat = 0
@@ -172,36 +171,9 @@ struct TaskDetailView: View {
         ToolbarItem { Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset) }
             .sharedBackgroundVisibility(.hidden)
         ToolbarSpacer(.flexible)
-        ToolbarItem { branchButton(task) }
+        ToolbarItem { BranchButton(branch: task.branch, help: "This task's branch. Click to copy it.") }
             .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .primaryAction) { moreMenu(task, project) }
-    }
-
-    /// The task's branch: click to copy its name.
-    private func branchButton(_ task: TaskItem) -> some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(task.branch, forType: .string)
-            branchCopied = true
-        } label: {
-            // Not a Label: its icon column can't be tightened.
-            HStack(spacing: 3) {
-                Image(systemName: "arrow.triangle.branch").imageScale(.small)
-                Text(task.branch).lineLimit(1).truncationMode(.middle)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.accessoryBar)
-        .help("This task's branch. Click to copy it.")
-        .popover(isPresented: $branchCopied, arrowEdge: .bottom) {
-            Text("Copied").padding(.horizontal, 10).padding(.vertical, 6)
-        }
-        .task(id: branchCopied) {
-            guard branchCopied else { return }
-            try? await Task.sleep(for: .seconds(1.2))
-            if !Task.isCancelled { branchCopied = false }
-        }
     }
 
     /// The same structure for every status, directly on the window background: the task's own text,
