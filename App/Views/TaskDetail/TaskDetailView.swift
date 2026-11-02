@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 import ShiftCore
 
@@ -40,6 +41,8 @@ struct TaskDetailView: View {
     @State private var turns: [TranscriptTurn] = []
     /// The prompts showing what the agent did about them.
     @State private var openPrompts: Set<Prompt.ID> = []
+    /// The screenshot open in Quick Look.
+    @State private var screenshotPreview: URL?
 
     private let apps = ExternalApps()
 
@@ -68,6 +71,7 @@ struct TaskDetailView: View {
                                 }
                                 .foregroundStyle(.secondary)
                             }
+                            screenshotsRow(task)
                             if task.status == .completed { changesSection }
                             if !task.prompts.isEmpty { promptList(task) }
                         }
@@ -436,6 +440,33 @@ struct TaskDetailView: View {
         if let remote = model.pushStates[project.id]?.remote {
             Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
                 .help("Push \(task.branch) to \(remote)")
+        }
+    }
+
+    /// Most recent first. Quick Look's arrow keys walk through them all, to compare.
+    @ViewBuilder private func screenshotsRow(_ task: TaskItem) -> some View {
+        let shots = (task.screenshots ?? []).reversed().map { $0 }
+        if !shots.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(shots) { shot in
+                        Button { screenshotPreview = shot.url } label: {
+                            VStack(spacing: 4) {
+                                AsyncImage(url: shot.url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                                    .frame(width: 96, height: 60, alignment: .top)
+                                    .clipShape(.rect(cornerRadius: 8))
+                                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
+                                Text(shot.isBefore ? "Before" : "After").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help("\(shot.page), \(shot.date.formatted(date: .abbreviated, time: .shortened))")
+                    }
+                }
+            }
+            .scrollIndicators(.never)
+            .scrollBounceBehavior(.basedOnSize)
+            .quickLookPreview($screenshotPreview, in: shots.map(\.url))
         }
     }
 

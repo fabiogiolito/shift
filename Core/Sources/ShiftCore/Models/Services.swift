@@ -92,6 +92,9 @@ public enum AgentEvent: Equatable, Sendable {
     case activity(String)
     /// The agent's own words for what the task will accomplish. Either may be missing.
     case described(title: String?, description: String?)
+    /// Screenshots are on: the page this turn's change shows on, nil if nothing visible changes. The first one
+    /// comes before the agent's work; a later one replaces it.
+    case screenshotPage(String?)
     /// Raw output for the debugging view only.
     case rawOutput(String)
     /// Manual permissions: the agent waits to be allowed to do `summary`, one short human line such as
@@ -158,10 +161,13 @@ public struct AgentRequest: Sendable {
     public var chat: Bool
     /// The project chat: what it's told about the project's tasks right now, after its instructions.
     public var chatContext: String
+    /// The agent must say which page shows this turn's change (`.screenshotPage`).
+    public var screenshots: Bool
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
-                description: String? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false, chatContext: String = "") {
+                description: String? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false,
+                chatContext: String = "", screenshots: Bool = false) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -173,6 +179,7 @@ public struct AgentRequest: Sendable {
         self.approvals = approvals
         self.chat = chat
         self.chatContext = chatContext
+        self.screenshots = screenshots
     }
 }
 
@@ -242,6 +249,11 @@ public protocol Notifying: Sendable {
     func setBadge(count: Int) async
 }
 
+public protocol Screenshotting: Sendable {
+    /// Saves a PNG of the page at `url` to `file`, making its folder if needed. False if the page did not load.
+    func capture(url: URL, to file: URL) async -> Bool
+}
+
 // MARK: - Persistence
 
 public struct AppState: Codable, Equatable, Sendable {
@@ -295,9 +307,12 @@ public struct Services: Sendable {
     public var store: StateStoring
     /// Shares task servers on the tailnet. Nil: not shared (tests, or nothing to share with).
     public var tailscale: Tailscale?
+    /// Nil: no screenshots, whatever the project says.
+    public var screenshots: Screenshotting?
 
     public init(git: GitServicing, agents: [AgentKind: AgentAdapter], servers: ServerManaging,
-                ports: PortAllocating, notifier: Notifying, store: StateStoring, tailscale: Tailscale? = nil) {
+                ports: PortAllocating, notifier: Notifying, store: StateStoring, tailscale: Tailscale? = nil,
+                screenshots: Screenshotting? = nil) {
         self.git = git
         self.agents = agents
         self.servers = servers
@@ -305,6 +320,7 @@ public struct Services: Sendable {
         self.notifier = notifier
         self.store = store
         self.tailscale = tailscale
+        self.screenshots = screenshots
     }
 }
 
@@ -322,6 +338,7 @@ public enum ShiftPaths {
     public static let state = root.appendingPathComponent("state.json")
     public static let logs = root.appendingPathComponent("logs")
     public static let worktrees = root.appendingPathComponent("worktrees")
+    public static let screenshots = root.appendingPathComponent("screenshots")
     /// SHIFT_HOME of a task's build when Shift opens it, so a build of Shift keeps its own data.
     // ponytail: never cleaned up; delete it with the task if builds of Shift pile up.
     public static func build(taskID: Int) -> URL { root.appendingPathComponent("builds/\(taskID)") }

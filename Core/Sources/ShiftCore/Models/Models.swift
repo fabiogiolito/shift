@@ -157,13 +157,15 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var models: [AgentKind: String]
     /// Push each task's branch to the remote when the task completes.
     public var pushTaskBranches: Bool
+    /// Keep screenshots of what each prompt changes. Not for apps: they have no page to load.
+    public var takesScreenshots: Bool
     /// A finished task's main button opens a pull request, and merging moves to its dropdown.
     public var opensPullRequests: Bool
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
-                pushTaskBranches: Bool = false, opensPullRequests: Bool = false) {
+                pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -176,6 +178,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.permissions = permissions
         self.models = models
         self.pushTaskBranches = pushTaskBranches
+        self.takesScreenshots = takesScreenshots
         self.opensPullRequests = opensPullRequests
     }
 
@@ -193,6 +196,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
         models = try values.decodeIfPresent([AgentKind: String].self, forKey: .models) ?? [:]
         pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
+        takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!buildCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
@@ -254,6 +258,26 @@ public struct Prompt: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// A picture of the task's server, taken before its first change or after a prompt changed something.
+public struct TaskScreenshot: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID
+    public var path: String
+    public var isBefore: Bool
+    /// The page it shows, e.g. `/pricing`.
+    public var page: String
+    public var date: Date
+
+    public init(id: UUID = UUID(), path: String, isBefore: Bool, page: String, date: Date = Date()) {
+        self.id = id
+        self.path = path
+        self.isBefore = isBefore
+        self.page = page
+        self.date = date
+    }
+
+    public var url: URL { URL(fileURLWithPath: path) }
+}
+
 /// A piece of delegated work. Outlives any single agent invocation.
 /// Named TaskItem to avoid clashing with Swift's `Task`.
 public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
@@ -294,6 +318,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var workingSince: Date?
     public var mergedAt: Date?
+    /// Oldest first. Optional so state saved by earlier builds still decodes.
+    public var screenshots: [TaskScreenshot]?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
                 agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,
