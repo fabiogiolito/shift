@@ -35,6 +35,10 @@ public final class AppModel {
         }
     }
 
+    /// Each task's latest pull request, as of the last check. No entry: none, or not known (no `gh`).
+    public private(set) var pullRequests: [TaskItem.ID: PullRequest] = [:]
+    private var refreshingPullRequests: Set<Project.ID> = []
+
     /// Web projects: the port of the dev server running on the project's own checkout, its base branch.
     /// No entry: not started yet.
     public private(set) var basePorts: [Project.ID: Int] = [:]
@@ -244,6 +248,10 @@ public final class AppModel {
         changed()
         Task { [weak self] in
             while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
+        }
+        Task { [weak self] in
+            await self?.refreshAllPullRequests()
+            while (try? await Task.sleep(for: .seconds(60))) != nil, let self { await self.refreshAllPullRequests() }
         }
     }
 
@@ -553,12 +561,18 @@ public final class AppModel {
         await refreshMergeability()
     }
 
-    /// Pushes the task's branch to the project's remote. Never forced.
+    /// Commits what the task has and pushes its branch to the project's remote, which updates its open
+    /// pull request. Never forced.
     public func pushBranch(taskID: TaskItem.ID) async {
         guard let services, let task = task(taskID), let project = project(task.projectID),
               let remote = await services.git.remote(repo: project.repoURL, branch: task.branch) else { return }
         do {
+            if FileManager.default.fileExists(atPath: task.worktreePath) {
+                try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
+            }
             try await services.git.push(repo: project.repoURL, branch: task.branch, remote: remote)
+            // GitHub may take a moment to show the new head; the next check has it.
+            if pullRequests[taskID]?.state == .open { pullRequests[taskID]?.hasNewWork = false }
         } catch {
             lastError = "Could not push \(task.title): \(Self.firstLine(Self.describe(error)))"
         }
@@ -590,14 +604,84 @@ public final class AppModel {
     /// GitHub's compare page for `branch` into `base`, from an https or ssh remote URL. Nil for other hosts.
     /// An empty `body` is left out so the repo's pull request template still applies.
     static func pullRequestURL(remoteURL: String, branch: String, base: String, title: String, body: String) -> URL? {
-        guard let match = remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#) else { return nil }
+        guard let repo = githubRepo(remoteURL: remoteURL) else { return nil }
         // `+` must be escaped too: GitHub reads a bare one in a query as a space.
         let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
         func encoded(_ text: String) -> String { text.addingPercentEncoding(withAllowedCharacters: allowed) ?? "" }
-        let page = "https://github.com/\(match.1)/compare/\(base)...\(branch)?expand=1&title=\(encoded(title))"
+        let page = "https://github.com/\(repo)/compare/\(base)...\(branch)?expand=1&title=\(encoded(title))"
         let filled = "\(page)&body=\(encoded(body))"
         // ponytail: GitHub rejects very long URLs, so a huge body is dropped rather than truncated mid-sentence.
         return URL(string: body.isEmpty || filled.count > 6000 ? page : filled)
+    }
+
+    /// "owner/repo" from an https or ssh remote URL. Nil for other hosts.
+    static func githubRepo(remoteURL: String) -> String? {
+        remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#).map { String($0.1) }
+    }
+
+    private func refreshAllPullRequests() async {
+        for id in projects.map(\.id) { await refreshPullRequests(projectID: id) }
+    }
+
+    /// Reads the pull requests of the project's tasks from GitHub. A task whose pull request was merged
+    /// is done, unless it has work that was not in it: that stays, and can go into a new pull request.
+    public func refreshPullRequests(projectID: Project.ID) async {
+        guard let services, let project = project(projectID), !refreshingPullRequests.contains(projectID),
+              tasks(in: projectID).contains(where: { $0.status != .merged }),
+              let remote = await services.git.remote(repo: project.repoURL, branch: project.baseBranch),
+              let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
+              let github = Self.githubRepo(remoteURL: remoteURL) else { return }
+        refreshingPullRequests.insert(projectID)
+        defer { refreshingPullRequests.remove(projectID) }
+        // No `gh`, signed out or offline: what is known stays.
+        guard let found = try? await services.git.pullRequests(repo: project.repoURL, github: github) else { return }
+
+        var newlyMergedBases: Set<String> = []
+        for id in tasks(in: projectID).map(\.id) {
+            guard let task = task(id), task.status != .merged else { continue }
+            guard var pullRequest = found[task.branch],
+                  await services.git.branchExists(repo: project.repoURL, branch: task.branch) else {
+                pullRequests[id] = nil
+                continue
+            }
+            pullRequest.hasNewWork = await hasWork(id, outside: pullRequest, remote: remote)
+            if pullRequest.state == .merged, pullRequests[id]?.state != .merged { newlyMergedBases.insert(task.base(in: project)) }
+            pullRequests[id] = pullRequest
+            if pullRequest.state == .merged, !pullRequest.hasNewWork, isSettled(id) {
+                busy.insert(id)
+                await cleanUp(id)
+                markMerged(id)
+                busy.remove(id)
+            }
+        }
+        guard !newlyMergedBases.isEmpty else { return }
+        // Merged on GitHub: new tasks must start from it, and other tasks must be checked against it.
+        // Not moved if the local base has its own commits or the move would overwrite uncommitted changes.
+        for base in newlyMergedBases { try? await services.git.fastForward(repo: project.repoURL, branch: base, remote: remote) }
+        await refreshPushState(projectID: projectID)
+        await refreshMergeability()
+    }
+
+    /// Finished, with nothing happening to it.
+    private func isSettled(_ id: TaskItem.ID) -> Bool {
+        guard let task = task(id), task.status == .completed || task.status == .conflict else { return false }
+        return runs[id] == nil && !busy.contains(id)
+    }
+
+    /// Whether the task has anything the pull request does not. Unknown counts as yes: a yes keeps the
+    /// work, a wrong no deletes it. Local commits behind the pull request (GitHub's "Update branch") are not work.
+    private func hasWork(_ id: TaskItem.ID, outside pullRequest: PullRequest, remote: String) async -> Bool {
+        guard let services, let task = task(id), let project = project(task.projectID) else { return true }
+        if isSettled(id), FileManager.default.fileExists(atPath: task.worktreePath) {
+            do { try await services.git.commitAll(worktree: task.worktreeURL, message: task.title) } catch { return true }
+        }
+        func isContained() async -> Bool? {
+            try? await services.git.isContained(repo: project.repoURL, branch: task.branch, in: pullRequest.headRefOid)
+        }
+        if let contained = await isContained() { return !contained }
+        // The head commit is not here yet.
+        try? await services.git.fetchPullRequest(repo: project.repoURL, number: pullRequest.number, remote: remote)
+        return await isContained() != true
     }
 
     /// The project's base branch in the browser: its base server, started again first if it stopped, once it
@@ -1574,8 +1658,12 @@ public final class AppModel {
         enqueue { await services.notifier.notify(title: title, body: body, taskID: id) }
         // For the countdown to the reset: the last reading is likely from before the limit was reached.
         if self.task(id)?.isUsageLimited == true { Task { await refreshUsage(task.agent) } }
-        if settled.status == .completed, project(task.projectID)?.pushTaskBranches == true {
-            Task { await pushBranch(taskID: id) }
+        let pushes = settled.status == .completed && project(task.projectID)?.pushTaskBranches == true
+        if pushes || pullRequests[id] != nil {
+            Task {
+                if pushes { await pushBranch(taskID: id) }
+                await refreshPullRequests(projectID: task.projectID)
+            }
         }
     }
 
@@ -1633,6 +1721,7 @@ public final class AppModel {
     }
 
     private func markMerged(_ id: TaskItem.ID) {
+        pullRequests[id] = nil
         update(id) {
             Self.apply(Settled(status: .merged), to: &$0)
             $0.port = nil

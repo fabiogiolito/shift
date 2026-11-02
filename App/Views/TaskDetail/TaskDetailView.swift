@@ -217,6 +217,7 @@ struct TaskDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Its changes conflict with changes made to \(task.base(in: project)) since it started\(conflicts.isEmpty ? "." : ", in:")")
                 ForEach(conflicts, id: \.self) { Text($0).monospaced().textSelection(.enabled) }
+                if let line = pullRequestLine { Text(line) }
             }
             .foregroundStyle(.secondary)
         case .merged:
@@ -226,7 +227,17 @@ struct TaskDetailView: View {
                  : "Merged into \(base). The project folder has \(checkedOut ?? "") checked out, so it doesn't show there.")
                 .foregroundStyle(.secondary)
         default:
-            EmptyView()
+            if let line = pullRequestLine { Text(line).foregroundStyle(.secondary) }
+        }
+    }
+
+    private var pullRequestLine: String? {
+        guard let pullRequest = model.pullRequests[taskID] else { return nil }
+        let name = "Pull request #\(pullRequest.number)"
+        return switch pullRequest.state {
+        case .open: pullRequest.hasNewWork ? "\(name) is open. The latest changes here aren't in it yet." : "\(name) is open."
+        case .merged: "\(name) was merged without the latest changes here. They are still in this task."
+        case .closed: "\(name) was closed without merging. This task's changes are still here."
         }
     }
 
@@ -378,22 +389,38 @@ struct TaskDetailView: View {
     }
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
+        let pullRequest = model.pullRequests[taskID]
         if task.status == .completed {
-            // Without a remote there is nowhere to open a pull request: merging stays the main action.
-            let opensPR = project.opensPullRequests && model.pushStates[project.id]?.remote != nil
             let mergeTitle = "Merge into \(task.base(in: project))"
-            SplitButton(prominent: true, action: opensPR ? openPullRequest : merge) {
-                Text(opensPR ? "Open Pull Request" : mergeTitle)
-            } menu: {
-                Button(opensPR ? mergeTitle : "Open Pull Request", action: opensPR ? merge : openPullRequest)
-                Divider()
-                branchItems(task, project)
+            if let pullRequest, pullRequest.state == .open {
+                let view = { apps.openInBrowser(pullRequest.url) }
+                SplitButton(prominent: true, action: pullRequest.hasNewWork ? pushToPullRequest : view) {
+                    Text(pullRequest.hasNewWork ? "Push to Pull Request" : "View Pull Request")
+                } menu: {
+                    if pullRequest.hasNewWork { Button("View Pull Request", action: view) }
+                    Button(mergeTitle, action: merge)
+                    Divider()
+                    branchItems(task, project)
+                }
+                .disabled(isMerging)
+            } else {
+                // Without a remote there is nowhere to open a pull request: merging stays the main action.
+                let opensPR = (project.opensPullRequests || pullRequest != nil) && model.pushStates[project.id]?.remote != nil
+                SplitButton(prominent: true, action: opensPR ? openPullRequest : merge) {
+                    Text(opensPR ? "Open Pull Request" : mergeTitle)
+                } menu: {
+                    Button(opensPR ? mergeTitle : "Open Pull Request", action: opensPR ? merge : openPullRequest)
+                    if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
+                    Divider()
+                    branchItems(task, project)
+                }
+                .disabled(isMerging)
             }
-            .disabled(isMerging)
         } else if task.status == .conflict {
             SplitButton(prominent: true, tint: TaskStatus.conflict.color) { model.resolveConflict(taskID: taskID) } label: {
                 Text("Resolve")
             } menu: {
+                if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
                 branchItems(task, project)
             }
         } else if task.status == .working || task.approvalRequest != nil {
@@ -413,9 +440,19 @@ struct TaskDetailView: View {
     private func openPullRequest() {
         isMerging = true
         Task {
+            defer { isMerging = false }
+            // Its squashed commit is on the base now: without it, the new pull request repeats all of that work.
+            if model.pullRequests[taskID]?.state == .merged {
+                syncConflicts = await model.syncBase(taskID: taskID)
+                guard syncConflicts.isEmpty else { return }
+            }
             if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
-            isMerging = false
         }
+    }
+
+    private func pushToPullRequest() {
+        isMerging = true
+        Task { await model.pushBranch(taskID: taskID); isMerging = false }
     }
 
     /// What can be done with the task's branch, in the dropdown of its main action.

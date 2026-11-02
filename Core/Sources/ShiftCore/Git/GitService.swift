@@ -391,6 +391,43 @@ public struct GitService: GitServicing {
         if let failure { throw await pushError(failure, repo: repo, remote: remote, branch: branch) }
     }
 
+    // MARK: - Pull requests
+
+    public func pullRequests(repo: URL, github: String) async throws -> [String: PullRequest] {
+        // ponytail: the newest 200 of the repo's pull requests; a task's older than that shows as having none.
+        let command = (["gh", "pr", "list", "-R", github, "--state", "all", "--limit", "200",
+                        "--json", "number,url,state,headRefName,headRefOid"]).map(Self.quoted).joined(separator: " ")
+        let (result, _) = try await shell(command, repo: repo, env: ["GH_PROMPT_DISABLED": "1", "LC_ALL": "C"])
+        guard result.exitCode == 0 else { throw GitError(message: result.output) }
+        return try Self.parsePullRequests(result.output)
+    }
+
+    /// `gh`'s JSON (newest first) by head branch. The login shell's own output may come before it.
+    static func parsePullRequests(_ output: String) throws -> [String: PullRequest] {
+        let json = output.components(separatedBy: "\n").last { $0.hasPrefix("[") } ?? "[]"
+        let list = try JSONDecoder().decode([PullRequest].self, from: Data(json.utf8))
+        return Dictionary(list.map { ($0.headRefName, $0) }, uniquingKeysWith: { newest, _ in newest })
+    }
+
+    public func fetchPullRequest(repo: URL, number: Int, remote: String) async throws {
+        if let failure = try await gitOverNetwork(["fetch", remote, "refs/pull/\(number)/head"], repo: repo, remote: remote) {
+            throw GitError(message: failure)
+        }
+    }
+
+    public func fastForward(repo: URL, branch: String, remote: String) async throws {
+        let tracking = "refs/remotes/\(remote)/\(branch)"
+        if let failure = try await gitOverNetwork(["fetch", remote, "+refs/heads/\(branch):\(tracking)"], repo: repo, remote: remote) {
+            throw GitError(message: failure)
+        }
+        guard try await isAncestor(repo: repo, branch: branch, of: tracking) else { return }
+        if let checkout = try await worktree(of: branch, repo: repo) {
+            try await git(["merge", "--ff-only", "--no-stat", tracking], in: checkout)
+        } else {
+            try await git(["update-ref", "refs/heads/\(branch)", tracking], in: repo)
+        }
+    }
+
     /// Fetches `branch` and merges it in, never rewriting local commits. Throws if they conflict.
     private func bringInRemoteChanges(repo: URL, branch: String, remote: String) async throws {
         let tracking = "refs/remotes/\(remote)/\(branch)"
@@ -412,12 +449,20 @@ public struct GitService: GitServicing {
     /// Runs a git command that talks to `remote`. Returns its output if it failed, nil if it worked.
     private func gitOverNetwork(_ gitArgs: [String], repo: URL, remote: String) async throws -> String? {
         let args = ["env", "-u", "GIT_DIR", "-u", "GIT_WORK_TREE", "-u", "GIT_INDEX_FILE", "/usr/bin/git"] + gitArgs
-        let command = args.map { "'" + $0.replacingOccurrences(of: "'", with: "'\\''") + "'" }.joined(separator: " ")
+        let command = args.map(Self.quoted).joined(separator: " ")
         // Through the login shell like the agents: credential helpers and SSH agents set up there (gh, a
         // Homebrew PATH, a custom SSH_AUTH_SOCK) must work from the app too. Nothing may ask for a password:
         // an empty GIT_ASKPASS also overrides core.askPass and SSH_ASKPASS.
         let env = ["GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "", "SSH_ASKPASS": "", "SSH_ASKPASS_REQUIRE": "never",
                    "LC_ALL": "C"]
+        let (result, timedOut) = try await shell(command, repo: repo, env: env)
+        guard result.exitCode != 0 else { return nil }
+        if timedOut { throw GitError(message: "Pushing to \(remote) took too long and was stopped. Try again.") }
+        return result.output
+    }
+
+    /// Runs a command through the login shell, stopping it after `pushTimeout`.
+    private func shell(_ command: String, repo: URL, env: [String: String]) async throws -> (CommandResult, timedOut: Bool) {
         let work = Task { try await runShellCommand(command, directory: repo, environment: env) }
         let timeout = pushTimeout
         let timer = Task {
@@ -426,9 +471,11 @@ public struct GitService: GitServicing {
         }
         defer { timer.cancel() }
         let result = try await work.value
-        guard result.exitCode != 0 else { return nil }
-        if work.isCancelled { throw GitError(message: "Pushing to \(remote) took too long and was stopped. Try again.") }
-        return result.output
+        return (result, work.isCancelled)
+    }
+
+    private static func quoted(_ argument: String) -> String {
+        "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private func remoteHasBranch(repo: URL, branch: String, remote: String) async -> Bool {
