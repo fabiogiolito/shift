@@ -864,6 +864,7 @@ public final class AppModel {
         defer { busy.remove(taskID) }
         // Resources first, the record last: if the app dies halfway the task is still there to retry.
         if task.status != .merged { await cleanUp(taskID) }
+        for shot in self.task(taskID)?.screenshots ?? [] { try? FileManager.default.removeItem(at: shot.url) }
         tasks.removeAll { $0.id == taskID }
         changed()
         await services.store.deleteLog(taskID: taskID)
@@ -1199,7 +1200,7 @@ public final class AppModel {
                     if case .blocked(let reason, _) = outcome { failure = reason }
                     break events
                 case .approvalRequested(let id, let summary): chatApprovals[projectID, default: []].append((id, summary))
-                case .activity, .described: break
+                case .activity, .described, .screenshotPage: break
                 }
                 guard isChatCurrent(projectID, token) else { return }
                 deliverChatPending(projectID)
@@ -1411,6 +1412,8 @@ public final class AppModel {
         guard let services else { return }
         var prompt = prompt, promptIDs = promptIDs
         while true {
+            var shots = await screenshotTurn(id)
+            try check(id, token)
             let adapter = try adapter(for: id)
             guard let task = task(id) else { throw CancellationError() }
             // Without a session there is nothing to resume, so the agent needs the whole story.
@@ -1427,7 +1430,7 @@ public final class AppModel {
                                        model: project(task.projectID)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        description: task.description,
-                                       approvals: channel)
+                                       approvals: channel, screenshots: shots != nil)
             approvalChannels[id] = channel
             await services.store.appendLog(taskID: id, text: RunMarker.line(
                 agent: adapter.kind, promptIDs: delivered, text: delivered.isEmpty ? prompt : nil))
@@ -1454,6 +1457,13 @@ public final class AppModel {
                             $0.description = description ?? $0.description
                         }
                     }
+                case .screenshotPage(let page):
+                    shots?.page = page
+                    // Not awaited: the agent may be waiting for an answer to an approval meanwhile.
+                    if shots?.wantsBefore == true, let page, let diff = shots?.diff {
+                        shots?.before = Task { await takeBeforeScreenshot(id, page: page, unchangedFrom: diff) }
+                    }
+                    shots?.wantsBefore = false
                 case .rawOutput(let output): await services.store.appendLog(taskID: id, text: output + "\n")
                 case .approvalRequested(let approvalID, let summary):
                     pendingApprovals[id, default: []].append((approvalID, summary))
@@ -1475,6 +1485,10 @@ public final class AppModel {
                 await startServer(id)
                 try check(id, token)
             }
+            if let shots {
+                await takeAfterScreenshot(id, shots)
+                try check(id, token)
+            }
 
             // From here to the end of the iteration there is no await: a prompt sent now either
             // is pending already, or finds the task settled and starts a run of its own.
@@ -1488,6 +1502,82 @@ public final class AppModel {
             finish(id, settled)
             return
         }
+    }
+
+    // MARK: - Screenshots
+
+    /// What one agent turn needs to know to take its screenshots.
+    private struct ScreenshotTurn {
+        /// The task's changes when the turn started: a prompt that leaves them as they are gets no screenshot.
+        let diff: [FileDiff]
+        /// Nothing has changed yet, so the next page named can still be shot as it was.
+        var wantsBefore: Bool
+        /// The home page unless the agent names another. Nil: nothing visible changes.
+        var page: String? = "/"
+        var before: Task<Void, Never>?
+    }
+
+    /// Nil if this turn takes no screenshots. Conflict resolutions are Shift's own prompts, not the user's.
+    private func screenshotTurn(_ id: TaskItem.ID) async -> ScreenshotTurn? {
+        guard let services, services.screenshots != nil, let task = task(id), let project = project(task.projectID),
+              project.takesScreenshots, !project.isApp, task.port != nil, !task.isResolvingConflict,
+              let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)) else { return nil }
+        let wantsBefore = diff.isEmpty && task.screenshots?.contains(where: \.isBefore) != true
+        // The agent starts as soon as this returns, and the "before" has to beat its first edit.
+        if wantsBefore { _ = await serverAnswers(id) }
+        return ScreenshotTurn(diff: diff, wantsBefore: wantsBefore)
+    }
+
+    /// ponytail: checked only once, before the page loads; an edit during the seconds it takes can end up in the
+    /// picture. Checking after too would drop good ones: dev servers rewrite tracked files on first compile.
+    private func takeBeforeScreenshot(_ id: TaskItem.ID, page: String, unchangedFrom diff: [FileDiff]) async {
+        guard let services, let task = task(id), let project = project(task.projectID),
+              (try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project))) == diff else { return }
+        await takeScreenshot(id, page: page, isBefore: true)
+    }
+
+    private func takeAfterScreenshot(_ id: TaskItem.ID, _ shots: ScreenshotTurn) async {
+        await shots.before?.value
+        guard let services, let page = shots.page, let task = task(id), let project = project(task.projectID),
+              let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)),
+              diff != shots.diff else { return }
+        update(id) { $0.activity = "Taking a screenshot…" }
+        await takeScreenshot(id, page: page, isBefore: false)
+    }
+
+    private func takeScreenshot(_ id: TaskItem.ID, page: String, isBefore: Bool) async {
+        guard let services, let screenshots = services.screenshots, let server = task(id)?.serverURL else { return }
+        let shot = TaskScreenshot(path: ShiftPaths.screenshots.appendingPathComponent("\(id)-\(UUID().uuidString).png").path,
+                                  isBefore: isBefore, page: page)
+        let url = Self.screenshotURL(page: page, server: server)
+        guard await serverAnswers(id), await screenshots.capture(url: url, to: shot.url) else {
+            await services.store.appendLog(taskID: id, text: "Could not take a screenshot of \(url.absoluteString)\n")
+            return
+        }
+        // Deleted meanwhile: nothing will ever clean this one up.
+        guard task(id) != nil else {
+            try? FileManager.default.removeItem(at: shot.url)
+            return
+        }
+        update(id) { $0.screenshots = ($0.screenshots ?? []) + [shot] }
+    }
+
+    /// `page` on the task's server. The agent wrote it, so anything that leads elsewhere means the home page.
+    static func screenshotURL(page: String, server: URL) -> URL {
+        guard let url = URL(string: page, relativeTo: server)?.absoluteURL,
+              url.host == server.host, url.port == server.port, url.scheme == server.scheme else { return server }
+        return url
+    }
+
+    /// Waits up to 30 seconds for the task's server to answer. False if it does not, or is not running.
+    private func serverAnswers(_ id: TaskItem.ID) async -> Bool {
+        guard let services, let port = task(id)?.port else { return false }
+        for _ in 0..<150 {
+            if await services.ports.isListening(port) { return true }
+            guard await services.servers.isRunning(taskID: id) else { return false }
+            try? await Task.sleep(for: baseServerPoll)
+        }
+        return false
     }
 
     // MARK: - Pending prompts

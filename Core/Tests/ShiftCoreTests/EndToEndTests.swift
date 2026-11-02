@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import ShiftCore
 
@@ -56,7 +57,8 @@ final class EndToEndTests: XCTestCase {
                                    worktreesDirectory: temp.appendingPathComponent("worktrees")),
             ports: PortAllocator(),
             notifier: notifier,
-            store: JSONStateStore(root: temp.appendingPathComponent("state"))),
+            store: JSONStateStore(root: temp.appendingPathComponent("state")),
+            screenshots: WebScreenshotter()),
                  worktrees: temp.appendingPathComponent("worktrees"))
     }
 
@@ -75,6 +77,37 @@ final class EndToEndTests: XCTestCase {
     func testNeedsInputClaudeCode() async throws { try await needsInput(.claudeCode) }
     func testRecoveryClaudeCode() async throws { try await recovery(.claudeCode) }
     func testStopAndDeleteClaudeCode() async throws { try await stopAndDelete(.claudeCode) }
+
+    func testScreenshotsClaudeCode() async throws { try await screenshots(.claudeCode) }
+    func testScreenshotsCodex() async throws { try await screenshots(.codex) }
+
+    /// The real agent names the page soon enough for a "before", and each screenshot shows what the page was then.
+    private func screenshots(_ agent: AgentKind) async throws {
+        project.takesScreenshots = true
+        model.updateProject(project)
+        func middle(_ shot: TaskScreenshot) throws -> NSColor {
+            let image = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: shot.url)))
+            return try XCTUnwrap(image.colorAt(x: image.pixelsWide / 2, y: image.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+        }
+        let id = try create("In style.css make the page's background color pure red (#ff0000), and commit it.", agent)
+        try await settle(id, .completed)
+        let log = await model.rawOutput(taskID: id)
+        let first = try XCTUnwrap(model.task(id)?.screenshots, log.suffix(3000).description)
+        XCTAssertEqual(first.map(\.isBefore), [true, false], log.suffix(3000).description)
+        print("E2E \(agent) screenshots of \(first.map(\.page)), before \(try middle(first[0])), after \(try middle(first[1]))")
+        XCTAssertGreaterThan(try middle(first[0]).greenComponent, 0.8, "before: still white")
+        XCTAssertLessThan(try middle(first[1]).greenComponent, 0.2, "after: red")
+
+        model.sendPrompt(taskID: id, text: "Now make it pure blue (#0000ff), and commit it.")
+        try await settle(id, .completed)
+        let second = try XCTUnwrap(model.task(id)?.screenshots)
+        XCTAssertEqual(second.map(\.isBefore), [true, false, false])
+        XCTAssertGreaterThan(try middle(second[2]).blueComponent, 0.8, "after: blue")
+
+        model.sendPrompt(taskID: id, text: "Which file holds the styles? Don't change anything.")
+        try await settle(id, .completed)
+        XCTAssertEqual(model.task(id)?.screenshots?.count, 3, "nothing changed")
+    }
 
     func testFollowUpClaudeCode() async throws { try await followUp(.claudeCode) }
     func testFollowUpCodex() async throws { try await followUp(.codex) }
