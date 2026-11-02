@@ -109,6 +109,25 @@ final class EndToEndTests: XCTestCase {
         XCTAssertEqual(model.task(id)?.screenshots?.count, 3, "nothing changed")
     }
 
+    func testScreenshotOfAClickClaudeCode() async throws { try await screenshotOfAClick(.claudeCode) }
+    func testScreenshotOfAClickCodex() async throws { try await screenshotOfAClick(.codex) }
+
+    /// A change that only shows on a click: going by its instructions alone, the real agent has to get it into the picture.
+    private func screenshotOfAClick(_ agent: AgentKind) async throws {
+        project.takesScreenshots = true
+        model.updateProject(project)
+        let id = try create("Make the page's background turn pure green (#00ff00) for 1 second when the page is clicked, "
+            + "then go back to how it was. Commit it.", agent)
+        try await settle(id, .completed)
+        let log = await model.rawOutput(taskID: id)
+        let shot = try XCTUnwrap(model.task(id)?.screenshots?.last(where: { !$0.isBefore }), log.suffix(3000).description)
+        let image = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: shot.url)))
+        let color = try XCTUnwrap(image.colorAt(x: image.pixelsWide / 2, y: image.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+        print("E2E \(agent) click screenshot of \(shot.page): \(color)")
+        XCTAssertGreaterThan(color.greenComponent, 0.8, log.suffix(3000).description)
+        XCTAssertLessThan(color.redComponent, 0.3, "the page as it loads is white, not the click's green")
+    }
+
     func testFollowUpClaudeCode() async throws { try await followUp(.claudeCode) }
     func testFollowUpCodex() async throws { try await followUp(.codex) }
 
