@@ -15,10 +15,15 @@ extension OutcomeProtocol {
     /// Appended to every prompt (Codex) or to the system prompt (Claude Code).
     /// `firstTurn`: the task has no title or description of its own yet (new, or created before agents wrote them).
     /// `description`: the one it has, for the agent to build on; a new session has no memory of writing it.
-    /// `screenshots`: Shift takes screenshots of the task's server, of the page the agent names.
-    static func instructions(firstTurn: Bool, description: String? = nil, screenshots: Bool = false) -> String {
-        outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
-            + (screenshots ? "\n\n" + namePage : "")
+    /// `screenshots`: how this turn's are taken, and what the agent has to do for them.
+    static func instructions(firstTurn: Bool, description: String? = nil, screenshots: ScreenshotRequest? = nil) -> String {
+        var text = outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
+        switch screenshots {
+        case .page: text += "\n\n" + namePage
+        case .app(let wantsBefore): text += "\n\n" + shootApp(wantsBefore: wantsBefore)
+        case nil: break
+        }
+        return text
     }
 
     /// For the project chat, instead of everything above: it isn't a task, and the user is there.
@@ -142,6 +147,29 @@ extension OutcomeProtocol {
     visible will change, write `none`. If the page turns out to be another one, repeat the line with it at the start \
     of your final message.
     """
+
+    static func shootApp(wantsBefore: Bool) -> String {
+        let before = wantsBefore ? """
+        Before your first edit, build and run the app as it is now, capture the view that will change, and write the \
+        line below. Going by the request is enough: don't research it first.
+
+        """ : ""
+        return """
+        Shift keeps screenshots of what each message from the user changes. This project is an app, so you take them. \
+        If nothing visible will change, skip all of this and don't write the line below.
+
+        \(before)When your work is done, build and run the app, get to the view that shows the change, capture it, and \
+        write this line, on a line of its own, at the start of your final message:
+
+        SHIFT_SCREENSHOT: <absolute path of the image>
+
+        Capture just the app, not the whole screen: `screencapture -x -l <window number>` for a Mac app, or \
+        `xcrun simctl io booted screenshot <file>` for an iOS simulator. Save it as a PNG in a temporary folder outside \
+        the repository and name it after the view, such as `settings.png`. Afterwards quit only the copy you started, \
+        never another one that was already running. If a capture fails, for example for lack of Screen Recording \
+        permission, leave the line out and carry on: it never blocks the task, but mention it in your handoff note.
+        """
+    }
 
     static let outcome = """
     You are running unattended inside a task-management app. Nobody can answer questions while you \

@@ -119,6 +119,14 @@ public final class ApprovalChannel: @unchecked Sendable {
     }
 }
 
+/// Who takes this turn's screenshots.
+public enum ScreenshotRequest: Sendable, Equatable {
+    /// Shift does, of the page the agent names.
+    case page
+    /// An app has no page to load, so the agent does and names the image. `wantsBefore`: nothing has changed yet.
+    case app(wantsBefore: Bool)
+}
+
 public struct AgentRequest: Sendable {
     public var prompt: String
     /// nil starts a new session; otherwise resumes that session.
@@ -139,13 +147,13 @@ public struct AgentRequest: Sendable {
     public var chat: Bool
     /// The project chat: what it's told about the project's tasks right now, after its instructions.
     public var chatContext: String
-    /// The agent must say which page shows this turn's change (`.screenshotPage`).
-    public var screenshots: Bool
+    /// The agent must say what shows this turn's change (`.screenshotPage`).
+    public var screenshots: ScreenshotRequest?
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
                 description: String? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false,
-                chatContext: String = "", screenshots: Bool = false) {
+                chatContext: String = "", screenshots: ScreenshotRequest? = nil) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -218,6 +226,8 @@ public protocol Notifying: Sendable {
 public protocol Screenshotting: Sendable {
     /// Saves a PNG of the page at `url` to `file`, making its folder if needed. False if the page did not load.
     func capture(url: URL, to file: URL) async -> Bool
+    /// Saves the image at `source`, which an agent named, as a PNG to `file`. False if it isn't an image file.
+    func copyImage(at source: URL, to file: URL) async -> Bool
 }
 
 // MARK: - Persistence

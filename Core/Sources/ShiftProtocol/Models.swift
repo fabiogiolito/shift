@@ -235,7 +235,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var models: [AgentKind: String]
     /// Push each task's branch to the remote when the task completes.
     public var pushTaskBranches: Bool
-    /// Keep screenshots of what each prompt changes. Not for apps: they have no page to load.
+    /// Keep screenshots of what each prompt changes. Shift takes them of a page; an app's agent takes its own.
     public var takesScreenshots: Bool
     /// A finished task's main button opens a pull request, and merging moves to its dropdown.
     public var opensPullRequests: Bool
