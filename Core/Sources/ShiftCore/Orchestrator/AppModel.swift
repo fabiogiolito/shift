@@ -720,12 +720,21 @@ public final class AppModel {
         defer { openingBase.remove(projectID) }
         await startBaseServer(projectID)
         guard let project = project(projectID), let id = baseServerIDs[projectID],
-              let port = basePorts[projectID] else { return nil }
+              var port = basePorts[projectID] else { return nil }
         // Up for 3 seconds before it counts: Next.js listens for a second or two before it finds another
         // dev server running on the folder and quits. Given up on after 30 seconds.
-        var up = 0
-        for _ in 0..<150 {
-            guard await services.servers.isRunning(taskID: id) else { break }
+        var up = 0, polls = 0, retries = 0
+        while polls < 150 {
+            polls += 1
+            guard await services.servers.isRunning(taskID: id) else {
+                guard retries < Self.portRetries, await lostPort(id) else { break }
+                retries += 1
+                (up, polls) = (0, 0)
+                await startBaseServer(projectID)
+                guard let next = basePorts[projectID] else { return nil }
+                port = next
+                continue
+            }
             up = await isListening(port) ? up + 1 : 0
             if up == 15 { return url(port) }
             try? await Task.sleep(for: baseServerPoll)
@@ -1966,11 +1975,16 @@ public final class AppModel {
 
     /// Starts (or replaces) the task's dev server. Returns a message if it could not be started.
     @discardableResult
-    private func startServer(_ id: TaskItem.ID) async -> String? {
+    private func startServer(_ id: TaskItem.ID, retries: Int = 0) async -> String? {
         guard let services, let task = task(id), let project = project(task.projectID), !project.isApp else { return nil }
         // Our own server must be off to tell whether something else (another project's dev server,
         // which may have hopped to the next port while ours was down) now holds the task's port.
         await services.servers.stop(taskID: id)
+        // Our own share from the last start holds the port against the check below, and against the server.
+        // If something answers there now, the share is that server's, from another build of Shift: left alone.
+        if let port = task.port, await services.ports.isListening(port) == false {
+            await services.tailscale?.unserve(port: port)
+        }
         // A task from before every task had a server has no port yet.
         let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port)).union(basePorts.values)
         let port = await services.ports.allocate(preferred: task.port ?? id, reserved: reserved)
@@ -1989,12 +2003,7 @@ public final class AppModel {
             }
             update(id) { $0.serverPID = pid }
             serverFailures[id] = nil
-            if let tailscale = services.tailscale {
-                Task {
-                    if let old = task.port, old != port { await tailscale.unserve(port: old) }
-                    tailnetHost = await tailscale.serve(port: port)
-                }
-            }
+            watchServer(id, pid: pid, port: port, retries: retries)
             return nil
         } catch {
             let message = "Dev server failed to start: \(Self.describe(error))"
@@ -2002,6 +2011,39 @@ public final class AppModel {
             await services.store.appendLog(taskID: id, text: message + "\n")
             update(id) { $0.serverPID = nil }
             return message
+        }
+    }
+
+    /// How many other ports a server gets to try after losing the one it was given.
+    private static let portRetries = 5
+
+    /// Whether the server quit because something else was already on its port. Checking a port doesn't reserve it:
+    /// other apps and other builds of Shift want the same ones, and an install can run before the server gets to it.
+    private func lostPort(_ serverID: Int) async -> Bool {
+        guard let services, await services.servers.isRunning(taskID: serverID) == false else { return false }
+        let log = await services.servers.log(taskID: serverID, lines: 30)
+        return log.contains("EADDRINUSE") || log.localizedCaseInsensitiveContains("address already in use")
+    }
+
+    /// Shares the server on the tailnet once it is on its port: `tailscale serve` takes the port on the tailnet's
+    /// addresses at once, and a server still getting there would then fail to bind it. Starts the server on another
+    /// free port if it loses this one. Watches for five minutes, to see it through an install; its log starts over
+    /// with each start, so an old failure doesn't count.
+    private func watchServer(_ id: TaskItem.ID, pid: Int32, port: Int, retries: Int) {
+        Task { [weak self] in
+            var shared = false
+            let deadline = ContinuousClock.now + .seconds(300)
+            while ContinuousClock.now < deadline {
+                guard let self, self.task(id)?.serverPID == pid else { return }
+                guard let services = self.services, await services.servers.isRunning(taskID: id) else { break }
+                if !shared, await services.ports.isListening(port) {
+                    shared = true
+                    if let tailscale = services.tailscale { self.tailnetHost = await tailscale.serve(port: port) }
+                }
+                try? await Task.sleep(for: self.baseServerPoll)
+            }
+            guard let self, retries < Self.portRetries, self.task(id)?.serverPID == pid, await self.lostPort(id) else { return }
+            await self.startServer(id, retries: retries + 1)
         }
     }
 
