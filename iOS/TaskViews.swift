@@ -155,7 +155,7 @@ private struct ChatView: View {
                                        description: Text("Ask about any task and plan with the agent. It can start tasks, follow them and merge them when you ask."))
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaBar(edge: .bottom) {
             PromptBar(placeholder: "Ask or tell the agent anything…") {
                 await model.sendChat(projectID: project.id, text: $0, attachments: $1)
             }
@@ -198,7 +198,7 @@ private struct NewTaskView: View {
             TaskDetailView(taskID: taskID)
         } else {
             Color.clear
-                .safeAreaInset(edge: .bottom) {
+                .safeAreaBar(edge: .bottom) {
                     PromptBar(placeholder: "What should it do?", focusesOnAppear: true) { text, attachments in
                         taskID = await model.createTask(projectID: projectID, prompt: text, attachments: attachments)
                         return taskID != nil
@@ -245,7 +245,7 @@ struct TaskDetailView: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaBar(edge: .bottom) {
                 if task.status != .merged {
                     PromptBar { await model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
                 }
@@ -324,19 +324,34 @@ private struct PromptBar: View {
     @State private var pictures: [PhotosPickerItem] = []
     @State private var isSending = false
 
+    private static let controlSize: CGFloat = 30
+
     private var canSend: Bool { (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pictures.isEmpty) && !isSending && model.link == .online }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
+        HStack(alignment: .bottom, spacing: 8) {
             PhotosPicker(selection: $pictures, matching: .images) {
-                Image(systemName: pictures.isEmpty ? "photo" : "photo.badge.checkmark").accessibilityLabel("Attach pictures")
+                Image(systemName: pictures.isEmpty ? "photo" : "photo.badge.checkmark")
+                    .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
+                    .frame(width: Self.controlSize, height: Self.controlSize)
+                    .accessibilityLabel("Attach pictures")
             }
-            TextField(placeholder, text: $text, axis: .vertical).lineLimit(1...6).focused($isFocused)
-            Button("Send", systemImage: isSending ? "ellipsis" : "arrow.up.circle.fill", action: send)
-                .labelStyle(.iconOnly).disabled(!canSend)
+            TextField(placeholder, text: $text, axis: .vertical)
+                .lineLimit(1...6)
+                .focused($isFocused)
+                .padding(.vertical, 4)
+            Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
+                .labelStyle(.iconOnly)
+                .font(.system(size: Self.controlSize - 2))
+                .frame(width: Self.controlSize, height: Self.controlSize)
+                .disabled(!canSend)
         }
-        .padding(10)
-        .background(.bar)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
         .onAppear { if focusesOnAppear { isFocused = true } }
     }
 
