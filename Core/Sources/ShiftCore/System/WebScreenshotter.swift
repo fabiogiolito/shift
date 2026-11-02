@@ -7,7 +7,7 @@ import WebKit
 public final class WebScreenshotter: Screenshotting {
     public init() {}
 
-    public func capture(url: URL, to file: URL) async -> Bool {
+    public func capture(url: URL, script: String?, to file: URL) async -> Bool {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.mediaTypesRequiringUserActionForPlayback = .all
@@ -29,6 +29,18 @@ public final class WebScreenshotter: Screenshotting {
         guard loaded else { return false }
         // ponytail: fixed wait for scripts to draw; wait for network idle if pages get shot half loaded.
         try? await Task.sleep(for: .seconds(1.5))
+        if let script {
+            // The agent wrote it: it may return nothing, which WebKit can't hand over, or never finish.
+            let body = """
+            await Promise.race([(async () => {
+            \(script)
+            })(), new Promise(done => setTimeout(done, 5000))]);
+            return true;
+            """
+            guard (try? await webView.callAsyncJavaScript(body, contentWorld: .page)) != nil else { return false }
+            // Short, as what a click shows may not last.
+            try? await Task.sleep(for: .seconds(0.2))
+        }
 
         guard let image = try? await webView.takeSnapshot(configuration: nil),
               let tiff = image.tiffRepresentation else { return false }

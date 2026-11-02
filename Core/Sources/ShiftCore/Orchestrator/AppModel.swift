@@ -1413,7 +1413,7 @@ public final class AppModel {
                     if case .blocked(let reason, _) = outcome { failure = reason }
                     break events
                 case .approvalRequested(let id, let summary): chatApprovals[projectID, default: []].append((id, summary))
-                case .activity, .described, .screenshotPage: break
+                case .activity, .described, .screenshots: break
                 }
                 guard isChatCurrent(projectID, token) else { return }
                 deliverChatPending(projectID)
@@ -1687,12 +1687,12 @@ public final class AppModel {
                             $0.description = description ?? $0.description
                         }
                     }
-                case .screenshotPage(let page):
+                case .screenshots(let targets):
                     shots?.pagesNamed += 1
-                    shots?.page = page
+                    shots?.targets = targets
                     // Not awaited: the agent may be waiting for an answer to an approval meanwhile.
-                    if shots?.wantsBefore == true, let page, let diff = shots?.diff {
-                        shots?.before = Task { await takeBeforeScreenshot(id, page: page, unchangedFrom: diff) }
+                    if shots?.wantsBefore == true, let target = targets.first, let diff = shots?.diff {
+                        shots?.before = Task { await takeBeforeScreenshot(id, target, unchangedFrom: diff) }
                     }
                     shots?.wantsBefore = false
                 case .rawOutput(let output): await services.store.appendLog(taskID: id, text: output + "\n")
@@ -1743,10 +1743,10 @@ public final class AppModel {
         let diff: [FileDiff]
         /// Nothing has changed yet, so the next page named can still be shot as it was.
         var wantsBefore: Bool
-        /// The agent takes the screenshots and `page` is the image it took, as an app has no page to load.
+        /// The agent takes the screenshots and a target is the image it took, as an app has no page to load.
         let isApp: Bool
-        /// The home page unless the agent names another. An app's agent has to name one. Nil: nothing visible changes.
-        var page: String?
+        /// The home page unless the agent names something else. An app's agent has to name one. Empty: nothing visible changes.
+        var targets: [ScreenshotTarget]
         var pagesNamed = 0
         /// Whether it got a screenshot.
         var before: Task<Bool, Never>?
@@ -1760,43 +1760,47 @@ public final class AppModel {
         let wantsBefore = diff.isEmpty && task.screenshots?.contains(where: \.isBefore) != true
         // The agent starts as soon as this returns, and the "before" has to beat its first edit.
         if wantsBefore && !project.isApp { _ = await serverAnswers(id) }
-        return ScreenshotTurn(diff: diff, wantsBefore: wantsBefore, isApp: project.isApp, page: project.isApp ? nil : "/")
+        return ScreenshotTurn(diff: diff, wantsBefore: wantsBefore, isApp: project.isApp,
+                              targets: project.isApp ? [] : [ScreenshotTarget(page: "/")])
     }
 
     /// ponytail: checked only once, before the page loads; an edit during the seconds it takes can end up in the
     /// picture. Checking after too would drop good ones: dev servers rewrite tracked files on first compile.
-    private func takeBeforeScreenshot(_ id: TaskItem.ID, page: String, unchangedFrom diff: [FileDiff]) async -> Bool {
+    private func takeBeforeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, unchangedFrom diff: [FileDiff]) async -> Bool {
         guard let services, let task = task(id), let project = project(task.projectID),
               (try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project))) == diff else { return false }
-        return await takeScreenshot(id, page: page, isBefore: true)
+        // A page as it loads: what a script would select is what the agent is about to build.
+        return await takeScreenshot(id, project.isApp ? target : ScreenshotTarget(page: target.page), isBefore: true)
     }
 
     private func takeAfterScreenshot(_ id: TaskItem.ID, _ shots: ScreenshotTurn) async {
         let tookBefore = await shots.before?.value ?? false
         // A page is loaded again, but an app's image is what it was: it can't be the "after" too.
         if shots.isApp && tookBefore && shots.pagesNamed < 2 { return }
-        guard let services, let page = shots.page, let task = task(id), let project = project(task.projectID),
+        guard let services, !shots.targets.isEmpty, let task = task(id), let project = project(task.projectID),
               let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)),
               diff != shots.diff else { return }
         update(id) { $0.activity = "Taking a screenshot…" }
-        await takeScreenshot(id, page: page, isBefore: false)
+        for target in shots.targets { await takeScreenshot(id, target, isBefore: false) }
     }
 
     @discardableResult
-    private func takeScreenshot(_ id: TaskItem.ID, page: String, isBefore: Bool) async -> Bool {
+    private func takeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, isBefore: Bool) async -> Bool {
         guard let services, let screenshots = services.screenshots, let task = task(id),
               let project = project(task.projectID) else { return false }
         let file = ShiftPaths.screenshots.appendingPathComponent("\(id)-\(UUID().uuidString).png")
         let source: URL, captured: Bool
-        var shown = page
+        var shown = target.page
         if project.isApp {
-            source = URL(fileURLWithPath: page, relativeTo: task.worktreeURL).absoluteURL
+            // The line is a path, and any space in it looks like the start of a script.
+            let path = [target.page, target.script].compactMap { $0 }.joined(separator: " ")
+            source = URL(fileURLWithPath: path, relativeTo: task.worktreeURL).absoluteURL
             shown = source.deletingPathExtension().lastPathComponent
             captured = await screenshots.copyImage(at: source, to: file)
         } else {
             guard let server = task.serverURL else { return false }
-            source = Self.screenshotURL(page: page, server: server)
-            captured = await serverAnswers(id) ? await screenshots.capture(url: source, to: file) : false
+            source = Self.screenshotURL(page: target.page, server: server)
+            captured = await serverAnswers(id) ? await screenshots.capture(url: source, script: target.script, to: file) : false
         }
         guard captured else {
             await services.store.appendLog(taskID: id, text: "Could not take a screenshot of \(source.absoluteString)\n")

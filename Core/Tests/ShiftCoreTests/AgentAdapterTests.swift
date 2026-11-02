@@ -713,7 +713,7 @@ final class AgentAdapterTests: XCTestCase {
         var events: [AgentEvent] = [], sessions: [String] = [], activities: [String] = [], finished: [AgentEvent] = []
         for await event in stream {
             switch event {
-            case .rawOutput, .screenshotPage: continue
+            case .rawOutput, .screenshots: continue
             case .sessionStarted(let id): sessions.append(id)
             case .activity(let text): activities.append(text)
             case .described, .approvalRequested: break

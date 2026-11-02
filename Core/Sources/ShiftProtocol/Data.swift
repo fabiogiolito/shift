@@ -51,6 +51,17 @@ public enum AgentOutcome: Equatable, Sendable {
     case blocked(reason: String, options: [String] = [])
 }
 
+/// One screenshot an agent asks for: a page, and JavaScript that puts it in the state that shows the change.
+public struct ScreenshotTarget: Equatable, Sendable {
+    public var page: String
+    public var script: String?
+
+    public init(page: String, script: String? = nil) {
+        self.page = page
+        self.script = script
+    }
+}
+
 public enum AgentEvent: Equatable, Sendable {
     /// The agent's own session id, to persist and pass back in on the next run.
     case sessionStarted(id: String)
@@ -58,9 +69,9 @@ public enum AgentEvent: Equatable, Sendable {
     case activity(String)
     /// The agent's own words for what the task will accomplish. Either may be missing.
     case described(title: String?, description: String?)
-    /// Screenshots are on: the page this turn's change shows on, nil if nothing visible changes. The first one
-    /// comes before the agent's work; a later one replaces it. In an app project, the image the agent took instead.
-    case screenshotPage(String?)
+    /// Screenshots are on: what shows this turn's change, empty if nothing visible changes. The first one comes
+    /// before the agent's work; a later one replaces it. In an app project, the images the agent took instead.
+    case screenshots([ScreenshotTarget])
     /// Raw output for the debugging view only.
     case rawOutput(String)
     /// Manual permissions: the agent waits to be allowed to do `summary`, one short human line such as

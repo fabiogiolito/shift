@@ -276,7 +276,7 @@ struct ProjectSettingsView: View {
             } footer: {
                 Text(usesBuild(current)
                      ? "The agent builds and runs the app to capture the view each prompt changes, and how it looked before the task's first change, which takes longer. A Mac app needs Screen Recording permission for Shift. They show above the changed files."
-                     : "Keeps a screenshot of the page each prompt changes, and of how it looked before the task's first change. They show above the changed files.")
+                     : "Keeps screenshots of what each prompt changes, and of how the page looked before the task's first change. They show above the changed files.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

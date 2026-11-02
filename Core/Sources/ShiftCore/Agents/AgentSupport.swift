@@ -136,16 +136,31 @@ extension OutcomeProtocol {
     """
 
     static let namePage = """
-    Shift screenshots the page of the running project that shows your change, once before you start and once when \
-    you finish. Before doing any work, and for every message from the user, write this as the very first thing you \
-    write, on a line of its own, before reading or changing any file:
+    Shift takes screenshots of the running project so the user can see your change at a glance: one before you \
+    start, and when you finish the ones you ask for. They must show the change itself, in the state where it can be \
+    seen, not the page as it first loads.
+
+    Before doing any work, and for every message from the user, write this as the very first thing you write, on a \
+    line of its own, before reading or changing any file:
 
     SHIFT_SCREENSHOT: <path>
 
     The path is the page where the change will be best seen, such as `/` or `/pricing`, and one that exists now if \
-    possible, so the two screenshots compare. Going by the request is enough: don't research it first. If nothing \
-    visible will change, write `none`. If the page turns out to be another one, repeat the line with it at the start \
-    of your final message.
+    possible. Going by the request is enough: don't research it first. If nothing visible will change, write `none`.
+
+    At the start of your final message, write the line again if the page turned out to be another one, or if the \
+    change doesn't show as the page loads: something that appears on a click, in a modal or menu, after filling a \
+    form, or further down the page. After the path, on the same line, add JavaScript that gets the page to that \
+    state, using what you now know of the code:
+
+    SHIFT_SCREENSHOT: / document.querySelector('main').click()
+    SHIFT_SCREENSHOT: /pricing document.querySelector('[data-open-plans]').click(); await new Promise(done => setTimeout(done, 400))
+
+    Write one line per screenshot, at most 4, if the change takes more than one state to show, such as each step of \
+    a flow. Lines in a message replace the ones before. Each one starts from a fresh load of the path, and the script \
+    runs once the page has loaded. The screenshot comes 0.2 seconds after the script ends, so wait in the script for \
+    animations and data, but not past what is to be shown if it doesn't last. If the script throws, there is no \
+    screenshot, so make sure what it selects exists. It can't move to another page: name that page as the path.
     """
 
     static func shootApp(wantsBefore: Bool) -> String {
@@ -238,13 +253,24 @@ extension OutcomeProtocol {
         return (value(titleMarker, limit: 80), value(descriptionMarker, limit: 600))
     }
 
-    /// The page named in `message`, as `.screenshotPage`. The last one if there are several, nil if there are none.
-    static func screenshotPage(in message: String) -> AgentEvent? {
-        guard let range = message.range(of: screenshotMarker, options: .backwards) else { return nil }
-        let line = String(message[range.upperBound...].prefix { !$0.isNewline })
-        let page = line.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "*`")))
-        if page.isEmpty { return nil }
-        return .screenshotPage(page.lowercased() == "none" ? nil : page)
+    /// What `message` asks to screenshot, as `.screenshots`: one target per line, at most 4. Nil if it asks nothing.
+    static func screenshots(in message: String) -> AgentEvent? {
+        var named = false
+        var targets: [ScreenshotTarget] = []
+        let markup = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "*`"))
+        for line in message.components(separatedBy: .newlines) {
+            guard let range = line.range(of: screenshotMarker) else { continue }
+            let parts = line[range.upperBound...].trimmingCharacters(in: markup)
+                .split(maxSplits: 1, whereSeparator: \.isWhitespace)
+            guard let first = parts.first else { continue }
+            named = true
+            let page = first.trimmingCharacters(in: markup)
+            let script = parts.count > 1 ? parts[1].trimmingCharacters(in: markup) : ""
+            if page.lowercased() != "none" {
+                targets.append(ScreenshotTarget(page: page, script: script.isEmpty ? nil : script))
+            }
+        }
+        return named ? .screenshots(Array(targets.prefix(4))) : nil
     }
 
     /// `message` without its `SHIFT_OPTION:` lines, and the replies they offer: trimmed of markdown
@@ -460,7 +486,7 @@ func runAgentProcess(kind: AgentKind, request: AgentRequest,
                     if title != nil || description != nil {
                         continuation.yield(.described(title: title, description: description))
                     }
-                    if let page = OutcomeProtocol.screenshotPage(in: message) { continuation.yield(page) }
+                    if let shots = OutcomeProtocol.screenshots(in: message) { continuation.yield(shots) }
                 }
                 if let activity { continuation.yield(.activity(activity)) }
             }

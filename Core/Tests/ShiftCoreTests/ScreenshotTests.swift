@@ -39,7 +39,7 @@ final class ScreenshotTests: XCTestCase {
     /// One agent turn that names `page` first, then makes `changes`. `captures`: shots expected before the changes.
     func runTurn(page: String?, changes: DiffSummary?, captures: Int = 0, prompt: (String) -> Void) async {
         let gate = Gate()
-        agent.scripts.append([.emit(.sessionStarted(id: "s1")), .emit(.screenshotPage(page)), .pause(gate),
+        agent.scripts.append([.emit(.sessionStarted(id: "s1")), .emit(.screenshots(page.map { [ScreenshotTarget(page: $0)] } ?? [])), .pause(gate),
                               .emit(.finished(.completed(summary: "Done")))])
         prompt("Do it")
         await waitFor("the agent to pause") { gate.waiting == 1 && self.shots.captured.count == captures }
@@ -74,6 +74,22 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [true, false, false])
     }
 
+    /// The final message's lines replace the first: each is a shot, and only those run scripts, not the "before".
+    func testTheFinalMessageAsksForTheStatesThatShowTheChange() async {
+        let gate = Gate()
+        let final = [ScreenshotTarget(page: "/", script: "open()"), ScreenshotTarget(page: "/b")]
+        agent.scripts.append([.emit(.screenshots([ScreenshotTarget(page: "/", script: "tooSoon()")])), .pause(gate),
+                              .emit(.screenshots(final)), .emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "x")!
+        await waitFor("the before") { gate.waiting == 1 && self.shots.captured.count == 1 }
+        git.pendingChanges = change
+        gate.open()
+        await waitFor("completed") { self.model.task(id)?.status == .completed }
+        XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [true, false, false])
+        XCTAssertEqual(shots.captured.map(\.path), ["/", "/", "/b"])
+        XCTAssertEqual(shots.scripts, [nil, "open()", nil])
+    }
+
     func testNothingVisibleTakesNoScreenshots() async {
         let id = await firstTurn(page: nil, changes: change)
         XCTAssertNil(model.task(id)?.screenshots)
@@ -81,7 +97,7 @@ final class ScreenshotTests: XCTestCase {
 
     func testAPageNamedAfterTheFirstEditGetsNoBefore() async {
         let gate = Gate()
-        agent.scripts.append([.pause(gate), .emit(.screenshotPage("/a")), .emit(.finished(.completed(summary: "Done")))])
+        agent.scripts.append([.pause(gate), .emit(.screenshots([ScreenshotTarget(page: "/a")])), .emit(.finished(.completed(summary: "Done")))])
         let id = model.createTask(projectID: project.id, prompt: "x")!
         await waitFor("the agent to pause") { gate.waiting == 1 }
         git.pendingChanges = change
@@ -134,9 +150,18 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func testAgentMessagesNameThePage() {
-        XCTAssertEqual(OutcomeProtocol.screenshotPage(in: "SHIFT_SCREENSHOT: `/pricing`\nOn it."), .screenshotPage("/pricing"))
-        XCTAssertEqual(OutcomeProtocol.screenshotPage(in: "**SHIFT_SCREENSHOT:** none"), .screenshotPage(nil))
-        XCTAssertNil(OutcomeProtocol.screenshotPage(in: "Reading the code."))
+        XCTAssertEqual(OutcomeProtocol.screenshots(in: "SHIFT_SCREENSHOT: `/pricing`\nOn it."),
+                       .screenshots([ScreenshotTarget(page: "/pricing")]))
+        XCTAssertEqual(OutcomeProtocol.screenshots(in: "**SHIFT_SCREENSHOT:** none"), .screenshots([]))
+        XCTAssertNil(OutcomeProtocol.screenshots(in: "Reading the code."))
+        XCTAssertEqual(OutcomeProtocol.screenshots(in: """
+            SHIFT_SCREENSHOT: / document.querySelector('main button').click()
+            Text in between.
+            SHIFT_SCREENSHOT: `/b` `go()`
+            """), .screenshots([ScreenshotTarget(page: "/", script: "document.querySelector('main button').click()"),
+                                ScreenshotTarget(page: "/b", script: "go()")]))
+        let many = String(repeating: "SHIFT_SCREENSHOT: /a\n", count: 9)
+        XCTAssertEqual(OutcomeProtocol.screenshots(in: many), .screenshots(Array(repeating: ScreenshotTarget(page: "/a"), count: 4)))
         XCTAssertEqual(OutcomeProtocol.parse(finalMessage: "SHIFT_SCREENSHOT: /a\nSHIFT_STATUS: completed\nDone.", exitCode: 0),
                        .completed(summary: "Done."))
         XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, screenshots: .page).contains("SHIFT_SCREENSHOT: <path>"))
@@ -153,8 +178,8 @@ final class ScreenshotTests: XCTestCase {
     func testAnAppsAgentTakesItsOwnBeforeAndAfter() async {
         await startAppModel()
         let gate = Gate()
-        agent.scripts.append([.emit(.screenshotPage("/tmp/settings.png")), .pause(gate),
-                              .emit(.screenshotPage("relative/after.png")), .emit(.finished(.completed(summary: "Done")))])
+        agent.scripts.append([.emit(.screenshots([ScreenshotTarget(page: "/tmp/settings.png")])), .pause(gate),
+                              .emit(.screenshots([ScreenshotTarget(page: "relative/after.png")])), .emit(.finished(.completed(summary: "Done")))])
         let id = model.createTask(projectID: project.id, prompt: "x")!
         await waitFor("the before") { gate.waiting == 1 && self.shots.captured.count == 1 }
         git.pendingChanges = change
@@ -174,6 +199,19 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertEqual(agent.requests[1].screenshots, .app(wantsBefore: false))
     }
 
+    func testAnAppsImagePathCanHaveSpaces() async {
+        await startAppModel()
+        let gate = Gate()
+        let line = "SHIFT_SCREENSHOT: /tmp/my shots/after.png"
+        agent.scripts.append([.pause(gate), .emit(OutcomeProtocol.screenshots(in: line)!), .emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "x")!
+        await waitFor("the agent to pause") { gate.waiting == 1 }
+        git.pendingChanges = change
+        gate.open()
+        await waitFor("completed") { self.model.task(id)?.status == .completed }
+        XCTAssertEqual(shots.captured.map(\.path), ["/tmp/my shots/after.png"])
+    }
+
     func testAnAppsBeforeIsNeverAlsoItsAfter() async {
         await startAppModel()
         let id = await firstTurn(page: "/tmp/before.png", changes: change, captures: 1)
@@ -183,7 +221,7 @@ final class ScreenshotTests: XCTestCase {
     func testAnAppImageNamedOnlyAtTheEndIsTheAfter() async {
         await startAppModel()
         let gate = Gate()
-        agent.scripts.append([.pause(gate), .emit(.screenshotPage("/tmp/a.png")), .emit(.finished(.completed(summary: "Done")))])
+        agent.scripts.append([.pause(gate), .emit(.screenshots([ScreenshotTarget(page: "/tmp/a.png")])), .emit(.finished(.completed(summary: "Done")))])
         let id = model.createTask(projectID: project.id, prompt: "x")!
         await waitFor("the agent to pause") { gate.waiting == 1 }
         git.pendingChanges = change
@@ -236,7 +274,7 @@ final class ScreenshotTests: XCTestCase {
     func testWebScreenshotterCapturesThePage() async throws {
         let file = temp.appendingPathComponent("folder/shot.png")
         let page = try XCTUnwrap(URL(string: "data:text/html,<body style='background:rgb(255,0,0)'></body>"))
-        let captured = await WebScreenshotter().capture(url: page, to: file)
+        let captured = await WebScreenshotter().capture(url: page, script: nil, to: file)
         XCTAssertTrue(captured)
         let image = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: file)))
         XCTAssertGreaterThanOrEqual(image.pixelsWide, 1280)
@@ -245,9 +283,27 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertLessThan(color.greenComponent, 0.2)
     }
 
+    /// A page that turns green for a moment on a click, as in the request this came from: the shot has to catch it.
+    func testAScriptGetsThePageToTheStateThatShowsTheChange() async throws {
+        let html = "<html style='height:100%'><body style='height:100%;background:rgb(0,0,255)' "
+            + "onclick=\"this.style.background='rgb(0,255,0)';setTimeout(()=>this.style.background='rgb(0,0,255)',1000)\"></body></html>"
+        let page = try XCTUnwrap(URL(string: "data:text/html," + html.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!))
+        let file = temp.appendingPathComponent("green.png")
+        let captured = await WebScreenshotter().capture(url: page, script: "document.body.click()", to: file)
+        XCTAssertTrue(captured)
+        let image = try XCTUnwrap(NSBitmapImageRep(data: Data(contentsOf: file)))
+        let color = try XCTUnwrap(image.colorAt(x: image.pixelsWide / 2, y: image.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+        XCTAssertGreaterThan(color.greenComponent, 0.8)
+        XCTAssertLessThan(color.blueComponent, 0.3)
+
+        let failed = await WebScreenshotter().capture(url: page, script: "document.querySelector('#nope').click()",
+                                                      to: temp.appendingPathComponent("no.png"))
+        XCTAssertFalse(failed, "a script that fails shows nothing of what was asked")
+    }
+
     func testAPageThatDoesNotLoadIsNoScreenshot() async {
         let closed = URL(string: "http://localhost:1")!
-        let captured = await WebScreenshotter().capture(url: closed, to: temp.appendingPathComponent("no.png"))
+        let captured = await WebScreenshotter().capture(url: closed, script: nil, to: temp.appendingPathComponent("no.png"))
         XCTAssertFalse(captured)
     }
 }
