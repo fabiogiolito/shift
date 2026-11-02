@@ -564,13 +564,16 @@ public final class AppModel {
         }
     }
 
-    /// Pushes the task's branch and returns the page that opens a pull request for it into its base.
+    /// Pushes the task's branch and returns the page that opens a pull request for it into its base,
+    /// with the task's title and what the agent said about it filled in.
     /// Nil (and `lastError`) if the push fails or the remote is not on GitHub.
     public func pullRequestURL(taskID: TaskItem.ID) async -> URL? {
         guard let services, let task = task(taskID), let project = project(task.projectID) else { return nil }
         guard let remote = await services.git.remote(repo: project.repoURL, branch: task.branch),
               let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
-              let url = Self.pullRequestURL(remoteURL: remoteURL, branch: task.branch, base: task.base(in: project)) else {
+              let url = Self.pullRequestURL(remoteURL: remoteURL, branch: task.branch, base: task.base(in: project),
+                                            title: task.title,
+                                            body: [task.description, task.summary].compactMap { $0 }.joined(separator: "\n\n")) else {
             lastError = "Could not open a pull request for \(task.title): the project has no GitHub remote."
             return nil
         }
@@ -585,9 +588,16 @@ public final class AppModel {
     }
 
     /// GitHub's compare page for `branch` into `base`, from an https or ssh remote URL. Nil for other hosts.
-    static func pullRequestURL(remoteURL: String, branch: String, base: String) -> URL? {
+    /// An empty `body` is left out so the repo's pull request template still applies.
+    static func pullRequestURL(remoteURL: String, branch: String, base: String, title: String, body: String) -> URL? {
         guard let match = remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#) else { return nil }
-        return URL(string: "https://github.com/\(match.1)/compare/\(base)...\(branch)?expand=1")
+        // `+` must be escaped too: GitHub reads a bare one in a query as a space.
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
+        func encoded(_ text: String) -> String { text.addingPercentEncoding(withAllowedCharacters: allowed) ?? "" }
+        let page = "https://github.com/\(match.1)/compare/\(base)...\(branch)?expand=1&title=\(encoded(title))"
+        let filled = "\(page)&body=\(encoded(body))"
+        // ponytail: GitHub rejects very long URLs, so a huge body is dropped rather than truncated mid-sentence.
+        return URL(string: body.isEmpty || filled.count > 6000 ? page : filled)
     }
 
     /// The project's base branch in the browser: its base server, started again first if it stopped, once it

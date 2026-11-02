@@ -1812,11 +1812,16 @@ final class AppModelTests: XCTestCase {
     }
 
     func testPullRequestURL() {
-        let expected = "https://github.com/owner/repo/compare/main...shift/1?expand=1"
-        for remote in ["git@github.com:owner/repo.git", "https://github.com/owner/repo.git", "https://github.com/owner/repo"] {
-            XCTAssertEqual(AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main")?.absoluteString, expected)
+        func url(_ remote: String, title: String = "Fix A&B", body: String = "") -> String? {
+            AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main", title: title, body: body)?.absoluteString
         }
-        XCTAssertNil(AppModel.pullRequestURL(remoteURL: "git@gitlab.com:owner/repo.git", branch: "shift/1", base: "main"))
+        let page = "https://github.com/owner/repo/compare/main...shift/1?expand=1&title=Fix%20A%26B"
+        for remote in ["git@github.com:owner/repo.git", "https://github.com/owner/repo.git", "https://github.com/owner/repo"] {
+            XCTAssertEqual(url(remote), page)
+        }
+        XCTAssertNil(url("git@gitlab.com:owner/repo.git"))
+        XCTAssertEqual(url("https://github.com/owner/repo", body: "1+1=2\n\né"), "\(page)&body=1%2B1%3D2%0A%0A%C3%A9")
+        XCTAssertEqual(url("https://github.com/owner/repo", body: String(repeating: "x", count: 7000)), page)
     }
 }
 
