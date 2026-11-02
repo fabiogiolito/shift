@@ -52,12 +52,6 @@ struct ChatView: View {
                     // Sent, and not in the log yet or waiting for the agent to take them.
                     let shown = Set(turns.flatMap(\.promptIDs))
                     ForEach(chat?.prompts.filter { !shown.contains($0.id) } ?? []) { PromptBubble(prompt: $0) }
-                    if replying {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text("Working…").foregroundStyle(.secondary)
-                        }
-                    }
                     if let error = model.chatErrors[project.id] {
                         Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).textSelection(.enabled)
                     }
@@ -80,8 +74,15 @@ struct ChatView: View {
                 if let request = model.chatApprovalRequest(projectID: project.id) {
                     approval(request)
                 }
+                // In the bar, not the transcript: Stop has to stay reachable when scrolled back through the conversation.
                 if replying {
-                    Button("Stop", systemImage: "stop.fill") { model.stopChat(projectID: project.id) }.buttonStyle(.glass)
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Working…").foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Stop", systemImage: "stop.fill") { model.stopChat(projectID: project.id) }.buttonStyle(.glass)
+                    }
+                    .padding(.leading, TaskDetailView.margin - 12)
                 }
                 PromptField(placeholder: "Ask or tell the agent anything…", draftKey: "chat \(project.id)") {
                     model.sendChat(projectID: project.id, text: $0, attachments: $1)
