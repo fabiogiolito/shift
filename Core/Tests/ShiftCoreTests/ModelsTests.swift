@@ -19,6 +19,7 @@ final class ModelsTests: XCTestCase {
         let project = try JSONDecoder().decode(Project.self, from: Data(json.utf8))
         XCTAssertEqual(project.setupCommand, "")
         XCTAssertEqual(project.permissions, .bypass)
+        XCTAssertFalse(project.opensPullRequests)
         XCTAssertEqual(project.serverCommand, "pnpm dev")
         XCTAssertEqual(project.defaultAgent, .codex)
     }

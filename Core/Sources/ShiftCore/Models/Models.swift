@@ -157,11 +157,13 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var models: [AgentKind: String]
     /// Push each task's branch to the remote when the task completes.
     public var pushTaskBranches: Bool
+    /// A finished task's main button opens a pull request, and merging moves to its dropdown.
+    public var opensPullRequests: Bool
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
-                pushTaskBranches: Bool = false) {
+                pushTaskBranches: Bool = false, opensPullRequests: Bool = false) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -174,6 +176,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.permissions = permissions
         self.models = models
         self.pushTaskBranches = pushTaskBranches
+        self.opensPullRequests = opensPullRequests
     }
 
     public init(from decoder: Decoder) throws {
@@ -190,6 +193,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
         models = try values.decodeIfPresent([AgentKind: String].self, forKey: .models) ?? [:]
         pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
+        opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!buildCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
