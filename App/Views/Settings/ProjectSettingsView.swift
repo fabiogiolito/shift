@@ -21,7 +21,7 @@ struct ProjectSettingsView: View {
             if let draft {
                 form(Binding(get: { self.draft ?? draft }, set: { self.draft = $0 }))
             } else {
-                ContentUnavailableView("Project not found", systemImage: "folder.badge.questionmark")
+                EmptyState("Project not found", systemImage: "folder.badge.questionmark")
             }
         }
         .frame(minWidth: 480, minHeight: 420)
