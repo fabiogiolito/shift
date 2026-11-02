@@ -70,7 +70,7 @@ public enum AgentEvent: Equatable, Sendable {
     /// The agent's own words for what the task will accomplish. Either may be missing.
     case described(title: String?, description: String?)
     /// Screenshots are on: what shows this turn's change, empty if nothing visible changes. The first one comes
-    /// before the agent's work; a later one replaces it.
+    /// before the agent's work; a later one replaces it. In an app project, the images the agent took instead.
     case screenshots([ScreenshotTarget])
     /// Raw output for the debugging view only.
     case rawOutput(String)

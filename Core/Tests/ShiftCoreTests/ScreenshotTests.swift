@@ -56,7 +56,7 @@ final class ScreenshotTests: XCTestCase {
 
     func testFirstPromptTakesABeforeAndAnAfterOfTheNamedPage() async {
         let id = await firstTurn(page: "/pricing", changes: change, captures: 1)
-        XCTAssertEqual(agent.requests[0].screenshots, true)
+        XCTAssertEqual(agent.requests[0].screenshots, .page)
         XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [true, false])
         XCTAssertEqual(shots.captured.map(\.path), ["/pricing", "/pricing"])
     }
@@ -116,7 +116,7 @@ final class ScreenshotTests: XCTestCase {
         project.takesScreenshots = false
         await startModel()
         let id = await firstTurn(page: "/", changes: change)
-        XCTAssertEqual(agent.requests[0].screenshots, false)
+        XCTAssertNil(agent.requests[0].screenshots)
         XCTAssertNil(model.task(id)?.screenshots)
         XCTAssertTrue(shots.captured.isEmpty)
     }
@@ -164,8 +164,110 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertEqual(OutcomeProtocol.screenshots(in: many), .screenshots(Array(repeating: ScreenshotTarget(page: "/a"), count: 4)))
         XCTAssertEqual(OutcomeProtocol.parse(finalMessage: "SHIFT_SCREENSHOT: /a\nSHIFT_STATUS: completed\nDone.", exitCode: 0),
                        .completed(summary: "Done."))
-        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, screenshots: true).contains("SHIFT_SCREENSHOT: <path>"))
+        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, screenshots: .page).contains("SHIFT_SCREENSHOT: <path>"))
         XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false).contains("SHIFT_SCREENSHOT"))
+    }
+
+    // MARK: Apps
+
+    func startAppModel() async {
+        project.type = .nativeApp
+        await startModel()
+    }
+
+    func testAnAppsAgentTakesItsOwnBeforeAndAfter() async {
+        await startAppModel()
+        let gate = Gate()
+        agent.scripts.append([.emit(.screenshots([ScreenshotTarget(page: "/tmp/settings.png")])), .pause(gate),
+                              .emit(.screenshots([ScreenshotTarget(page: "relative/after.png")])), .emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "x")!
+        await waitFor("the before") { gate.waiting == 1 && self.shots.captured.count == 1 }
+        git.pendingChanges = change
+        gate.open()
+        await waitFor("completed") { self.model.task(id)?.status == .completed }
+        XCTAssertEqual(agent.requests[0].screenshots, .app(wantsBefore: true))
+        XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [true, false])
+        XCTAssertEqual(model.task(id)?.screenshots?.map(\.page), ["settings", "after"])
+        XCTAssertEqual(shots.captured[0].path, "/tmp/settings.png")
+        XCTAssertTrue(shots.captured[1].path.hasSuffix("/relative/after.png"), shots.captured[1].path)
+
+        // Later prompts have changes to start from, so there is no before to ask for.
+        await runTurn(page: "/tmp/b.png", changes: DiffSummary(files: change.files + [FileChange(path: "b", kind: .added)]), captures: 2) {
+            model.sendPrompt(taskID: id, text: $0)
+        }
+        await waitFor("an after") { self.model.task(id)?.screenshots?.count == 3 }
+        XCTAssertEqual(agent.requests[1].screenshots, .app(wantsBefore: false))
+    }
+
+    func testAnAppsImagePathCanHaveSpaces() async {
+        await startAppModel()
+        let gate = Gate()
+        let line = "SHIFT_SCREENSHOT: /tmp/my shots/after.png"
+        agent.scripts.append([.pause(gate), .emit(OutcomeProtocol.screenshots(in: line)!), .emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "x")!
+        await waitFor("the agent to pause") { gate.waiting == 1 }
+        git.pendingChanges = change
+        gate.open()
+        await waitFor("completed") { self.model.task(id)?.status == .completed }
+        XCTAssertEqual(shots.captured.map(\.path), ["/tmp/my shots/after.png"])
+    }
+
+    func testAnAppsBeforeIsNeverAlsoItsAfter() async {
+        await startAppModel()
+        let id = await firstTurn(page: "/tmp/before.png", changes: change, captures: 1)
+        XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [true])
+    }
+
+    func testAnAppImageNamedOnlyAtTheEndIsTheAfter() async {
+        await startAppModel()
+        let gate = Gate()
+        agent.scripts.append([.pause(gate), .emit(.screenshots([ScreenshotTarget(page: "/tmp/a.png")])), .emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "x")!
+        await waitFor("the agent to pause") { gate.waiting == 1 }
+        git.pendingChanges = change
+        gate.open()
+        await waitFor("completed") { self.model.task(id)?.status == .completed }
+        XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [false])
+    }
+
+    func testAnAppAgentThatNamesNothingGetsNoScreenshots() async {
+        await startAppModel()
+        agent.scripts.append([.emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "x")!
+        git.pendingChanges = change
+        await waitFor("completed") { self.model.task(id)?.status == .completed }
+        XCTAssertNil(model.task(id)?.screenshots)
+        XCTAssertTrue(shots.captured.isEmpty)
+    }
+
+    func testAppInstructionsTellTheAgentToCapture() {
+        let first = OutcomeProtocol.instructions(firstTurn: false, screenshots: .app(wantsBefore: true))
+        XCTAssertTrue(first.contains("SHIFT_SCREENSHOT: <absolute path"))
+        XCTAssertTrue(first.contains("Before your first edit"))
+        XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false, screenshots: .app(wantsBefore: false)).contains("Before your first edit"))
+    }
+
+    func testCopyingAnImageMakesAPNGAndRefusesAnythingElse() async throws {
+        let shooter = WebScreenshotter()
+        let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 3,
+                                                 hasAlpha: false, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let source = temp.appendingPathComponent("shot.jpg")
+        try XCTUnwrap(rep.representation(using: .jpeg, properties: [:])).write(to: source)
+        let file = temp.appendingPathComponent("folder/copy.png")
+        let copied = await shooter.copyImage(at: source, to: file)
+        XCTAssertTrue(copied)
+        XCTAssertEqual(try Data(contentsOf: file).prefix(4), Data([0x89, 0x50, 0x4E, 0x47]))
+
+        let text = temp.appendingPathComponent("secret.txt")
+        try Data("secret".utf8).write(to: text)
+        let notAnImage = temp.appendingPathComponent("no.png")
+        var refused = await shooter.copyImage(at: text, to: notAnImage)
+        XCTAssertFalse(refused)
+        refused = await shooter.copyImage(at: temp, to: notAnImage)
+        XCTAssertFalse(refused, "a folder")
+        refused = await shooter.copyImage(at: URL(fileURLWithPath: "/dev/zero"), to: notAnImage)
+        XCTAssertFalse(refused, "never finishes reading")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: notAnImage.path))
     }
 
     /// The real browser view: a red page has to come out red, not as an empty window.
