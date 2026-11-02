@@ -23,17 +23,55 @@ enum OutcomeProtocol {
 
     /// For the project chat, instead of everything above: it isn't a task, and the user is there.
     static let chatInstructions = """
-    This is an open-ended conversation with the user about this project, inside the app Shift. You are in the \
-    project's own folder, not in a task's worktree, so what you do here happens on the branch checked out there. \
-    The user is reading along and answers you, so asking questions is fine. If the project has an AGENTS.md or \
-    CLAUDE.md, read it first when it's relevant.
+    This is an open-ended conversation with the user about this project, inside the app Shift, where each task is \
+    an agent working on its own branch and worktree. You are in the project's own folder, not in a task's worktree, \
+    so what you do here happens on the branch checked out there, which can be any branch. The user is reading along \
+    and answers you, so asking questions is fine. If the project has an AGENTS.md or CLAUDE.md, read it first when \
+    it's relevant.
 
-    Do what the user asks: explain the code and work out plans, and when they ask for an action, carry it out. You can \
-    change anything in this folder, run any command, use git (commit, pull, push) and run the project's own scripts, \
-    such as the one that releases a new version. A question only needs an answer: don't change anything, commit or \
-    push unless asked. Before anything that can't be undone and wasn't clearly asked for, such as force-pushing or \
-    discarding uncommitted work, check with the user.
+    Do what the user asks: explain the code, answer questions about any task or about the project in general, work \
+    out plans, and when they ask for an action, carry it out. You can change anything in this folder, run any \
+    command, use git (switch branches, commit, pull, push) and run the project's own scripts, such as the one that \
+    releases a new version. A question only needs an answer: don't change anything, commit or push unless asked. \
+    Before anything that can't be undone and wasn't clearly asked for, such as force-pushing or discarding \
+    uncommitted work, check with the user.
     """
+
+    /// Most merged tasks the chat is told about; the rest it can look up in the state file.
+    static let chatMergedLimit = 50
+
+    /// What the chat knows about the project's tasks. Passed with each run, as the tasks keep changing.
+    static func chatContext(tasks: [TaskItem], project: Project) -> String {
+        func oneLine(_ text: String) -> String { text.split(whereSeparator: \.isNewline).joined(separator: " ") }
+        func day(_ date: Date) -> String { date.formatted(.iso8601.year().month().day()) }
+        func entry(_ task: TaskItem) -> String {
+            var state = task.status.rawValue
+            if let merged = task.mergedAt { state += " \(day(merged))" }
+            var lines = ["- \(task.id) (\(state)) \(oneLine(task.title)): branch \(task.branch), base \(task.base(in: project))"
+                + (task.status == .merged ? "" : ", worktree \(task.worktreePath)")]
+            if let about = task.summary ?? task.description { lines.append("  \(oneLine(about))") }
+            if task.status != .merged, let now = task.question ?? task.blockedReason ?? task.activity { lines.append("  Now: \(oneLine(now))") }
+            return lines.joined(separator: "\n")
+        }
+
+        let open = tasks.filter { $0.status != .merged }.sorted { $0.createdAt > $1.createdAt }
+        let merged = tasks.filter { $0.status == .merged }.sorted { ($0.mergedAt ?? $0.createdAt) > ($1.mergedAt ?? $1.createdAt) }
+        var parts = ["""
+
+
+        To answer about a task, look at its code rather than guessing: an open task's worktree has its current work, \
+        which you can read without switching branches (git won't check out a branch here while a worktree has it). \
+        Don't change anything in a worktree unless asked, as an agent may be working there. A merged task's work is \
+        in its base branch and its worktree is gone. What was said and done in any task is in its agent's log, \
+        \(ShiftPaths.logs.path)/agent-<task number>.log, which is long: search it or read its end.
+        """]
+        parts.append("Open tasks, newest first:\n" + (open.isEmpty ? "None" : open.map(entry).joined(separator: "\n")))
+        parts.append("Merged tasks, newest first:\n" + (merged.isEmpty ? "None" : merged.prefix(chatMergedLimit).map(entry).joined(separator: "\n")))
+        if merged.count > chatMergedLimit {
+            parts.append("\(merged.count - chatMergedLimit) older merged tasks aren't listed. All tasks, with their prompts, are in \(ShiftPaths.state.path).")
+        }
+        return parts.joined(separator: "\n\n")
+    }
 
     static let describeFirst = """
     Before doing any work, start your first message with these two lines, each on a line of its own. \

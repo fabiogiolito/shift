@@ -195,13 +195,15 @@ public struct AgentRequest: Sendable {
     public var approvals: ApprovalChannel
     /// The project chat: it gets the chat's instructions instead of the task ones, and its reply as it's written.
     public var chat: Bool
+    /// The project chat: what it's told about the project's tasks right now, after its instructions.
+    public var chatContext: String
     /// The agent must say which page shows this turn's change (`.screenshotPage`).
     public var screenshots: Bool
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
                 description: String? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false,
-                screenshots: Bool = false) {
+                chatContext: String = "", screenshots: Bool = false) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -212,6 +214,7 @@ public struct AgentRequest: Sendable {
         self.description = description
         self.approvals = approvals
         self.chat = chat
+        self.chatContext = chatContext
         self.screenshots = screenshots
     }
 }

@@ -1973,6 +1973,7 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(request.permissions, .manual)
         XCTAssertEqual(request.worktree.path, project.repoPath)
         XCTAssertEqual(request.prompt, "Why?")
+        XCTAssertTrue(request.chatContext.contains("Open tasks"))
         XCTAssertEqual(request.model, "opus")
         XCTAssertFalse(request.needsDescription)
         XCTAssertNil(request.sessionID)
