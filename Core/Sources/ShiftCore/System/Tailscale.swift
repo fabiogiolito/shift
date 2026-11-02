@@ -23,6 +23,16 @@ public struct Tailscale: Sendable {
         return dns
     }
 
+    /// The login of whoever this machine belongs to on the tailnet.
+    public func ownerLogin() async -> String? {
+        guard let status = await run(["status", "--json"]),
+              let json = try? JSONSerialization.jsonObject(with: Data(status.utf8)) as? [String: Any],
+              let id = (json["Self"] as? [String: Any])?["UserID"] as? NSNumber,
+              let users = json["User"] as? [String: Any], let user = users[id.stringValue] as? [String: Any]
+        else { return nil }
+        return user["LoginName"] as? String
+    }
+
     public func unserve(port: Int) async {
         _ = await run(["serve", "--https=\(port)", "off"])
     }

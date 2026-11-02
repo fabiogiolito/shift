@@ -47,6 +47,12 @@ struct ShiftApp: App {
         }
         .defaultSize(width: 720, height: 480)
         .restorationBehavior(.disabled)
+
+        Window("Paired Devices", id: PairedDevicesView.windowID) {
+            PairedDevicesView().environment(delegate.model)
+        }
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
     }
 }
 
@@ -84,7 +90,16 @@ private struct ProjectSettingsCommand: Commands {
             Button("Project Settings…") { openProjectSettings?() }
                 .keyboardShortcut(",")
                 .disabled(openProjectSettings == nil)
+            PairedDevicesCommand()
         }
+    }
+}
+
+private struct PairedDevicesCommand: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Paired Devices…") { openWindow(id: PairedDevicesView.windowID) }
     }
 }
 

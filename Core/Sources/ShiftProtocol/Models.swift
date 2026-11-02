@@ -21,8 +21,8 @@ public struct AgentModel: Hashable, Identifiable, Sendable {
 }
 
 /// How much of the user's agent subscription is used, per limit window (5 hours, a week…).
-public struct AgentUsage: Equatable, Sendable {
-    public struct Window: Equatable, Sendable {
+public struct AgentUsage: Codable, Equatable, Sendable {
+    public struct Window: Codable, Equatable, Sendable {
         /// "5-hour", "Weekly".
         public var name: String
         public var usedPercent: Double
@@ -355,7 +355,7 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
 
     public static let interruptedReason = "Interrupted when Shift quit."
     /// Saved by earlier builds; still resumable.
-    static let legacyInterruptedReason = "Interrupted when Shift quit. Send a prompt to continue."
+    package static let legacyInterruptedReason = "Interrupted when Shift quit. Send a prompt to continue."
     public static let stoppedReason = "Stopped"
 
     /// Blocked because it was stopped or interrupted, so `AppModel.resume(taskID:)` can carry on.
@@ -372,15 +372,34 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     }
 
     /// What a task is called until the agent or the user names it.
-    static func localTitle(id: Int, prompt: String, attachments: [String]) -> String {
-        let title = AppModel.title(for: prompt.isEmpty ? attachments.first.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "" : prompt)
+    package static func localTitle(id: Int, prompt: String, attachments: [String]) -> String {
+        let title = Self.title(for: prompt.isEmpty ? attachments.first.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "" : prompt)
         return title.isEmpty ? "Task \(id)" : title
     }
 
     /// Nobody has named it yet, so the agent still may.
-    var hasLocalTitle: Bool {
+    package var hasLocalTitle: Bool {
         guard let first = prompts.first else { return false }
         return title == Self.localTitle(id: id, prompt: first.text, attachments: first.attachments)
+    }
+
+    /// The title until the agent or the user gives one (see `hasLocalTitle`), and the fallback if neither does.
+    package static func title(for prompt: String) -> String {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        var sentence = ""
+        for (index, character) in zip(text.indices, text) {
+            if character.isNewline { break }
+            if ".!?".contains(character) {
+                let next = text.index(after: index)
+                if next == text.endIndex || text[next].isWhitespace { break }
+            }
+            sentence.append(character)
+        }
+        if sentence.count > 50 {
+            let cut = sentence.prefix(50)
+            sentence = String(cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut)
+        }
+        return sentence.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     }
 
     /// The branch this task merges into: its own, else (state from before tasks had one) the project's.

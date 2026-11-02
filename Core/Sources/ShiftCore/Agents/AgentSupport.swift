@@ -5,7 +5,7 @@ import Foundation
 
 // MARK: - Outcome protocol
 
-enum OutcomeProtocol {
+extension OutcomeProtocol {
     static let marker = "SHIFT_STATUS:"
     static let titleMarker = "SHIFT_TITLE:"
     static let descriptionMarker = "SHIFT_DESCRIPTION:"
@@ -243,46 +243,6 @@ enum OutcomeProtocol {
             .filter { !$0.contains(titleMarker) && !$0.contains(descriptionMarker) && !$0.contains(screenshotMarker) }
             .joined(separator: "\n")
     }
-
-    static func short(_ text: String, limit: Int = 400) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.count <= limit ? trimmed : String(trimmed.prefix(limit - 1)) + "…"
-    }
-}
-
-// MARK: - Stream parsing state
-
-/// What an adapter's line parser has learned so far about the current turn.
-struct TurnState: Equatable {
-    struct Approval: Equatable {
-        var id: String
-        var summary: String
-    }
-
-    var sessionID: String?
-    var finalMessage: String?
-    var error: String?
-    /// The CLI itself said the turn failed (as opposed to the agent saying it is blocked).
-    var cliFailed = false
-
-    // Manual permissions only: the parser's side of a conversation over stdin.
-    /// Approval requests found in the current line; the runner takes them.
-    var approvals: [Approval] = []
-    /// Lines to write to the agent's stdin; the runner takes them.
-    var outgoing: [String] = []
-    /// The turn is over: close stdin so the agent exits.
-    var closeInput = false
-    /// Codex: file-change item id → the file it changes, for its approval request.
-    var files: [String: String] = [:]
-
-    // Follow-up instructions sent into a running session (Codex app server).
-    /// The turn in progress, which follow-ups steer.
-    var turnID: String?
-    /// Steer requests waiting for their response: request id → the text they carry.
-    var steers: [Int: String] = [:]
-    /// Follow-ups whose steer came too late for the turn; they start the next turn instead.
-    var unsteered: [String] = []
-    var nextRequestID = 100
 }
 
 /// Parses one line of stdout. Returns a short activity line if the event deserves one.
@@ -295,27 +255,6 @@ typealias MessageSender = @Sendable (_ text: String, _ state: inout TurnState) -
 /// Manual permissions: the stdin line that answers the approval request that arrived as `request`
 /// (a whole stdout line), and whether `message` went with it.
 typealias ApprovalReply = @Sendable (_ request: String, _ allow: Bool, _ message: String?) -> (line: String, deliveredMessage: Bool)
-
-func jsonLine(_ object: Any) -> String {
-    let data = (try? JSONSerialization.data(withJSONObject: object, options: [.withoutEscapingSlashes, .sortedKeys])) ?? Data()
-    return String(decoding: data, as: UTF8.self) + "\n"
-}
-
-/// "Run `pnpm install`": a verb and a short excerpt of code, on one line.
-func approvalSummary(_ verb: String, _ code: String) -> String {
-    let line = code.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines)[0]
-    return "\(verb) `\(OutcomeProtocol.short(line, limit: 60))`"
-}
-
-func jsonObject(_ line: String) -> [String: Any]? {
-    guard line.first == "{", let data = line.data(using: .utf8) else { return nil }
-    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-}
-
-func fileName(_ path: String?) -> String? {
-    guard let path, !path.isEmpty else { return nil }
-    return (path as NSString).lastPathComponent
-}
 
 // MARK: - Environment and detection
 

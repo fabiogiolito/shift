@@ -14,7 +14,8 @@ extension AppModel {
             store: JSONStateStore(),
             tailscale: Tailscale(),
             screenshots: WebScreenshotter(),
-            control: ControlServer()
+            control: ControlServer(),
+            remote: RemoteListener()
         ))
     }
 }

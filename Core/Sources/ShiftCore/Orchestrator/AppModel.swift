@@ -52,12 +52,7 @@ public final class AppModel {
     /// App projects: each task's latest build since launch. No entry: not built yet.
     public private(set) var builds: [TaskItem.ID: BuildState] = [:]
 
-    public enum BuildState: Equatable, Sendable {
-        case building
-        /// `app`: the .app it built, if the build command printed one.
-        case succeeded(app: URL?)
-        case failed(String)
-    }
+    public typealias BuildState = ShiftProtocol.BuildState
 
     /// Each project's chat, once it has been used.
     public private(set) var chats: [ProjectChat] = []
@@ -69,6 +64,9 @@ public final class AppModel {
     private var chatApprovals: [Project.ID: [(id: String, summary: String)]] = [:]
 
     private let services: Services?
+    /// What a paired phone goes through. nil without `Services.remote`.
+    var remote: RemoteServer?
+    var store: StateStoring? { services?.store }
 
     /// One agent run (setup + turns) for a task. A run may only write to its task while it is
     /// the entry in `runs` and still `active`; stop/merge/delete revoke that before cancelling,
@@ -250,6 +248,11 @@ public final class AppModel {
             await self?.handleControl(token: token, arguments: arguments) ?? ControlReply(ok: false, text: "Shift is quitting.")
         }
 
+        if let listener = services.remote {
+            remote = RemoteServer(model: self, listener: listener)
+            await remote?.start()
+        }
+
         for task in tasks where task.status != .merged {
             await reconcile(task.id)
         }
@@ -266,6 +269,7 @@ public final class AppModel {
     /// Called on app termination: stop servers and agents, persist.
     public func shutdown() async {
         guard let services else { return }
+        remote?.stop()
         tasks.map(\.id).forEach(dropPending)
         let running = runs.values.map(\.task)
         for id in runs.keys { runs[id]?.active = false }
@@ -1117,6 +1121,17 @@ public final class AppModel {
     public func rawOutput(taskID: TaskItem.ID) async -> String {
         guard let services else { return "" }
         return await services.store.readLog(taskID: taskID)
+    }
+
+    /// Serves the port on the tailnet, for a phone. nil: Tailscale isn't running, or is set up without HTTPS.
+    func shareOnTailnet(port: Int) async -> (host: String, owner: String)? {
+        guard let tailscale = services?.tailscale, let host = await tailscale.serve(port: port),
+              let owner = await tailscale.ownerLogin() else { return nil }
+        return (host, owner)
+    }
+
+    func stopSharingOnTailnet(port: Int) async {
+        await services?.tailscale?.unserve(port: port)
     }
 
     /// Reads the task's log as a conversation. nil for the preview model.
@@ -2002,24 +2017,7 @@ public final class AppModel {
 
     // MARK: - Helpers
 
-    /// The title until the agent or the user gives one (see `TaskItem.hasLocalTitle`), and the fallback if neither does.
-    nonisolated static func title(for prompt: String) -> String {
-        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        var sentence = ""
-        for (index, character) in zip(text.indices, text) {
-            if character.isNewline { break }
-            if ".!?".contains(character) {
-                let next = text.index(after: index)
-                if next == text.endIndex || text[next].isWhitespace { break }
-            }
-            sentence.append(character)
-        }
-        if sentence.count > 50 {
-            let cut = sentence.prefix(50)
-            sentence = String(cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut)
-        }
-        return sentence.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-    }
+    nonisolated static func title(for prompt: String) -> String { TaskItem.title(for: prompt) }
 
     static func branchMissingReason(_ task: TaskItem, _ project: Project) -> String {
         "The branch \(task.branch) is missing. Send a prompt to start the task again from \(task.base(in: project))."

@@ -1,5 +1,5 @@
 import SwiftUI
-import ShiftCore
+import ShiftProtocol
 
 struct StatusIcon: View {
     let status: TaskStatus
