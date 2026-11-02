@@ -343,9 +343,13 @@ final class MockSimulators: SimulatorRunning {
 final class MockScreenshots: Screenshotting {
     var fails = false
     private(set) var captured: [URL] = []
+    private(set) var scripts: [String?] = []
 
-    func capture(url: URL, to file: URL) async -> Bool {
-        if !fails { captured.append(url) }
+    func capture(url: URL, script: String?, to file: URL) async -> Bool {
+        if !fails {
+            captured.append(url)
+            scripts.append(script)
+        }
         return !fails
     }
 }

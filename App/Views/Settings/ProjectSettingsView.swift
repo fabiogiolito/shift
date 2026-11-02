@@ -272,7 +272,7 @@ struct ProjectSettingsView: View {
             } footer: {
                 Text(usesBuild(current)
                      ? "Only for projects with a dev server: Shift screenshots a page of the running project, and an app build has no page to load."
-                     : "Keeps a screenshot of the page each prompt changes, and of how it looked before the task's first change. They show above the changed files.")
+                     : "Keeps screenshots of what each prompt changes, and of how the page looked before the task's first change. They show above the changed files.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

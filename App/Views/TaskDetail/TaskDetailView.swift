@@ -44,6 +44,7 @@ struct TaskDetailView: View {
     @State private var openPrompts: Set<Prompt.ID> = []
     /// The screenshot open in Quick Look.
     @State private var screenshotPreview: URL?
+    @State private var screenshotsExpanded = false
 
     private let apps = ExternalApps()
 
@@ -544,24 +545,33 @@ struct TaskDetailView: View {
         }
     }
 
-    /// Most recent first. Quick Look's arrow keys walk through them all, to compare.
+    /// Most recent first, as a stack when there are several: a click spreads it out, then a click opens one.
+    /// Quick Look's arrow keys walk through them all, to compare.
     @ViewBuilder private func screenshotsRow(_ task: TaskItem) -> some View {
         let shots = (task.screenshots ?? []).reversed().map { $0 }
         if !shots.isEmpty {
+            let stacked = shots.count > 1 && !screenshotsExpanded
             ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(shots) { shot in
-                        Button { screenshotPreview = shot.url } label: {
-                            VStack(spacing: 4) {
-                                AsyncImage(url: shot.url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
-                                    .frame(width: 96, height: 60, alignment: .top)
-                                    .clipShape(.rect(cornerRadius: 8))
-                                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
-                                Text(shot.isBefore ? "Before" : "After").font(.caption).foregroundStyle(.secondary)
-                            }
+                HStack(alignment: .center, spacing: stacked ? -90 : 8) {
+                    ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
+                        Button {
+                            if stacked { withAnimation(.snappy) { screenshotsExpanded = true } }
+                            else { screenshotPreview = shot.url }
+                        } label: {
+                            AsyncImage(url: shot.url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                                .frame(width: 96, height: 60, alignment: .top)
+                                .clipShape(.rect(cornerRadius: 8))
+                                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
                         }
                         .buttonStyle(.plain)
+                        .zIndex(Double(-index))
                         .help("\(shot.page), \(shot.date.formatted(date: .abbreviated, time: .shortened))")
+                    }
+                    if shots.count > 1 && screenshotsExpanded {
+                        Button("Collapse", systemImage: "chevron.left") { withAnimation(.snappy) { screenshotsExpanded = false } }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
+                            .help("Stack the screenshots")
                     }
                 }
             }

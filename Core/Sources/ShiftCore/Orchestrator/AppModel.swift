@@ -1413,7 +1413,7 @@ public final class AppModel {
                     if case .blocked(let reason, _) = outcome { failure = reason }
                     break events
                 case .approvalRequested(let id, let summary): chatApprovals[projectID, default: []].append((id, summary))
-                case .activity, .described, .screenshotPage: break
+                case .activity, .described, .screenshots: break
                 }
                 guard isChatCurrent(projectID, token) else { return }
                 deliverChatPending(projectID)
@@ -1686,10 +1686,10 @@ public final class AppModel {
                             $0.description = description ?? $0.description
                         }
                     }
-                case .screenshotPage(let page):
-                    shots?.page = page
+                case .screenshots(let targets):
+                    shots?.targets = targets
                     // Not awaited: the agent may be waiting for an answer to an approval meanwhile.
-                    if shots?.wantsBefore == true, let page, let diff = shots?.diff {
+                    if shots?.wantsBefore == true, let page = targets.first?.page, let diff = shots?.diff {
                         shots?.before = Task { await takeBeforeScreenshot(id, page: page, unchangedFrom: diff) }
                     }
                     shots?.wantsBefore = false
@@ -1741,8 +1741,8 @@ public final class AppModel {
         let diff: [FileDiff]
         /// Nothing has changed yet, so the next page named can still be shot as it was.
         var wantsBefore: Bool
-        /// The home page unless the agent names another. Nil: nothing visible changes.
-        var page: String? = "/"
+        /// The home page unless the agent names something else. Empty: nothing visible changes.
+        var targets = [ScreenshotTarget(page: "/")]
         var before: Task<Void, Never>?
     }
 
@@ -1762,24 +1762,25 @@ public final class AppModel {
     private func takeBeforeScreenshot(_ id: TaskItem.ID, page: String, unchangedFrom diff: [FileDiff]) async {
         guard let services, let task = task(id), let project = project(task.projectID),
               (try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project))) == diff else { return }
-        await takeScreenshot(id, page: page, isBefore: true)
+        // As it loads: what a script would select is what the agent is about to build.
+        await takeScreenshot(id, ScreenshotTarget(page: page), isBefore: true)
     }
 
     private func takeAfterScreenshot(_ id: TaskItem.ID, _ shots: ScreenshotTurn) async {
         await shots.before?.value
-        guard let services, let page = shots.page, let task = task(id), let project = project(task.projectID),
+        guard let services, !shots.targets.isEmpty, let task = task(id), let project = project(task.projectID),
               let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)),
               diff != shots.diff else { return }
         update(id) { $0.activity = "Taking a screenshot…" }
-        await takeScreenshot(id, page: page, isBefore: false)
+        for target in shots.targets { await takeScreenshot(id, target, isBefore: false) }
     }
 
-    private func takeScreenshot(_ id: TaskItem.ID, page: String, isBefore: Bool) async {
+    private func takeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, isBefore: Bool) async {
         guard let services, let screenshots = services.screenshots, let server = task(id)?.serverURL else { return }
         let shot = TaskScreenshot(path: ShiftPaths.screenshots.appendingPathComponent("\(id)-\(UUID().uuidString).png").path,
-                                  isBefore: isBefore, page: page)
-        let url = Self.screenshotURL(page: page, server: server)
-        guard await serverAnswers(id), await screenshots.capture(url: url, to: shot.url) else {
+                                  isBefore: isBefore, page: target.page)
+        let url = Self.screenshotURL(page: target.page, server: server)
+        guard await serverAnswers(id), await screenshots.capture(url: url, script: target.script, to: shot.url) else {
             await services.store.appendLog(taskID: id, text: "Could not take a screenshot of \(url.absoluteString)\n")
             return
         }

@@ -139,7 +139,7 @@ public struct AgentRequest: Sendable {
     public var chat: Bool
     /// The project chat: what it's told about the project's tasks right now, after its instructions.
     public var chatContext: String
-    /// The agent must say which page shows this turn's change (`.screenshotPage`).
+    /// The agent must say what shows this turn's change (`.screenshots`).
     public var screenshots: Bool
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
@@ -216,8 +216,9 @@ public protocol Notifying: Sendable {
 }
 
 public protocol Screenshotting: Sendable {
-    /// Saves a PNG of the page at `url` to `file`, making its folder if needed. False if the page did not load.
-    func capture(url: URL, to file: URL) async -> Bool
+    /// Saves a PNG of the page at `url` to `file`, making its folder if needed, after running `script` in the
+    /// loaded page. False if the page did not load or the script failed: the picture wouldn't show what was asked.
+    func capture(url: URL, script: String?, to file: URL) async -> Bool
 }
 
 // MARK: - Persistence
