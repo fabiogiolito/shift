@@ -364,9 +364,33 @@ final class ConversationTests: XCTestCase {
             .listItem(level: 0, marker: "1.", "First"),
             .code("let x = 1\n\nlet y = 2"),
             .quote("Quoted"),
-            .table("| a | b |\n|---|---|\n| 1 | 2 |"),
+            .table(header: ["a", "b"], rows: [["1", "2"]]),
             .rule,
             .code("still open"),
+        ])
+    }
+
+    func testMarkdownTables() {
+        let text = """
+        | | B |
+        |:--|--:|
+        | **x** \\| y | 2 |
+        | short |
+        | one | two | extra |
+
+        a | b
+        ---|---
+        1 | 2
+        after
+
+        | not a table |
+        | still not |
+        """
+        XCTAssertEqual(MarkdownBlock.parse(text), [
+            .table(header: ["", "B"], rows: [["**x** | y", "2"], ["short", ""], ["one", "two"]]),
+            .table(header: ["a", "b"], rows: [["1", "2"]]),
+            .paragraph("after"),
+            .paragraph("| not a table |\n| still not |"),
         ])
     }
 }
