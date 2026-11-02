@@ -202,5 +202,18 @@
 - Stop showing routine step failures as red warnings in conversations]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.1.13/Shift-0.1.13.zip" sparkle:edSignature="W5XYD7rP2qWqHjkM9snTe5SUvtIWuN01D5XCXX7sji16DxEgR6o6RK0fCbT93a/KUlIme7d++GGJgfeFhM/aDw==" length="4086569" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.0</title>
+      <pubDate>Mon, 02 Nov 2026 14:08:15 +0000</pubDate>
+      <sparkle:version>16</sparkle:version>
+      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Follow and steer tasks from your iPhone with the new iOS companion app: pair by QR code over Tailscale, see conversations, approve or deny requests, stop or resume tasks, and preview dev servers
+- Give a project several build targets, such as a Mac app, iOS Simulator, run command or script, each with its own build state and logs
+- Choose a target from the Build button, which becomes a split button with several targets and suggests the one that covers most of the task's changes
+- Let Shift detect build targets automatically, or edit them in project settings or through the chat
+- Your Mac stays awake while a task is working, and you can revoke a paired phone at any time]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.0/Shift-0.2.0.zip" sparkle:edSignature="FVkZdDzfsg3i2yHerwqW54ar/R4gW/dc3K0ETjcP03NrMeCJvik+Cs0Pjv1013xRMO/+YGKwjSlTU9cfekeJDw==" length="4479188" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
