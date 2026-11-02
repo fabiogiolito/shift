@@ -154,10 +154,12 @@ public struct AgentRequest: Sendable {
     public var approvals: ApprovalChannel
     /// The project chat: it gets the chat's instructions instead of the task ones, and its reply as it's written.
     public var chat: Bool
+    /// The project chat: what it's told about the project's tasks right now, after its instructions.
+    public var chatContext: String
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
-                approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false) {
+                approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false, chatContext: String = "") {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -167,6 +169,7 @@ public struct AgentRequest: Sendable {
         self.needsDescription = needsDescription ?? (sessionID == nil)
         self.approvals = approvals
         self.chat = chat
+        self.chatContext = chatContext
     }
 }
 

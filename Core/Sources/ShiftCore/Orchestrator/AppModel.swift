@@ -1171,7 +1171,8 @@ public final class AppModel {
             chatRuns[projectID]?.channel = channel
             let request = AgentRequest(prompt: text, sessionID: chat(projectID: projectID)?.sessionID, worktree: project.repoURL,
                                        permissions: project.permissions, model: project.models[kind], needsDescription: false,
-                                       approvals: channel, chat: true)
+                                       approvals: channel, chat: true,
+                                       chatContext: OutcomeProtocol.chatContext(tasks: tasks(in: projectID), project: project))
             var failure: String?
             events: for await event in adapter.run(request) {
                 guard isChatCurrent(projectID, token) else { return }

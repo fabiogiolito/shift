@@ -85,7 +85,7 @@ public struct CodexAdapter: AgentAdapter {
     }
 
     public func run(_ request: AgentRequest) -> AsyncStream<AgentEvent> {
-        let prompt = request.prompt + "\n\n" + (request.chat ? OutcomeProtocol.chatInstructions
+        let prompt = request.prompt + "\n\n" + (request.chat ? OutcomeProtocol.chatInstructions + request.chatContext
             : OutcomeProtocol.instructions(firstTurn: request.needsDescription))
         let session = request.sessionID, cwd = request.worktree.path, manual = request.permissions == .manual
         return runAgentProcess(kind: kind, request: request,
