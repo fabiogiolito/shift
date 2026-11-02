@@ -58,7 +58,7 @@ struct TaskListView: View {
             }
         }
         .overlay {
-            if tasks.isEmpty { ContentUnavailableView("No Tasks", systemImage: "checklist") }
+            if tasks.isEmpty { ContentUnavailableView("No Tasks", systemImage: "tray", description: Text("Start a task in Shift on your Mac.")) }
         }
         .navigationTitle(model.state.projects.first { $0.id == projectID }?.name ?? "Tasks")
     }
