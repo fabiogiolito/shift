@@ -63,27 +63,17 @@ struct PromptBubble: View {
     }
 }
 
-/// Consecutive tool steps as one line that expands. Failures stay visible while it's closed.
+/// Consecutive tool steps as one line that expands. A failed step is only marked inside: agents hit
+/// and work past these all the time, and a failure that ends the run shows as its own error.
 private struct StepsView: View {
     let steps: [TranscriptStep]
     let reader: TranscriptReader?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            DisclosureGroup {
-                ForEach(steps) { StepRow(step: $0, reader: reader) }
-            } label: {
-                Text(TranscriptStep.summary(steps)).foregroundStyle(.secondary)
-            }
-            ForEach(steps.filter { $0.failure != nil }) { step in
-                Label {
-                    Text("\(step.title): \(step.failure ?? "")").lineLimit(2).textSelection(.enabled)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                }
-                .font(.callout)
-                .foregroundStyle(.red)
-            }
+        DisclosureGroup {
+            ForEach(steps) { StepRow(step: $0, reader: reader) }
+        } label: {
+            Text(TranscriptStep.summary(steps)).foregroundStyle(.secondary)
         }
     }
 }
