@@ -66,6 +66,7 @@ targets:
       - iOS
       - App/Views/Shared/StatusIcon.swift
       - App/Views/Shared/MarkdownText.swift
+      - App/Views/Shared/EmptyState.swift
       - App/Resources/AppIcon.icon
     dependencies:
       - package: ShiftCore
