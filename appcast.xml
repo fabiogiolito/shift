@@ -215,5 +215,17 @@
 - Your Mac stays awake while a task is working, and you can revoke a paired phone at any time]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.0/Shift-0.2.0.zip" sparkle:edSignature="FVkZdDzfsg3i2yHerwqW54ar/R4gW/dc3K0ETjcP03NrMeCJvik+Cs0Pjv1013xRMO/+YGKwjSlTU9cfekeJDw==" length="4479188" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.1</title>
+      <pubDate>Mon, 02 Nov 2026 17:53:47 +0000</pubDate>
+      <sparkle:version>17</sparkle:version>
+      <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Dev servers no longer fail with "port in use" when Tailscale is sharing that port, and a server that loses its port moves to a free one
+- Your messages have a lighter background
+- Empty states look cleaner
+- The screenshots setting is always visible and explains when it's unavailable]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.1/Shift-0.2.1.zip" sparkle:edSignature="tHIZDuQ3dihR6a88l0KR/rftCRqn4FCJfPgH8AMw3jx+SNcq7RnDeNcByucPTvnLqzjPKhUrFOS0/qPfKH37DA==" length="4480573" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
