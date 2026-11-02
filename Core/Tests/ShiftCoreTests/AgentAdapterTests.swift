@@ -151,11 +151,14 @@ final class AgentAdapterTests: XCTestCase {
         let first = OutcomeProtocol.instructions(firstTurn: true), later = OutcomeProtocol.instructions(firstTurn: false)
         for text in [first, later] {
             XCTAssertTrue(text.contains("SHIFT_STATUS: completed"))
-            XCTAssertTrue(text.contains("SHIFT_TITLE: <title>"))
+            XCTAssertTrue(text.contains("SHIFT_DESCRIPTION: <description>"))
             XCTAssertTrue(text.contains("SHIFT_OPTION: <reply>"))
         }
         XCTAssertTrue(first.contains("Before doing any work"))
-        XCTAssertTrue(later.contains("otherwise do not write them"))
+        XCTAssertTrue(first.contains("SHIFT_TITLE: <title>"))
+        XCTAssertFalse(later.contains("SHIFT_TITLE"), "the agent names a task once")
+        XCTAssertTrue(later.contains("do not write it at all"))
+        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, description: "Adds a page.").contains("\"Adds a page.\""))
         XCTAssertEqual(ClaudeCodeAdapter.arguments(for: AgentRequest(prompt: "x", sessionID: "abc", worktree: URL(fileURLWithPath: "/tmp")))
             .contains(later), true)
     }

@@ -415,9 +415,9 @@ public final class AppModel {
         let first = Prompt(text: prompt, attachments: attachments)
         let id = nextTaskID
         nextTaskID += 1
-        let title = Self.title(for: prompt.isEmpty ? URL(fileURLWithPath: attachments[0]).lastPathComponent : prompt)
+        let title = TaskItem.localTitle(id: id, prompt: prompt, attachments: attachments)
         tasks.append(TaskItem(
-            id: id, projectID: projectID, title: title.isEmpty ? "Task \(id)" : title, status: .working,
+            id: id, projectID: projectID, title: title, status: .working,
             agent: agent ?? project.defaultAgent, branch: "shift/\(id)", baseBranch: project.baseBranch,
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
             prompts: [first], workingSince: Date()))
@@ -564,13 +564,16 @@ public final class AppModel {
         }
     }
 
-    /// Pushes the task's branch and returns the page that opens a pull request for it into its base.
+    /// Pushes the task's branch and returns the page that opens a pull request for it into its base,
+    /// with the task's title and what the agent said about it filled in.
     /// Nil (and `lastError`) if the push fails or the remote is not on GitHub.
     public func pullRequestURL(taskID: TaskItem.ID) async -> URL? {
         guard let services, let task = task(taskID), let project = project(task.projectID) else { return nil }
         guard let remote = await services.git.remote(repo: project.repoURL, branch: task.branch),
               let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
-              let url = Self.pullRequestURL(remoteURL: remoteURL, branch: task.branch, base: task.base(in: project)) else {
+              let url = Self.pullRequestURL(remoteURL: remoteURL, branch: task.branch, base: task.base(in: project),
+                                            title: task.title,
+                                            body: [task.description, task.summary].compactMap { $0 }.joined(separator: "\n\n")) else {
             lastError = "Could not open a pull request for \(task.title): the project has no GitHub remote."
             return nil
         }
@@ -585,9 +588,16 @@ public final class AppModel {
     }
 
     /// GitHub's compare page for `branch` into `base`, from an https or ssh remote URL. Nil for other hosts.
-    static func pullRequestURL(remoteURL: String, branch: String, base: String) -> URL? {
+    /// An empty `body` is left out so the repo's pull request template still applies.
+    static func pullRequestURL(remoteURL: String, branch: String, base: String, title: String, body: String) -> URL? {
         guard let match = remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#) else { return nil }
-        return URL(string: "https://github.com/\(match.1)/compare/\(base)...\(branch)?expand=1")
+        // `+` must be escaped too: GitHub reads a bare one in a query as a space.
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
+        func encoded(_ text: String) -> String { text.addingPercentEncoding(withAllowedCharacters: allowed) ?? "" }
+        let page = "https://github.com/\(match.1)/compare/\(base)...\(branch)?expand=1&title=\(encoded(title))"
+        let filled = "\(page)&body=\(encoded(body))"
+        // ponytail: GitHub rejects very long URLs, so a huge body is dropped rather than truncated mid-sentence.
+        return URL(string: body.isEmpty || filled.count > 6000 ? page : filled)
     }
 
     /// The project's base branch in the browser: its base server, started again first if it stopped, once it
@@ -825,6 +835,13 @@ public final class AppModel {
         let base = task.base(in: project)
         guard await !services.git.branchExists(repo: project.repoURL, branch: base) else { return nil }
         return "The base branch \(base) no longer exists. Pick another one in the task's More menu."
+    }
+
+    /// The name the user gave it. From here on the agent can't change it.
+    public func rename(taskID: TaskItem.ID, to title: String) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        update(taskID) { $0.title = title }
     }
 
     /// Stops the agent. The task becomes blocked and can be restarted with a prompt.
@@ -1410,6 +1427,7 @@ public final class AppModel {
                                        permissions: project(task.projectID)?.permissions ?? .bypass,
                                        model: project(task.projectID)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
+                                       description: task.description,
                                        approvals: channel)
             approvalChannels[id] = channel
             await services.store.appendLog(taskID: id, text: RunMarker.line(
@@ -1432,7 +1450,8 @@ public final class AppModel {
                     // The prompt of a conflict resolution is ours; it does not change what the task is for.
                     if !task.isResolvingConflict {
                         update(id) {
-                            $0.title = title ?? $0.title
+                            // Named once: only the local title gives way, never the agent's or the user's.
+                            if let title, $0.hasLocalTitle { $0.title = title }
                             $0.description = description ?? $0.description
                         }
                     }
@@ -1753,8 +1772,8 @@ public final class AppModel {
 
     // MARK: - Helpers
 
-    /// The title until the agent gives its own (`.described`), and the fallback if it never does.
-    static func title(for prompt: String) -> String {
+    /// The title until the agent or the user gives one (see `TaskItem.hasLocalTitle`), and the fallback if neither does.
+    nonisolated static func title(for prompt: String) -> String {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         var sentence = ""
         for (index, character) in zip(text.indices, text) {

@@ -150,6 +150,8 @@ public struct AgentRequest: Sendable {
     public var model: String?
     /// The task has no agent-written title and description yet, so the agent must provide them.
     public var needsDescription: Bool
+    /// The task's current description, which the agent extends as the task grows.
+    public var description: String?
     /// Manual permissions: where the answers to `.approvalRequested` come from.
     public var approvals: ApprovalChannel
     /// The project chat: it gets the chat's instructions instead of the task ones, and its reply as it's written.
@@ -159,7 +161,7 @@ public struct AgentRequest: Sendable {
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
-                approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false, chatContext: String = "") {
+                description: String? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false, chatContext: String = "") {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -167,6 +169,7 @@ public struct AgentRequest: Sendable {
         self.permissions = permissions
         self.model = model
         self.needsDescription = needsDescription ?? (sessionID == nil)
+        self.description = description
         self.approvals = approvals
         self.chat = chat
         self.chatContext = chatContext

@@ -116,6 +116,7 @@ struct TaskListView: View {
 
 struct TaskRow: View {
     let task: TaskItem
+    @State private var renaming = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -131,5 +132,33 @@ struct TaskRow: View {
             Text(task.description ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
         }
         .padding(.vertical, 2)
+        .contextMenu {
+            Button("Rename Task…") { renaming = true }
+        }
+        .renameTaskAlert(task, isPresented: $renaming)
+    }
+}
+
+extension View {
+    /// Asks for a new name for `task`. Shared by the task list and the More menu.
+    func renameTaskAlert(_ task: TaskItem, isPresented: Binding<Bool>) -> some View {
+        modifier(RenameTaskAlert(task: task, isPresented: isPresented))
+    }
+}
+
+private struct RenameTaskAlert: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+    @Binding var isPresented: Bool
+    @State private var name = ""
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: isPresented) { if isPresented { name = task.title } }
+            .alert("Rename Task", isPresented: $isPresented) {
+                TextField("Name", text: $name)
+                Button("Rename") { model.rename(taskID: task.id, to: name) }
+                Button("Cancel", role: .cancel) {}
+            }
     }
 }

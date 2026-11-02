@@ -1240,8 +1240,41 @@ final class AppModelTests: XCTestCase {
                               .emit(.finished(.completed(summary: "Done")))])
         model.sendPrompt(taskID: id, text: "Change of plan")
         await waitFor("the third run") { self.agent.requests.count == 3 && self.status(id) == .completed }
-        XCTAssertEqual(model.task(id)?.title, "New goal")
+        XCTAssertEqual(model.task(id)?.title, "New goal", "still the local title until now")
         XCTAssertEqual(model.task(id)?.description, "Why it matters.")
+    }
+
+    func testTheAgentNamesATaskOnlyOnce() async {
+        let id = await createCompletedTask()
+        agent.scripts.append([.emit(.described(title: "First name", description: "What it does.")),
+                              .emit(.finished(.completed(summary: "Done")))])
+        model.sendPrompt(taskID: id, text: "More")
+        await waitFor("the second run") { self.agent.requests.count == 2 && self.status(id) == .completed }
+        XCTAssertEqual(model.task(id)?.title, "First name")
+
+        agent.scripts.append([.emit(.described(title: "Second name", description: "What it does now.")),
+                              .emit(.finished(.completed(summary: "Done")))])
+        model.sendPrompt(taskID: id, text: "Even more")
+        await waitFor("the third run") { self.agent.requests.count == 3 && self.status(id) == .completed }
+        XCTAssertEqual(agent.requests[2].description, "What it does.")
+        XCTAssertEqual(model.task(id)?.title, "First name")
+        XCTAssertEqual(model.task(id)?.description, "What it does now.")
+    }
+
+    func testARenameIsNotOverwrittenByTheAgent() async {
+        let gate = Gate()
+        agent.scripts.append([.emit(.sessionStarted(id: "s1")), .pause(gate),
+                              .emit(.described(title: "Agent name", description: "What it does.")),
+                              .emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "Do the thing")!
+        await waitFor("the agent to pause") { gate.waiting == 1 }
+        model.rename(taskID: id, to: "  ")
+        XCTAssertEqual(model.task(id)?.title, "Do the thing")
+        model.rename(taskID: id, to: " My name ")
+        gate.open()
+        await waitForStatus(id, .completed)
+        XCTAssertEqual(model.task(id)?.title, "My name")
+        XCTAssertEqual(model.task(id)?.description, "What it does.")
     }
 
     func testStartingAgainDoesNotInterruptRunningTasks() async {
@@ -1779,11 +1812,16 @@ final class AppModelTests: XCTestCase {
     }
 
     func testPullRequestURL() {
-        let expected = "https://github.com/owner/repo/compare/main...shift/1?expand=1"
-        for remote in ["git@github.com:owner/repo.git", "https://github.com/owner/repo.git", "https://github.com/owner/repo"] {
-            XCTAssertEqual(AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main")?.absoluteString, expected)
+        func url(_ remote: String, title: String = "Fix A&B", body: String = "") -> String? {
+            AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main", title: title, body: body)?.absoluteString
         }
-        XCTAssertNil(AppModel.pullRequestURL(remoteURL: "git@gitlab.com:owner/repo.git", branch: "shift/1", base: "main"))
+        let page = "https://github.com/owner/repo/compare/main...shift/1?expand=1&title=Fix%20A%26B"
+        for remote in ["git@github.com:owner/repo.git", "https://github.com/owner/repo.git", "https://github.com/owner/repo"] {
+            XCTAssertEqual(url(remote), page)
+        }
+        XCTAssertNil(url("git@gitlab.com:owner/repo.git"))
+        XCTAssertEqual(url("https://github.com/owner/repo", body: "1+1=2\n\né"), "\(page)&body=1%2B1%3D2%0A%0A%C3%A9")
+        XCTAssertEqual(url("https://github.com/owner/repo", body: String(repeating: "x", count: 7000)), page)
     }
 }
 
