@@ -71,7 +71,7 @@ struct ChatView: View {
             .overlay {
                 if chat == nil {
                     ContentUnavailableView("Chat About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
-                                           description: Text("Ask about any task, open or merged, plan, or have the agent do something in the project's folder, like switch branches, pull, push or release. It has the project's permissions."))
+                                           description: Text("Ask about any task, open or merged, and plan with the agent. It can start tasks, follow them and tell you how they went, merge them when you ask, and change the project's settings. It can also work in the project's folder, like switch branches, pull, push or release. It has the project's permissions."))
                 }
             }
         }

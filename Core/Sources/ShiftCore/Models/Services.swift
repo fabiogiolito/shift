@@ -343,12 +343,14 @@ public struct Services: Sendable {
     public var store: StateStoring
     /// Shares task servers on the tailnet. Nil: not shared (tests, or nothing to share with).
     public var tailscale: Tailscale?
+    /// Lets the project chat's agent run Shift through `shiftctl`. Nil: it can't (tests).
+    public var control: ControlServer?
     /// Nil: no screenshots, whatever the project says.
     public var screenshots: Screenshotting?
 
     public init(git: GitServicing, agents: [AgentKind: AgentAdapter], servers: ServerManaging,
                 ports: PortAllocating, notifier: Notifying, store: StateStoring, tailscale: Tailscale? = nil,
-                screenshots: Screenshotting? = nil) {
+                screenshots: Screenshotting? = nil, control: ControlServer? = nil) {
         self.git = git
         self.agents = agents
         self.servers = servers
@@ -356,6 +358,7 @@ public struct Services: Sendable {
         self.notifier = notifier
         self.store = store
         self.tailscale = tailscale
+        self.control = control
         self.screenshots = screenshots
     }
 }
@@ -374,6 +377,8 @@ public enum ShiftPaths {
     public static let state = root.appendingPathComponent("state.json")
     public static let logs = root.appendingPathComponent("logs")
     public static let worktrees = root.appendingPathComponent("worktrees")
+    /// The command the project chat's agent runs Shift with.
+    public static let controlScript = root.appendingPathComponent("bin/shiftctl")
     public static let screenshots = root.appendingPathComponent("screenshots")
     /// SHIFT_HOME of a task's build when Shift opens it, so a build of Shift keeps its own data.
     // ponytail: never cleaned up; delete it with the task if builds of Shift pile up.

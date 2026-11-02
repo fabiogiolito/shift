@@ -318,6 +318,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var workingSince: Date?
     public var mergedAt: Date?
+    /// The project chat that started or follows this task, and hears how it goes. Not one that replaced it.
+    public var chatID: ProjectChat.ID?
     /// Oldest first. Optional so state saved by earlier builds still decodes.
     public var screenshots: [TaskScreenshot]?
 

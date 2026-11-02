@@ -106,6 +106,11 @@ public final class AppModel {
     }
 
     private let worktreesRoot: URL
+    /// What happened to the tasks each chat follows, until its agent has been told.
+    @ObservationIgnored private var chatReports: [Project.ID: [String]] = [:]
+    /// Where the chats' agents reach `shiftctl`'s server, and which project each one's access is for.
+    @ObservationIgnored private var controlPort: Int?
+    @ObservationIgnored var controlTokens: [String: Project.ID] = [:]
     @ObservationIgnored private var chatRuns: [Project.ID: ChatRun] = [:]
     @ObservationIgnored private var nextTaskID = 3001
     @ObservationIgnored private var runs: [TaskItem.ID: Run] = [:]
@@ -241,6 +246,9 @@ public final class AppModel {
             models[kind] = await services.agents[kind]?.models()
         }
         Task { await services.notifier.requestAuthorization() }
+        controlPort = await services.control?.start { [weak self] token, arguments in
+            await self?.handleControl(token: token, arguments: arguments) ?? ControlReply(ok: false, text: "Shift is quitting.")
+        }
 
         for task in tasks where task.status != .merged {
             await reconcile(task.id)
@@ -375,6 +383,7 @@ public final class AppModel {
             return
         }
         await cancelChat(id)
+        chatReports[id] = nil
         if let chat = chat(projectID: id) { await services?.store.deleteChatLog(chatID: chat.id) }
         chats.removeAll { $0.projectID == id }
         chatErrors[id] = nil
@@ -786,6 +795,7 @@ public final class AppModel {
             update(id) { $0.status = status }
             if status == .conflict {
                 enqueue { await services.notifier.notify(title: "\(now.title) has a conflict", body: "It does not merge cleanly.", taskID: id) }
+                reportToChat(now, "has a conflict: it no longer merges cleanly into \(now.base(in: project)).")
             }
         }
     }
@@ -1180,10 +1190,30 @@ public final class AppModel {
     public func newChat(projectID: Project.ID) async {
         guard let services, let old = chat(projectID: projectID) else { return }
         await cancelChat(projectID)
+        chatReports[projectID] = nil
         await services.store.deleteChatLog(chatID: old.id)
         chats.removeAll { $0.projectID == projectID }
         chatErrors[projectID] = nil
         changed()
+    }
+
+    /// From here on the project's chat hears how the task goes, until the chat is replaced by a new one.
+    func follow(taskID: TaskItem.ID) {
+        guard let task = task(taskID), let chat = chat(projectID: task.projectID) else { return }
+        update(taskID) { $0.chatID = chat.id }
+    }
+
+    /// Tells the chat that follows the task what happened, in the reply under way or in a new one.
+    /// ponytail: a task waiting for an approval doesn't wake the chat (it would for every command in Manual);
+    /// the user gets a notification and the chat sees it in `shiftctl tasks`.
+    private func reportToChat(_ task: TaskItem, _ text: String) {
+        guard let chatID = task.chatID, chat(projectID: task.projectID)?.id == chatID else { return }
+        chatReports[task.projectID, default: []].append("[Shift] Task \(task.id) “\(task.title)” \(text)")
+        if chatRuns[task.projectID]?.active == true {
+            deliverChatPending(task.projectID)
+        } else {
+            startChatRun(task.projectID, prompt: nil)
+        }
     }
 
     private func updateChat(_ projectID: Project.ID, _ change: (inout ProjectChat) -> Void) {
@@ -1211,13 +1241,14 @@ public final class AppModel {
         }
     }
 
-    private func startChatRun(_ projectID: Project.ID, prompt: Prompt) {
+    /// `prompt` nil: there is only `chatReports` to tell the agent.
+    private func startChatRun(_ projectID: Project.ID, prompt: Prompt?) {
         let previous = chatRuns[projectID]?.task
         let token = UUID()
         let task = Task { [weak self] in
             // Never two runs of one session: the one before has to be completely gone first.
             await previous?.value
-            await self?.runChat(projectID, token: token, prompt: prompt.agentText, promptIDs: [prompt.id])
+            await self?.runChat(projectID, token: token, prompt: prompt?.agentText ?? "", promptIDs: prompt.map { [$0.id] } ?? [])
         }
         chatRuns[projectID] = ChatRun(token: token, task: task)
         replyingChats.insert(projectID)
@@ -1255,17 +1286,20 @@ public final class AppModel {
             }
             updateChat(projectID) { $0.agent = kind }
             let pending = chat(projectID: projectID)?.prompts.filter(\.isPending) ?? []
-            let text = ([prompt] + pending.map(\.agentText)).joined(separator: "\n\n")
+            let reports = chatReports.removeValue(forKey: projectID) ?? []
+            let text = ([prompt] + reports + pending.map(\.agentText)).filter { !$0.isEmpty }.joined(separator: "\n\n")
             let delivered = promptIDs + pending.map(\.id)
             updateChat(projectID) { chat in
                 for index in chat.prompts.indices { chat.prompts[index].isPending = false }
             }
-            await services.store.appendChatLog(chatID: log, text: RunMarker.line(agent: kind, promptIDs: delivered, note: note))
+            await services.store.appendChatLog(chatID: log, text: RunMarker.line(
+                agent: kind, promptIDs: delivered, text: reports.isEmpty ? nil : reports.joined(separator: "\n"), note: note))
             guard isChatCurrent(projectID, token) else { return }
 
             let channel = ApprovalChannel()
             chatRuns[projectID]?.channel = channel
             let request = AgentRequest(prompt: text, sessionID: chat(projectID: projectID)?.sessionID, worktree: project.repoURL,
+                                       environment: controlEnvironment(projectID),
                                        permissions: project.permissions, model: project.models[kind], needsDescription: false,
                                        approvals: channel, chat: true,
                                        chatContext: OutcomeProtocol.chatContext(tasks: tasks(in: projectID), project: project))
@@ -1292,7 +1326,8 @@ public final class AppModel {
             // From here to the end of the iteration there is no await: a message sent now either
             // is pending already, or finds the run over and starts one of its own.
             let more = chat(projectID: projectID)?.prompts.filter(\.isPending) ?? []
-            guard !more.isEmpty, failure == nil else {
+            // Reports stay for the next run if this one failed: the agent still has to hear them.
+            guard !more.isEmpty || chatReports[projectID] != nil, failure == nil else {
                 updateChat(projectID) { $0.prompts.removeAll(where: \.isPending) }
                 return
             }
@@ -1304,8 +1339,23 @@ public final class AppModel {
         }
     }
 
+    /// What `shiftctl` needs to reach this project, and nothing else, from the chat's agent.
+    private func controlEnvironment(_ projectID: Project.ID) -> [String: String] {
+        guard let controlPort else { return [:] }
+        let token = controlTokens.first { $0.value == projectID }?.key ?? UUID().uuidString
+        controlTokens[token] = projectID
+        return ["SHIFT_URL": "http://127.0.0.1:\(controlPort)", "SHIFT_ACCESS": token]
+    }
+
     private func deliverChatPending(_ projectID: Project.ID) {
         guard let channel = chatRuns[projectID]?.channel, let chat = chat(projectID: projectID) else { return }
+        while let report = chatReports[projectID]?.first, channel.send(report) {
+            chatReports[projectID]?.removeFirst()
+            if chatReports[projectID]?.isEmpty == true { chatReports[projectID] = nil }
+            if let services, let agent = chat.agent {
+                Task { await services.store.appendChatLog(chatID: chat.id, text: RunMarker.line(agent: agent, promptIDs: [], text: report)) }
+            }
+        }
         for prompt in chat.prompts where prompt.isPending {
             guard channel.send(prompt.agentText) else { return }
             markChatDelivered(projectID, prompt)
@@ -1741,6 +1791,13 @@ public final class AppModel {
         default: ("\(task.title) is ready", settled.summary ?? "")
         }
         enqueue { await services.notifier.notify(title: title, body: body, taskID: id) }
+        let report = switch settled.status {
+        case .needsInput: "needs input: \(body)"
+        case .blocked: "is blocked: \(body)"
+        case .conflict: "is finished but has a conflict: it does not merge cleanly."
+        default: "is finished: \(body)"
+        }
+        reportToChat(task, report)
         // For the countdown to the reset: the last reading is likely from before the limit was reached.
         if self.task(id)?.isUsageLimited == true { Task { await refreshUsage(task.agent) } }
         let pushes = settled.status == .completed && project(task.projectID)?.pushTaskBranches == true
