@@ -31,8 +31,21 @@ public final class WebScreenshotter: Screenshotting {
         try? await Task.sleep(for: .seconds(1.5))
 
         guard let image = try? await webView.takeSnapshot(configuration: nil),
-              let tiff = image.tiffRepresentation,
-              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return false }
+              let tiff = image.tiffRepresentation else { return false }
+        return Self.writePNG(from: tiff, to: file)
+    }
+
+    /// Off the main thread, and regular files only: the agent chose the path, and a pipe would never finish reading.
+    public func copyImage(at source: URL, to file: URL) async -> Bool {
+        await Task.detached {
+            guard (try? source.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+                  let data = try? Data(contentsOf: source) else { return false }
+            return Self.writePNG(from: data, to: file)
+        }.value
+    }
+
+    private nonisolated static func writePNG(from image: Data, to file: URL) -> Bool {
+        guard let png = NSBitmapImageRep(data: image)?.representation(using: .png, properties: [:]) else { return false }
         do {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try png.write(to: file, options: .atomic)

@@ -348,6 +348,10 @@ final class MockScreenshots: Screenshotting {
         if !fails { captured.append(url) }
         return !fails
     }
+
+    func copyImage(at source: URL, to file: URL) async -> Bool {
+        await capture(url: source, to: file)
+    }
 }
 
 @MainActor
