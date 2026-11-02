@@ -47,19 +47,21 @@ struct PromptBubble: View {
     let prompt: Prompt
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !prompt.text.isEmpty { Text(prompt.text).textSelection(.enabled) }
-            if !prompt.attachments.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 6) {
-                        ForEach(prompt.attachments, id: \.self) { AttachmentChip(url: URL(fileURLWithPath: $0)) }
+        // A group box, for the same background as the prompts of a task.
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                if !prompt.text.isEmpty { Text(prompt.text).textSelection(.enabled) }
+                if !prompt.attachments.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 6) {
+                            ForEach(prompt.attachments, id: \.self) { AttachmentChip(url: URL(fileURLWithPath: $0)) }
+                        }
                     }
+                    .scrollIndicators(.never)
                 }
-                .scrollIndicators(.never)
             }
+            .padding(6)
         }
-        .padding(10)
-        .background(.quaternary, in: .rect(cornerRadius: 12))
     }
 }
 

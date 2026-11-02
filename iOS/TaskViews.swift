@@ -410,7 +410,7 @@ private struct PromptBubble: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary, in: .rect(cornerRadius: 12))
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 12)) // What a group box has here.
     }
 }
 
