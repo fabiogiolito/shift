@@ -84,11 +84,10 @@ struct TaskDetailView: View {
             }
             .toolbar { toolbar(task, project) }
             .sheet(item: $output) { output in
-                OutputSheet(title: output.rawValue, hasRaw: output == .agentOutput) { raw in
+                OutputSheet(title: output.rawValue) {
                     switch output {
                     case .appLog: await model.serverLog(taskID: taskID)
                     case .buildLog: model.buildLog(taskID: taskID)
-                    case .agentOutput: raw ? await model.rawOutput(taskID: taskID) : await model.readableOutput(taskID: taskID)
                     }
                 }
             }
@@ -592,7 +591,6 @@ struct TaskDetailView: View {
                 } else if project.isApp {
                     Button("Build Log") { output = .buildLog }
                 }
-                Button("Agent Output") { output = .agentOutput }
                 if task.status == .working || task.approvalRequest != nil {
                     Button("Stop Task") { model.stop(taskID: taskID) }
                 }
@@ -664,29 +662,22 @@ private enum ServerState {
 
 /// Debugging text, from the ••• menu.
 private enum Output: String, Identifiable {
-    case appLog = "App Log", buildLog = "Build Log", agentOutput = "Agent Output"
+    case appLog = "App Log", buildLog = "Build Log"
     var id: Self { self }
 }
 
 private struct OutputSheet: View {
     let title: String
-    /// Offers the unformatted text too, for debugging.
-    let hasRaw: Bool
-    let load: (_ raw: Bool) async -> String
+    let load: () async -> String
     @State private var text: String?
-    @State private var raw = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(title).font(.headline)
-                Spacer()
-                if hasRaw { Toggle("Raw", isOn: $raw).toggleStyle(.checkbox) }
-            }
+            Text(title).font(.headline)
             ScrollView {
                 Text(text.map { $0.isEmpty ? "No output." : $0 } ?? "Loading…")
-                    .font(hasRaw && !raw ? .body : .callout.monospaced())
+                    .font(.callout.monospaced())
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -707,6 +698,6 @@ private struct OutputSheet: View {
         }
         .padding(20)
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
-        .task(id: raw) { text = await load(raw) }
+        .task { text = await load() }
     }
 }

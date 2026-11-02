@@ -1001,16 +1001,10 @@ public final class AppModel {
         }
     }
 
-    /// Raw agent output, for the debugging view only.
+    /// Raw agent output.
     public func rawOutput(taskID: TaskItem.ID) async -> String {
         guard let services else { return "" }
         return await services.store.readLog(taskID: taskID)
-    }
-
-    /// The agent's output as a person reads it: its messages, its actions, its errors.
-    public func readableOutput(taskID: TaskItem.ID) async -> String {
-        guard let agent = task(taskID)?.agent else { return "" }
-        return Transcript.readable(await rawOutput(taskID: taskID), agent: agent)
     }
 
     /// Reads the task's log as a conversation. nil for the preview model.
