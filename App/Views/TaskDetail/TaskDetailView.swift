@@ -83,6 +83,14 @@ struct TaskDetailView: View {
                 }
             }
             .toolbar { toolbar(task, project) }
+            // The latest prompt the agent has opens in place of the one before it; any others opened by hand stay.
+            // A queued prompt waits for delivery, so the work in progress stays visible until then.
+            .onChange(of: task.prompts.last { !$0.isPending }?.id, initial: true) { old, new in
+                withAnimation(reduceMotion || old == new ? nil : .snappy(duration: 0.2)) {
+                    if let old, old != new { openPrompts.remove(old) }
+                    if let new { openPrompts.insert(new) }
+                }
+            }
             .sheet(item: $output) { output in
                 OutputSheet(title: output.rawValue, hasRaw: output == .agentOutput) { raw in
                     switch output {
