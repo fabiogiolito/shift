@@ -38,7 +38,7 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         arguments += autonomyArguments(request.permissions)
         if let model = request.model { arguments += ["--model", model] }
         arguments += ["--append-system-prompt", request.chat ? OutcomeProtocol.chatInstructions
-            : OutcomeProtocol.instructions(firstTurn: request.needsDescription)]
+            : OutcomeProtocol.instructions(firstTurn: request.needsDescription, screenshots: request.screenshots)]
         if let sessionID = request.sessionID { arguments += ["--resume", sessionID] }
         return arguments
     }

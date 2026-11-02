@@ -10,11 +10,14 @@ enum OutcomeProtocol {
     static let titleMarker = "SHIFT_TITLE:"
     static let descriptionMarker = "SHIFT_DESCRIPTION:"
     static let optionMarker = "SHIFT_OPTION:"
+    static let screenshotMarker = "SHIFT_SCREENSHOT:"
 
     /// Appended to every prompt (Codex) or to the system prompt (Claude Code).
     /// `firstTurn`: the task has no title or description of its own yet (new, or created before agents wrote them).
-    static func instructions(firstTurn: Bool) -> String {
+    /// `screenshots`: Shift takes screenshots of the task's server, of the page the agent names.
+    static func instructions(firstTurn: Bool, screenshots: Bool = false) -> String {
         outcome + "\n\n" + (firstTurn ? describeFirst : describeAgain) + "\n\n" + describeRules
+            + (screenshots ? "\n\n" + namePage : "")
     }
 
     /// For the project chat, instead of everything above: it isn't a task, and the user is there.
@@ -55,6 +58,19 @@ enum OutcomeProtocol {
     page". Name the outcome, not the problem, and do not reuse the user's wording.
     The description is one or two plain sentences on what the task does and why, from the user's \
     point of view. It is not a restatement of the latest prompt and not a list of steps.
+    """
+
+    static let namePage = """
+    Shift screenshots the page of the running project that shows your change, once before you start and once when \
+    you finish. Before doing any work, and for every message from the user, write this as the very first thing you \
+    write, on a line of its own, before reading or changing any file:
+
+    SHIFT_SCREENSHOT: <path>
+
+    The path is the page where the change will be best seen, such as `/` or `/pricing`, and one that exists now if \
+    possible, so the two screenshots compare. Going by the request is enough: don't research it first. If nothing \
+    visible will change, write `none`. If the page turns out to be another one, repeat the line with it at the start \
+    of your final message.
     """
 
     static let outcome = """
@@ -124,6 +140,15 @@ enum OutcomeProtocol {
         return (value(titleMarker, limit: 80), value(descriptionMarker, limit: 400))
     }
 
+    /// The page named in `message`, as `.screenshotPage`. The last one if there are several, nil if there are none.
+    static func screenshotPage(in message: String) -> AgentEvent? {
+        guard let range = message.range(of: screenshotMarker, options: .backwards) else { return nil }
+        let line = String(message[range.upperBound...].prefix { !$0.isNewline })
+        let page = line.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "*`")))
+        if page.isEmpty { return nil }
+        return .screenshotPage(page.lowercased() == "none" ? nil : page)
+    }
+
     /// `message` without its `SHIFT_OPTION:` lines, and the replies they offer: trimmed of markdown
     /// and quotes, no empties or duplicates, at most 4 of at most 80 characters.
     static func extractingOptions(_ message: String) -> (message: String, options: [String]) {
@@ -142,10 +167,10 @@ enum OutcomeProtocol {
         return (kept.joined(separator: "\n"), options)
     }
 
-    /// `message` without the title and description lines, which are not for the user to read.
+    /// `message` without the title, description and screenshot lines, which are not for the user to read.
     static func strippingDescribed(_ message: String) -> String {
         message.components(separatedBy: "\n")
-            .filter { !$0.contains(titleMarker) && !$0.contains(descriptionMarker) }
+            .filter { !$0.contains(titleMarker) && !$0.contains(descriptionMarker) && !$0.contains(screenshotMarker) }
             .joined(separator: "\n")
     }
 
@@ -398,6 +423,7 @@ func runAgentProcess(kind: AgentKind, request: AgentRequest,
                     if title != nil || description != nil {
                         continuation.yield(.described(title: title, description: description))
                     }
+                    if let page = OutcomeProtocol.screenshotPage(in: message) { continuation.yield(page) }
                 }
                 if let activity { continuation.yield(.activity(activity)) }
             }

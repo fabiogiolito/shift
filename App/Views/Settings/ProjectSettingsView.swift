@@ -177,6 +177,16 @@ struct ProjectSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            if !usesBuild(current) {
+                Section {
+                    Toggle("Take screenshots", isOn: project.takesScreenshots)
+                } footer: {
+                    Text("Keeps a screenshot of the page each prompt changes, and of how it looked before the task's first change. They show above the changed files.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             if let remote = model.pushStates[projectID]?.remote {
                 Section {
                     Toggle("Push task branches to \(remote)", isOn: project.pushTaskBranches)

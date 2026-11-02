@@ -307,6 +307,17 @@ final class MockServers: ServerManaging {
     }
 }
 
+@MainActor @Observable
+final class MockScreenshots: Screenshotting {
+    var fails = false
+    private(set) var captured: [URL] = []
+
+    func capture(url: URL, to file: URL) async -> Bool {
+        if !fails { captured.append(url) }
+        return !fails
+    }
+}
+
 @MainActor
 final class MockPorts: PortAllocating {
     var taken: Set<Int> = []
