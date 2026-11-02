@@ -22,6 +22,9 @@ struct ShiftApp: App {
             .environment(delegate.model)
             .background { OpenWindowHandoff(delegate: delegate) }
             .task {
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == nil { await DemoProject.seed() }
+                #endif
                 await delegate.model.start()
                 ready = true
                 delegate.applyScreenshotSize()

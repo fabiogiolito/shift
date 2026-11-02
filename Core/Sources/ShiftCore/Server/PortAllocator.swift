@@ -11,14 +11,37 @@ public struct PortAllocator: PortAllocating {
         return preferred
     }
 
-    public func isListening(_ port: Int) async -> Bool { !Self.isFree(port) }
+    public func isListening(_ port: Int) async -> Bool { !Self.isFreeOnLoopback(port) }
 
-    /// Free means we can bind it on both IPv4 and IPv6 loopback. No SO_REUSEADDR on purpose:
+    /// Free for a server: on loopback, and on all interfaces, which is what most dev servers bind. `tailscale serve`,
+    /// for one, holds a port on the tailnet addresses only: nothing on loopback, yet Next.js fails with EADDRINUSE.
+    static func isFree(_ port: Int) -> Bool {
+        isFreeOnLoopback(port) && canBindAllInterfaces(port)
+    }
+
+    /// With SO_REUSEADDR, as servers bind: a port whose server just stopped is still free.
+    private static func canBindAllInterfaces(_ port: Int) -> Bool {
+        var v4 = sockaddr_in()
+        v4.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        v4.sin_family = sa_family_t(AF_INET)
+        v4.sin_port = in_port_t(port).bigEndian
+        v4.sin_addr.s_addr = INADDR_ANY
+
+        var v6 = sockaddr_in6()
+        v6.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
+        v6.sin6_family = sa_family_t(AF_INET6)
+        v6.sin6_port = in_port_t(port).bigEndian
+        v6.sin6_addr = in6addr_any
+
+        return canBind(AF_INET, &v4, reuse: true) && canBind(AF_INET6, &v6, reuse: true)
+    }
+
+    /// Whether we can bind it on both IPv4 and IPv6 loopback. No SO_REUSEADDR on purpose:
     /// with it, a bind next to a wildcard listener would succeed. A port whose server just
     /// stopped also refuses the bind for a while (connections in TIME_WAIT), so a refused bind
     /// only counts when something actually answers on the port, on either family: a listener on
     /// one family alone still takes `localhost` away from us in the browser.
-    static func isFree(_ port: Int) -> Bool {
+    static func isFreeOnLoopback(_ port: Int) -> Bool {
         var v4 = sockaddr_in()
         v4.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         v4.sin_family = sa_family_t(AF_INET)
@@ -36,10 +59,14 @@ public struct PortAllocator: PortAllocating {
     }
 
     /// False only when the address is in use; any other failure means nothing can listen there.
-    private static func canBind<T>(_ family: Int32, _ address: inout T) -> Bool {
+    private static func canBind<T>(_ family: Int32, _ address: inout T, reuse: Bool = false) -> Bool {
         let fd = socket(family, SOCK_STREAM, 0)
         guard fd >= 0 else { return true } // family unavailable: nothing can be listening on it
         defer { close(fd) }
+        if reuse {
+            var on: Int32 = 1
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, socklen_t(MemoryLayout<Int32>.size))
+        }
         let ok = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 bind(fd, $0, socklen_t(MemoryLayout<T>.size)) == 0

@@ -1241,6 +1241,38 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(servers.baseRunning.isEmpty)
     }
 
+    func testATaskServerThatLosesItsPortMovesToAFreeOne() async throws {
+        model.baseServerPoll = .milliseconds(1)
+        let id = await createCompletedTask()
+        let port = try XCTUnwrap(model.task(id)?.port)
+        let starts = servers.starts.count
+
+        // Something else took the port while the server was getting to it.
+        ports.taken = [port]
+        servers.logs[id] = "Error: listen EADDRINUSE: address already in use :::\(port)"
+        servers.crash(taskID: id)
+        await waitFor("the server to move") { self.model.task(id)?.port == port + 1 }
+        XCTAssertEqual(servers.starts.last, .init(taskID: id, command: servers.starts[starts - 1].command, port: port + 1))
+        XCTAssertEqual(servers.starts.count, starts + 1)
+
+        // Dying of anything else stays dead, as before.
+        servers.logs[id] = "SyntaxError"
+        servers.crash(taskID: id)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(servers.starts.count, starts + 1)
+    }
+
+    func testABaseServerThatLosesItsPortTriesOthersThenGivesUp() async {
+        model.baseServerPoll = .milliseconds(1)
+        servers.exitOnStart = true
+        servers.logs[-1] = "OSError: [Errno 48] Address already in use"
+        ports.taken = [3000]
+        let url = await model.baseServerURL(projectID: project.id)
+        XCTAssertNil(url)
+        XCTAssertEqual(servers.baseStarts.count, 6)
+        XCTAssertEqual(servers.baseStarts.first?.port, 3001)
+    }
+
     func testOpeningABaseServerWhoseFolderIsGoneSaysSo() async {
         var gone = project!
         gone.repoPath = "/nonexistent/spot"
@@ -2314,6 +2346,7 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(model.tasks.count, 1)
         XCTAssertEqual(model.tasks.first?.prompts.map(\.text), ["Task"])
         XCTAssertEqual(model.tasks.first?.id, 3001)
+        await model.flush() // The task's own notification is queued after its status.
         let notified = notifier.notifications.count
 
         gate.open()
