@@ -294,6 +294,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var workingSince: Date?
     public var mergedAt: Date?
+    /// The project chat that started or follows this task, and hears how it goes. Not one that replaced it.
+    public var chatID: ProjectChat.ID?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
                 agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,

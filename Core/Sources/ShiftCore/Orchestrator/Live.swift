@@ -12,7 +12,8 @@ extension AppModel {
             ports: PortAllocator(),
             notifier: notifier,
             store: JSONStateStore(),
-            tailscale: Tailscale()
+            tailscale: Tailscale(),
+            control: ControlServer()
         ))
     }
 }
