@@ -373,6 +373,8 @@ private struct PromptBar: View {
 
     private func send() {
         isSending = true
+        // Not `isFocused = false`: here it reads false with the field focused, and setting it does nothing.
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         Task {
             defer { isSending = false }
             do {
