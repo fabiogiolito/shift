@@ -99,10 +99,7 @@ struct ChatView: View {
             ToolbarSpacer(.flexible)
             if let branch {
                 ToolbarItem {
-                    Label(branch, systemImage: "arrow.triangle.branch").labelStyle(.titleAndIcon)
-                        .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                        .padding(.horizontal, 8)
-                        .help("The branch checked out in the project's folder, which the agent works on")
+                    BranchButton(branch: branch, help: "The branch checked out in the project's folder, which the agent works on. Click to copy it.")
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
