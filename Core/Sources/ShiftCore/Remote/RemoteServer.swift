@@ -214,6 +214,8 @@ public final class RemoteServer {
         case .resume(let id): model.resume(taskID: id)
         case .rename(let id, let title): model.rename(taskID: id, to: title)
         case .merge(let id): await model.merge(taskID: id)
+        case .branches(let projectID): return .success(.files(await model.branches(for: projectID)))
+        case .changeBase(let id, let base): await model.changeBase(taskID: id, to: base)
         case .delete(let id): await model.delete(taskID: id)
         case .resolveConflict(let id): model.resolveConflict(taskID: id)
         case .conflictedFiles(let id): return .success(.files(await model.conflictedFiles(taskID: id)))

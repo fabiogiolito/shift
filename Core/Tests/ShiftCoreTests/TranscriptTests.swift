@@ -13,6 +13,17 @@ final class ConversationTests: XCTestCase {
         RunMarker.line(agent: agent, promptIDs: ids, text: text, note: note).trimmingCharacters(in: .newlines)
     }
 
+    func testResponsesGoWithTheirPrompts() {
+        let prompts = [UUID(), UUID(), UUID()].map { Prompt(id: $0, text: "p") }
+        let (first, second, third) = (prompts[0].id, prompts[1].id, prompts[2].id)
+        let log = turns([text("From before markers"), marker([second, third]), marker(text: "Resolve the conflict")])
+        XCTAssertEqual(log.count, 3)
+        let responses = TranscriptTurn.responses(to: prompts, in: log)
+        XCTAssertEqual(responses[first], [log[0]])
+        XCTAssertEqual(responses[second], [log[1], log[2]])
+        XCTAssertEqual(responses[third], [log[1], log[2]])
+    }
+
     // MARK: Claude Code lines
 
     private let claudeInit = #"{"type":"system","subtype":"init","cwd":"/w","session_id":"s","tools":["Bash"]}"#
