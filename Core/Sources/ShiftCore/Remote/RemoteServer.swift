@@ -229,6 +229,12 @@ public final class RemoteServer {
         case .answerChatApproval(let id, let allow): model.answerChatApproval(projectID: id, allow: allow)
         case .stopChat(let id): model.stopChat(projectID: id)
         case .newChat(let id): await model.newChat(projectID: id)
+        case .baseServerURL(let id):
+            let url = await model.baseServerURL(projectID: id)
+            // ponytail: stays shared until Tailscale's serve config is reset; it only points at a port on this Mac,
+            // for this tailnet. Unserve it when the base server stops if that ever matters.
+            if let port = url?.port { _ = await model.shareOnTailnet(port: port) }
+            return .success(.url(url))
         }
         return .success(.done)
     }
