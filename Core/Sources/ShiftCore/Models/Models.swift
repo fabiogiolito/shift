@@ -339,6 +339,18 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
                                                    options: [.regularExpression, .caseInsensitive]) != nil
     }
 
+    /// What a task is called until the agent or the user names it.
+    static func localTitle(id: Int, prompt: String, attachments: [String]) -> String {
+        let title = AppModel.title(for: prompt.isEmpty ? attachments.first.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "" : prompt)
+        return title.isEmpty ? "Task \(id)" : title
+    }
+
+    /// Nobody has named it yet, so the agent still may.
+    var hasLocalTitle: Bool {
+        guard let first = prompts.first else { return false }
+        return title == Self.localTitle(id: id, prompt: first.text, attachments: first.attachments)
+    }
+
     /// The branch this task merges into: its own, else (state from before tasks had one) the project's.
     public func base(in project: Project) -> String { baseBranch ?? project.baseBranch }
     public var worktreeURL: URL { URL(fileURLWithPath: worktreePath) }

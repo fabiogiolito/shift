@@ -415,9 +415,9 @@ public final class AppModel {
         let first = Prompt(text: prompt, attachments: attachments)
         let id = nextTaskID
         nextTaskID += 1
-        let title = Self.title(for: prompt.isEmpty ? URL(fileURLWithPath: attachments[0]).lastPathComponent : prompt)
+        let title = TaskItem.localTitle(id: id, prompt: prompt, attachments: attachments)
         tasks.append(TaskItem(
-            id: id, projectID: projectID, title: title.isEmpty ? "Task \(id)" : title, status: .working,
+            id: id, projectID: projectID, title: title, status: .working,
             agent: agent ?? project.defaultAgent, branch: "shift/\(id)", baseBranch: project.baseBranch,
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
             prompts: [first], workingSince: Date()))
@@ -825,6 +825,13 @@ public final class AppModel {
         let base = task.base(in: project)
         guard await !services.git.branchExists(repo: project.repoURL, branch: base) else { return nil }
         return "The base branch \(base) no longer exists. Pick another one in the task's More menu."
+    }
+
+    /// The name the user gave it. From here on the agent can't change it.
+    public func rename(taskID: TaskItem.ID, to title: String) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        update(taskID) { $0.title = title }
     }
 
     /// Stops the agent. The task becomes blocked and can be restarted with a prompt.
@@ -1409,6 +1416,7 @@ public final class AppModel {
                                        permissions: project(task.projectID)?.permissions ?? .bypass,
                                        model: project(task.projectID)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
+                                       description: task.description,
                                        approvals: channel)
             approvalChannels[id] = channel
             await services.store.appendLog(taskID: id, text: RunMarker.line(
@@ -1431,7 +1439,8 @@ public final class AppModel {
                     // The prompt of a conflict resolution is ours; it does not change what the task is for.
                     if !task.isResolvingConflict {
                         update(id) {
-                            $0.title = title ?? $0.title
+                            // Named once: only the local title gives way, never the agent's or the user's.
+                            if let title, $0.hasLocalTitle { $0.title = title }
                             $0.description = description ?? $0.description
                         }
                     }
@@ -1752,8 +1761,8 @@ public final class AppModel {
 
     // MARK: - Helpers
 
-    /// The title until the agent gives its own (`.described`), and the fallback if it never does.
-    static func title(for prompt: String) -> String {
+    /// The title until the agent or the user gives one (see `TaskItem.hasLocalTitle`), and the fallback if neither does.
+    nonisolated static func title(for prompt: String) -> String {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         var sentence = ""
         for (index, character) in zip(text.indices, text) {
