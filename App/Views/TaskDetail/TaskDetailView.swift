@@ -379,19 +379,13 @@ struct TaskDetailView: View {
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         if task.status == .completed {
-            SplitButton(prominent: true) {
-                isMerging = true
-                Task { await model.merge(taskID: taskID); isMerging = false }
-            } label: {
-                Text("Merge into \(task.base(in: project))")
+            // Without a remote there is nowhere to open a pull request: merging stays the main action.
+            let opensPR = project.opensPullRequests && model.pushStates[project.id]?.remote != nil
+            let mergeTitle = "Merge into \(task.base(in: project))"
+            SplitButton(prominent: true, action: opensPR ? openPullRequest : merge) {
+                Text(opensPR ? "Open Pull Request" : mergeTitle)
             } menu: {
-                Button("Open Pull Request") {
-                    isMerging = true
-                    Task {
-                        if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
-                        isMerging = false
-                    }
-                }
+                Button(opensPR ? mergeTitle : "Open Pull Request", action: opensPR ? merge : openPullRequest)
                 Divider()
                 branchItems(task, project)
             }
@@ -408,6 +402,19 @@ struct TaskDetailView: View {
                 Label("Stop Task", systemImage: "stop.fill")
             }
             .buttonStyle(.glass)
+        }
+    }
+
+    private func merge() {
+        isMerging = true
+        Task { await model.merge(taskID: taskID); isMerging = false }
+    }
+
+    private func openPullRequest() {
+        isMerging = true
+        Task {
+            if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
+            isMerging = false
         }
     }
 
