@@ -230,27 +230,38 @@ struct TaskDetailView: View {
     let taskID: Int
     @State private var stream: LogStream?
     @State private var showsPreview = false
+    @State private var changes: DiffSummary?
+    @State private var openPrompt: Prompt?
+    @State private var scroll = ScrollPosition(edge: .top)
 
     var body: some View {
         if let task = model.task(taskID) {
+            let responses = TranscriptTurn.responses(to: task.prompts, in: stream?.turns ?? [])
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Conversation(prompts: task.prompts, turns: stream?.turns ?? [])
+                    Text(task.title).font(.title2.bold())
+                    if let about = task.summary ?? task.description { MarkdownText(text: about) }
                     TaskStatusView(task: task)
+                    if let changes, !changes.files.isEmpty { ChangesRow(changes: changes) }
+                    if let project = model.state.projects.first(where: { $0.id == task.projectID }) {
+                        TaskActions(task: task, project: project)
+                    }
+                    PromptList(prompts: task.prompts) { openPrompt = $0 }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .defaultScrollAnchor(.bottom)
+            .scrollPosition($scroll)
+            .onChange(of: task.prompts.count) { scroll.scrollTo(edge: .top) }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaBar(edge: .bottom) {
                 if task.status != .merged {
                     PromptBar { await model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
                 }
             }
-            .navigationTitle(task.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                StatusIcon(status: task.status).accessibilityLabel(task.status.label)
                 if model.previewURL(task) != nil {
                     Button("Preview", systemImage: "safari") { showsPreview = true }
                 }
@@ -261,8 +272,15 @@ struct TaskDetailView: View {
             .sheet(isPresented: $showsPreview) {
                 if let url = model.previewURL(task) { SafariView(url: url).ignoresSafeArea() }
             }
+            .sheet(item: $openPrompt) { prompt in
+                PromptResponseView(prompt: prompt, turns: responses[prompt.id] ?? [], task: task)
+            }
             .task(id: taskID) {
                 stream = model.openLog(.task(taskID), agent: task.agent)
+            }
+            // As on the Mac, and again once the Mac is back.
+            .task(id: task.status == .completed && model.link == .online) {
+                changes = task.status == .completed && model.link == .online ? await model.changes(taskID: taskID) : nil
             }
             .onDisappear { model.closeLog(.task(taskID)) }
         } else {
@@ -296,8 +314,8 @@ private struct TaskStatusView: View {
                 Label(reason, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red)
             } else if task.status == .conflict {
                 Label("It doesn't merge cleanly into its base.", systemImage: "checkmark.circle.fill").foregroundStyle(.orange)
-            } else if task.status == .completed || task.status == .merged, let summary = task.summary {
-                Label { MarkdownText(text: summary) } icon: { StatusIcon(status: task.status) }
+            } else if task.status == .merged, let project = model.state.projects.first(where: { $0.id == task.projectID }) {
+                Text("Merged into \(task.base(in: project))").foregroundStyle(.secondary)
             }
             if task.canResume {
                 Button("Resume") { Task { await model.resume(taskID: task.id) } }.buttonStyle(.borderedProminent)
@@ -313,7 +331,7 @@ private struct TaskStatusView: View {
 
 private struct PromptBar: View {
     @Environment(RemoteModel.self) private var model
-    var placeholder = "Message"
+    var placeholder = "Ask for changes…"
     var focusesOnAppear = false
     /// False if it didn't go through: what was written stays.
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
@@ -376,6 +394,174 @@ private struct PromptBar: View {
     }
 }
 
+/// The status's main action, the rest under the button beside it, as in the Mac's split button.
+/// Merging and pull requests name the branch they go to, and that menu changes it.
+private struct TaskActions: View {
+    @Environment(RemoteModel.self) private var model
+    @Environment(\.openURL) private var openURL
+    let task: TaskItem
+    let project: Project
+    @State private var isBusy = false
+    @State private var branches: [String] = []
+    @State private var newBase: String?
+
+    private struct Action {
+        let title: String
+        let run: () async -> Void
+    }
+
+    private var actions: [Action] {
+        let id = task.id, model = model, openURL = openURL
+        let pullRequest = model.state.pullRequests[id]
+        let view = pullRequest.map { pullRequest in
+            Action(title: "View Pull Request #\(pullRequest.number)") { openURL(pullRequest.url) }
+        }
+        let viewing = view.map { [$0] } ?? []
+        switch task.status {
+        case .completed:
+            let merge = Action(title: "Merge into \(task.base(in: project))") { await model.merge(taskID: id) }
+            if pullRequest?.state == .open {
+                let push = Action(title: "Push to Pull Request") { await model.push(taskID: id) }
+                return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
+            }
+            // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
+            if pullRequest?.state == .merged { return [merge] + viewing }
+            let open = Action(title: "Open Pull Request") {
+                if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
+            }
+            return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
+        case .conflict:
+            return [Action(title: "Resolve") { await model.resolveConflict(taskID: id) }] + viewing
+        default:
+            return []
+        }
+    }
+
+    var body: some View {
+        if let main = actions.first {
+            let base = task.base(in: project)
+            HStack {
+                Button { perform(main) } label: {
+                    Text(main.title).lineLimit(1).frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                Menu {
+                    ForEach(actions.dropFirst(), id: \.title) { action in
+                        Button(action.title) { perform(action) }
+                    }
+                    Divider()
+                    // The current base is always offered, so the picker is valid before branches load.
+                    Picker("Base Branch", selection: Binding(get: { base }, set: { if $0 != base { newBase = $0 } })) {
+                        ForEach(branches.contains(base) ? branches : [base] + branches, id: \.self) { Text($0) }
+                    }
+                    .pickerStyle(.menu)
+                } label: {
+                    Label("More", systemImage: "ellipsis").labelStyle(.iconOnly).frame(maxHeight: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+            .fixedSize(horizontal: false, vertical: true) // The menu as tall as the button.
+            .controlSize(.large)
+            .disabled(isBusy || model.link != .online)
+            .task(id: model.link) {
+                if model.link == .online { branches = await model.branches(projectID: project.id) }
+            }
+            .confirmationDialog("Change the base to \(newBase ?? "")?",
+                                isPresented: Binding(get: { newBase != nil }, set: { if !$0 { newBase = nil } }),
+                                titleVisibility: .visible) {
+                Button("Change Base") {
+                    if let newBase { Task { await model.changeBase(taskID: task.id, to: newBase) } }
+                }
+            } message: {
+                Text("Its own commits move onto \(newBase ?? ""), without what \(base) has, and Merge puts them there. If they conflict, the agent resolves it.")
+            }
+        }
+    }
+
+    private func perform(_ action: Action) {
+        isBusy = true
+        Task {
+            await action.run()
+            isBusy = false
+        }
+    }
+}
+
+private struct ChangesRow: View {
+    let changes: DiffSummary
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("\(changes.files.count) \(changes.files.count == 1 ? "file" : "files") changed").foregroundStyle(.secondary)
+            Text("+\(changes.additions)").foregroundStyle(.green)
+            Text("-\(changes.deletions)").foregroundStyle(.red)
+        }
+        .font(.subheadline)
+        .monospacedDigit()
+    }
+}
+
+/// Most recent on top, each opening what the agent did about it.
+private struct PromptList: View {
+    let prompts: [Prompt]
+    let onOpen: (Prompt) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(prompts.reversed()) { prompt in
+                Button { onOpen(prompt) } label: {
+                    HStack(spacing: 8) {
+                        Text(prompt.text.isEmpty ? prompt.attachments.first.map { ($0 as NSString).lastPathComponent } ?? "" : prompt.text)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    .padding(12)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .opacity(prompt.isPending ? 0.6 : 1)
+                if prompt.id != prompts.first?.id { Divider().padding(.leading, 12) }
+            }
+        }
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 12))
+    }
+}
+
+/// A prompt, and what the agent did about it. Fills in as the agent works.
+private struct PromptResponseView: View {
+    let prompt: Prompt
+    let turns: [TranscriptTurn]
+    let task: TaskItem
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    PromptBubble(prompt: prompt)
+                    ForEach(turns) { TurnView(turn: $0) }
+                    if turns.isEmpty {
+                        if task.status == .working {
+                            Label { Text(task.activity ?? "Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
+                        } else {
+                            Text("No response to show.").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle("Response")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                Button("Close", systemImage: "xmark") { dismiss() }
+            }
+        }
+    }
+}
+
 /// The prompts in order, each with what the agent did about it.
 private struct Conversation: View {
     let prompts: [Prompt]
@@ -384,15 +570,24 @@ private struct Conversation: View {
     var body: some View {
         let answered = Set(turns.flatMap(\.promptIDs))
         ForEach(turns) { turn in
-            VStack(alignment: .leading, spacing: 12) {
-                if let note = turn.note { Label(note, systemImage: "info.circle").font(.footnote).foregroundStyle(.secondary) }
-                ForEach(prompts.filter { turn.promptIDs.contains($0.id) }) { PromptBubble(prompt: $0) }
-                if let text = turn.text { Text(text).font(.footnote).foregroundStyle(.secondary).lineLimit(3) }
-                ForEach(turn.sections) { SectionView(section: $0) }
-            }
+            TurnView(turn: turn, prompts: prompts.filter { turn.promptIDs.contains($0.id) })
         }
         // Not reached the agent yet, or from a log that doesn't say.
         ForEach(prompts.filter { !answered.contains($0.id) }) { PromptBubble(prompt: $0).opacity($0.isPending ? 0.6 : 1) }
+    }
+}
+
+private struct TurnView: View {
+    let turn: TranscriptTurn
+    var prompts: [Prompt] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let note = turn.note { Label(note, systemImage: "info.circle").font(.footnote).foregroundStyle(.secondary) }
+            ForEach(prompts) { PromptBubble(prompt: $0) }
+            if let text = turn.text { Text(text).font(.footnote).foregroundStyle(.secondary).lineLimit(3) }
+            ForEach(turn.sections) { SectionView(section: $0) }
+        }
     }
 }
 

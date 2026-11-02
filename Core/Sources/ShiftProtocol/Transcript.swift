@@ -166,6 +166,20 @@ public struct TranscriptTurn: Identifiable, Hashable, Sendable {
         }
         return sections
     }
+
+    /// What the agent did about each prompt: the turns answering it, and the runs Shift started by itself after them,
+    /// which no prompt stands for. Logs from before markers name no prompts at all, so they all go with the first.
+    public static func responses(to prompts: [Prompt], in turns: [TranscriptTurn]) -> [Prompt.ID: [TranscriptTurn]] {
+        let known = Set(prompts.map(\.id))
+        var owners = prompts.first.map { [$0.id] } ?? []
+        var responses: [Prompt.ID: [TranscriptTurn]] = [:]
+        for turn in turns {
+            let named = turn.promptIDs.filter(known.contains)
+            if !named.isEmpty { owners = named }
+            for owner in owners { responses[owner, default: []].append(turn) }
+        }
+        return responses
+    }
 }
 
 /// Turns a log into `TranscriptTurn`s, one chunk of bytes at a time. Holds on to no tool output beyond its previews.

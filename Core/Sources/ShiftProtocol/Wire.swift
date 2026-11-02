@@ -83,6 +83,9 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     case newChat(projectID: UUID)
     /// The base server's address on the Mac, started and shared with the phone first. Its port is what the phone wants.
     case baseServerURL(projectID: UUID)
+    /// The branches a task in the project could merge into.
+    case branches(projectID: UUID)
+    case changeBase(taskID: Int, to: String)
 }
 
 public enum RemoteResult: Codable, Equatable, Sendable {

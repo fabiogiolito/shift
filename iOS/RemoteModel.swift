@@ -218,6 +218,30 @@ final class RemoteModel {
         return pairing?.preview(port: port)
     }
 
+    func merge(taskID: Int) async { await perform(.merge(taskID: taskID)) }
+    func push(taskID: Int) async { await perform(.pushBranch(taskID: taskID)) }
+    func resolveConflict(taskID: Int) async { await perform(.resolveConflict(taskID: taskID)) }
+    func changeBase(taskID: Int, to base: String) async { await perform(.changeBase(taskID: taskID, to: base)) }
+
+    /// The page to open it on, with the branch pushed.
+    func pullRequestURL(taskID: Int) async -> URL? {
+        guard case .url(let url)? = await perform(.pullRequestURL(taskID: taskID)) else { return nil }
+        return url
+    }
+
+    /// Nothing to say if it fails, as from a Mac too old to know the command: the picker offers just the current base.
+    func branches(projectID: UUID) async -> [String] {
+        let earlier = lastError
+        defer { lastError = earlier }
+        guard case .files(let branches)? = await perform(.branches(projectID: projectID)) else { return [] }
+        return branches
+    }
+
+    func changes(taskID: Int) async -> DiffSummary? {
+        guard case .changes(let changes)? = await perform(.loadChanges(taskID: taskID)) else { return nil }
+        return changes
+    }
+
     /// Saves an image on the Mac. Its path there goes in a prompt's `attachments`.
     func upload(_ data: Data, name: String) async throws -> String {
         guard let pairing else { throw URLError(.notConnectedToInternet) }

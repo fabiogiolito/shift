@@ -47,7 +47,7 @@ final class WireTests: XCTestCase {
             .createTask(projectID: id, prompt: "p", attachments: ["/a"], agent: nil), .sendPrompt(taskID: 1, text: "t", attachments: []),
             .answerApproval(taskID: 1, allow: false), .stop(taskID: 1), .resume(taskID: 1), .rename(taskID: 1, title: "t"), .merge(taskID: 1),
             .delete(taskID: 1), .resolveConflict(taskID: 1), .conflictedFiles(taskID: 1), .pushBranch(taskID: 1), .pullRequestURL(taskID: 1),
-            .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1, target: id), .buildLog(taskID: 1, target: id),
+            .branches(projectID: id), .changeBase(taskID: 1, to: "main"), .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1, target: id), .buildLog(taskID: 1, target: id),
             .sendChat(projectID: id, text: "t", attachments: []), .answerChatApproval(projectID: id, allow: true), .stopChat(projectID: id), .newChat(projectID: id), .baseServerURL(projectID: id),
         ]
         commands.forEach { roundTrip(ClientMessage.command(CommandRequest(id: 1, command: $0))) }
