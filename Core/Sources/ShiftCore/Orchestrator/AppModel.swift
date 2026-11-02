@@ -35,6 +35,10 @@ public final class AppModel {
         }
     }
 
+    /// Each task's latest pull request, as of the last check. No entry: none, or not known (no `gh`).
+    public private(set) var pullRequests: [TaskItem.ID: PullRequest] = [:]
+    private var refreshingPullRequests: Set<Project.ID> = []
+
     /// Web projects: the port of the dev server running on the project's own checkout, its base branch.
     /// No entry: not started yet.
     public private(set) var basePorts: [Project.ID: Int] = [:]
@@ -252,6 +256,10 @@ public final class AppModel {
         changed()
         Task { [weak self] in
             while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
+        }
+        Task { [weak self] in
+            await self?.refreshAllPullRequests()
+            while (try? await Task.sleep(for: .seconds(60))) != nil, let self { await self.refreshAllPullRequests() }
         }
     }
 
@@ -562,12 +570,18 @@ public final class AppModel {
         await refreshMergeability()
     }
 
-    /// Pushes the task's branch to the project's remote. Never forced.
+    /// Commits what the task has and pushes its branch to the project's remote, which updates its open
+    /// pull request. Never forced.
     public func pushBranch(taskID: TaskItem.ID) async {
         guard let services, let task = task(taskID), let project = project(task.projectID),
               let remote = await services.git.remote(repo: project.repoURL, branch: task.branch) else { return }
         do {
+            if FileManager.default.fileExists(atPath: task.worktreePath) {
+                try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
+            }
             try await services.git.push(repo: project.repoURL, branch: task.branch, remote: remote)
+            // GitHub may take a moment to show the new head; the next check has it.
+            if pullRequests[taskID]?.state == .open { pullRequests[taskID]?.hasNewWork = false }
         } catch {
             lastError = "Could not push \(task.title): \(Self.firstLine(Self.describe(error)))"
         }
@@ -599,14 +613,84 @@ public final class AppModel {
     /// GitHub's compare page for `branch` into `base`, from an https or ssh remote URL. Nil for other hosts.
     /// An empty `body` is left out so the repo's pull request template still applies.
     static func pullRequestURL(remoteURL: String, branch: String, base: String, title: String, body: String) -> URL? {
-        guard let match = remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#) else { return nil }
+        guard let repo = githubRepo(remoteURL: remoteURL) else { return nil }
         // `+` must be escaped too: GitHub reads a bare one in a query as a space.
         let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
         func encoded(_ text: String) -> String { text.addingPercentEncoding(withAllowedCharacters: allowed) ?? "" }
-        let page = "https://github.com/\(match.1)/compare/\(base)...\(branch)?expand=1&title=\(encoded(title))"
+        let page = "https://github.com/\(repo)/compare/\(base)...\(branch)?expand=1&title=\(encoded(title))"
         let filled = "\(page)&body=\(encoded(body))"
         // ponytail: GitHub rejects very long URLs, so a huge body is dropped rather than truncated mid-sentence.
         return URL(string: body.isEmpty || filled.count > 6000 ? page : filled)
+    }
+
+    /// "owner/repo" from an https or ssh remote URL. Nil for other hosts.
+    static func githubRepo(remoteURL: String) -> String? {
+        remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#).map { String($0.1) }
+    }
+
+    private func refreshAllPullRequests() async {
+        for id in projects.map(\.id) { await refreshPullRequests(projectID: id) }
+    }
+
+    /// Reads the pull requests of the project's tasks from GitHub. A task whose pull request was merged
+    /// is done, unless it has work that was not in it: that stays, and can go into a new pull request.
+    public func refreshPullRequests(projectID: Project.ID) async {
+        guard let services, let project = project(projectID), !refreshingPullRequests.contains(projectID),
+              tasks(in: projectID).contains(where: { $0.status != .merged }),
+              let remote = await services.git.remote(repo: project.repoURL, branch: project.baseBranch),
+              let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
+              let github = Self.githubRepo(remoteURL: remoteURL) else { return }
+        refreshingPullRequests.insert(projectID)
+        defer { refreshingPullRequests.remove(projectID) }
+        // No `gh`, signed out or offline: what is known stays.
+        guard let found = try? await services.git.pullRequests(repo: project.repoURL, github: github) else { return }
+
+        var newlyMergedBases: Set<String> = []
+        for id in tasks(in: projectID).map(\.id) {
+            guard let task = task(id), task.status != .merged else { continue }
+            guard var pullRequest = found[task.branch],
+                  await services.git.branchExists(repo: project.repoURL, branch: task.branch) else {
+                pullRequests[id] = nil
+                continue
+            }
+            pullRequest.hasNewWork = await hasWork(id, outside: pullRequest, remote: remote)
+            if pullRequest.state == .merged, pullRequests[id]?.state != .merged { newlyMergedBases.insert(task.base(in: project)) }
+            pullRequests[id] = pullRequest
+            if pullRequest.state == .merged, !pullRequest.hasNewWork, isSettled(id) {
+                busy.insert(id)
+                await cleanUp(id)
+                markMerged(id)
+                busy.remove(id)
+            }
+        }
+        guard !newlyMergedBases.isEmpty else { return }
+        // Merged on GitHub: new tasks must start from it, and other tasks must be checked against it.
+        // Not moved if the local base has its own commits or the move would overwrite uncommitted changes.
+        for base in newlyMergedBases { try? await services.git.fastForward(repo: project.repoURL, branch: base, remote: remote) }
+        await refreshPushState(projectID: projectID)
+        await refreshMergeability()
+    }
+
+    /// Finished, with nothing happening to it.
+    private func isSettled(_ id: TaskItem.ID) -> Bool {
+        guard let task = task(id), task.status == .completed || task.status == .conflict else { return false }
+        return runs[id] == nil && !busy.contains(id)
+    }
+
+    /// Whether the task has anything the pull request does not. Unknown counts as yes: a yes keeps the
+    /// work, a wrong no deletes it. Local commits behind the pull request (GitHub's "Update branch") are not work.
+    private func hasWork(_ id: TaskItem.ID, outside pullRequest: PullRequest, remote: String) async -> Bool {
+        guard let services, let task = task(id), let project = project(task.projectID) else { return true }
+        if isSettled(id), FileManager.default.fileExists(atPath: task.worktreePath) {
+            do { try await services.git.commitAll(worktree: task.worktreeURL, message: task.title) } catch { return true }
+        }
+        func isContained() async -> Bool? {
+            try? await services.git.isContained(repo: project.repoURL, branch: task.branch, in: pullRequest.headRefOid)
+        }
+        if let contained = await isContained() { return !contained }
+        // The head commit is not here yet.
+        try? await services.git.fetchPullRequest(repo: project.repoURL, number: pullRequest.number, remote: remote)
+        return await isContained() != true
     }
 
     /// The project's base branch in the browser: its base server, started again first if it stopped, once it
@@ -874,6 +958,7 @@ public final class AppModel {
         defer { busy.remove(taskID) }
         // Resources first, the record last: if the app dies halfway the task is still there to retry.
         if task.status != .merged { await cleanUp(taskID) }
+        for shot in self.task(taskID)?.screenshots ?? [] { try? FileManager.default.removeItem(at: shot.url) }
         tasks.removeAll { $0.id == taskID }
         changed()
         await services.store.deleteLog(taskID: taskID)
@@ -1028,16 +1113,10 @@ public final class AppModel {
         }
     }
 
-    /// Raw agent output, for the debugging view only.
+    /// Raw agent output.
     public func rawOutput(taskID: TaskItem.ID) async -> String {
         guard let services else { return "" }
         return await services.store.readLog(taskID: taskID)
-    }
-
-    /// The agent's output as a person reads it: its messages, its actions, its errors.
-    public func readableOutput(taskID: TaskItem.ID) async -> String {
-        guard let agent = task(taskID)?.agent else { return "" }
-        return Transcript.readable(await rawOutput(taskID: taskID), agent: agent)
     }
 
     /// Reads the task's log as a conversation. nil for the preview model.
@@ -1222,7 +1301,8 @@ public final class AppModel {
             let request = AgentRequest(prompt: text, sessionID: chat(projectID: projectID)?.sessionID, worktree: project.repoURL,
                                        environment: controlEnvironment(projectID),
                                        permissions: project.permissions, model: project.models[kind], needsDescription: false,
-                                       approvals: channel, chat: true)
+                                       approvals: channel, chat: true,
+                                       chatContext: OutcomeProtocol.chatContext(tasks: tasks(in: projectID), project: project))
             var failure: String?
             events: for await event in adapter.run(request) {
                 guard isChatCurrent(projectID, token) else { return }
@@ -1233,7 +1313,7 @@ public final class AppModel {
                     if case .blocked(let reason, _) = outcome { failure = reason }
                     break events
                 case .approvalRequested(let id, let summary): chatApprovals[projectID, default: []].append((id, summary))
-                case .activity, .described: break
+                case .activity, .described, .screenshotPage: break
                 }
                 guard isChatCurrent(projectID, token) else { return }
                 deliverChatPending(projectID)
@@ -1461,6 +1541,8 @@ public final class AppModel {
         guard let services else { return }
         var prompt = prompt, promptIDs = promptIDs
         while true {
+            var shots = await screenshotTurn(id)
+            try check(id, token)
             let adapter = try adapter(for: id)
             guard let task = task(id) else { throw CancellationError() }
             // Without a session there is nothing to resume, so the agent needs the whole story.
@@ -1477,7 +1559,7 @@ public final class AppModel {
                                        model: project(task.projectID)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        description: task.description,
-                                       approvals: channel)
+                                       approvals: channel, screenshots: shots != nil)
             approvalChannels[id] = channel
             await services.store.appendLog(taskID: id, text: RunMarker.line(
                 agent: adapter.kind, promptIDs: delivered, text: delivered.isEmpty ? prompt : nil))
@@ -1504,6 +1586,13 @@ public final class AppModel {
                             $0.description = description ?? $0.description
                         }
                     }
+                case .screenshotPage(let page):
+                    shots?.page = page
+                    // Not awaited: the agent may be waiting for an answer to an approval meanwhile.
+                    if shots?.wantsBefore == true, let page, let diff = shots?.diff {
+                        shots?.before = Task { await takeBeforeScreenshot(id, page: page, unchangedFrom: diff) }
+                    }
+                    shots?.wantsBefore = false
                 case .rawOutput(let output): await services.store.appendLog(taskID: id, text: output + "\n")
                 case .approvalRequested(let approvalID, let summary):
                     pendingApprovals[id, default: []].append((approvalID, summary))
@@ -1525,6 +1614,10 @@ public final class AppModel {
                 await startServer(id)
                 try check(id, token)
             }
+            if let shots {
+                await takeAfterScreenshot(id, shots)
+                try check(id, token)
+            }
 
             // From here to the end of the iteration there is no await: a prompt sent now either
             // is pending already, or finds the task settled and starts a run of its own.
@@ -1538,6 +1631,82 @@ public final class AppModel {
             finish(id, settled)
             return
         }
+    }
+
+    // MARK: - Screenshots
+
+    /// What one agent turn needs to know to take its screenshots.
+    private struct ScreenshotTurn {
+        /// The task's changes when the turn started: a prompt that leaves them as they are gets no screenshot.
+        let diff: [FileDiff]
+        /// Nothing has changed yet, so the next page named can still be shot as it was.
+        var wantsBefore: Bool
+        /// The home page unless the agent names another. Nil: nothing visible changes.
+        var page: String? = "/"
+        var before: Task<Void, Never>?
+    }
+
+    /// Nil if this turn takes no screenshots. Conflict resolutions are Shift's own prompts, not the user's.
+    private func screenshotTurn(_ id: TaskItem.ID) async -> ScreenshotTurn? {
+        guard let services, services.screenshots != nil, let task = task(id), let project = project(task.projectID),
+              project.takesScreenshots, !project.isApp, task.port != nil, !task.isResolvingConflict,
+              let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)) else { return nil }
+        let wantsBefore = diff.isEmpty && task.screenshots?.contains(where: \.isBefore) != true
+        // The agent starts as soon as this returns, and the "before" has to beat its first edit.
+        if wantsBefore { _ = await serverAnswers(id) }
+        return ScreenshotTurn(diff: diff, wantsBefore: wantsBefore)
+    }
+
+    /// ponytail: checked only once, before the page loads; an edit during the seconds it takes can end up in the
+    /// picture. Checking after too would drop good ones: dev servers rewrite tracked files on first compile.
+    private func takeBeforeScreenshot(_ id: TaskItem.ID, page: String, unchangedFrom diff: [FileDiff]) async {
+        guard let services, let task = task(id), let project = project(task.projectID),
+              (try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project))) == diff else { return }
+        await takeScreenshot(id, page: page, isBefore: true)
+    }
+
+    private func takeAfterScreenshot(_ id: TaskItem.ID, _ shots: ScreenshotTurn) async {
+        await shots.before?.value
+        guard let services, let page = shots.page, let task = task(id), let project = project(task.projectID),
+              let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)),
+              diff != shots.diff else { return }
+        update(id) { $0.activity = "Taking a screenshot…" }
+        await takeScreenshot(id, page: page, isBefore: false)
+    }
+
+    private func takeScreenshot(_ id: TaskItem.ID, page: String, isBefore: Bool) async {
+        guard let services, let screenshots = services.screenshots, let server = task(id)?.serverURL else { return }
+        let shot = TaskScreenshot(path: ShiftPaths.screenshots.appendingPathComponent("\(id)-\(UUID().uuidString).png").path,
+                                  isBefore: isBefore, page: page)
+        let url = Self.screenshotURL(page: page, server: server)
+        guard await serverAnswers(id), await screenshots.capture(url: url, to: shot.url) else {
+            await services.store.appendLog(taskID: id, text: "Could not take a screenshot of \(url.absoluteString)\n")
+            return
+        }
+        // Deleted meanwhile: nothing will ever clean this one up.
+        guard task(id) != nil else {
+            try? FileManager.default.removeItem(at: shot.url)
+            return
+        }
+        update(id) { $0.screenshots = ($0.screenshots ?? []) + [shot] }
+    }
+
+    /// `page` on the task's server. The agent wrote it, so anything that leads elsewhere means the home page.
+    static func screenshotURL(page: String, server: URL) -> URL {
+        guard let url = URL(string: page, relativeTo: server)?.absoluteURL,
+              url.host == server.host, url.port == server.port, url.scheme == server.scheme else { return server }
+        return url
+    }
+
+    /// Waits up to 30 seconds for the task's server to answer. False if it does not, or is not running.
+    private func serverAnswers(_ id: TaskItem.ID) async -> Bool {
+        guard let services, let port = task(id)?.port else { return false }
+        for _ in 0..<150 {
+            if await services.ports.isListening(port) { return true }
+            guard await services.servers.isRunning(taskID: id) else { return false }
+            try? await Task.sleep(for: baseServerPoll)
+        }
+        return false
     }
 
     // MARK: - Pending prompts
@@ -1631,8 +1800,12 @@ public final class AppModel {
         reportToChat(task, report)
         // For the countdown to the reset: the last reading is likely from before the limit was reached.
         if self.task(id)?.isUsageLimited == true { Task { await refreshUsage(task.agent) } }
-        if settled.status == .completed, project(task.projectID)?.pushTaskBranches == true {
-            Task { await pushBranch(taskID: id) }
+        let pushes = settled.status == .completed && project(task.projectID)?.pushTaskBranches == true
+        if pushes || pullRequests[id] != nil {
+            Task {
+                if pushes { await pushBranch(taskID: id) }
+                await refreshPullRequests(projectID: task.projectID)
+            }
         }
     }
 
@@ -1690,6 +1863,7 @@ public final class AppModel {
     }
 
     private func markMerged(_ id: TaskItem.ID) {
+        pullRequests[id] = nil
         update(id) {
             Self.apply(Settled(status: .merged), to: &$0)
             $0.port = nil

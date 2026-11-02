@@ -13,6 +13,7 @@ extension AppModel {
             notifier: notifier,
             store: JSONStateStore(),
             tailscale: Tailscale(),
+            screenshots: WebScreenshotter(),
             control: ControlServer()
         ))
     }

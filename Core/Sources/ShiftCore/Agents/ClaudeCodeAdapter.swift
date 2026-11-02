@@ -37,8 +37,9 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         if request.chat { arguments.append("--include-partial-messages") }
         arguments += autonomyArguments(request.permissions)
         if let model = request.model { arguments += ["--model", model] }
-        arguments += ["--append-system-prompt", request.chat ? OutcomeProtocol.chatInstructions
-            : OutcomeProtocol.instructions(firstTurn: request.needsDescription, description: request.description)]
+        arguments += ["--append-system-prompt", request.chat ? OutcomeProtocol.chatInstructions + request.chatContext
+            : OutcomeProtocol.instructions(firstTurn: request.needsDescription, description: request.description,
+                                           screenshots: request.screenshots)]
         if let sessionID = request.sessionID { arguments += ["--resume", sessionID] }
         return arguments
     }

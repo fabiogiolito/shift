@@ -10,26 +10,31 @@ enum OutcomeProtocol {
     static let titleMarker = "SHIFT_TITLE:"
     static let descriptionMarker = "SHIFT_DESCRIPTION:"
     static let optionMarker = "SHIFT_OPTION:"
+    static let screenshotMarker = "SHIFT_SCREENSHOT:"
 
     /// Appended to every prompt (Codex) or to the system prompt (Claude Code).
     /// `firstTurn`: the task has no title or description of its own yet (new, or created before agents wrote them).
     /// `description`: the one it has, for the agent to build on; a new session has no memory of writing it.
-    static func instructions(firstTurn: Bool, description: String? = nil) -> String {
+    /// `screenshots`: Shift takes screenshots of the task's server, of the page the agent names.
+    static func instructions(firstTurn: Bool, description: String? = nil, screenshots: Bool = false) -> String {
         outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
+            + (screenshots ? "\n\n" + namePage : "")
     }
 
     /// For the project chat, instead of everything above: it isn't a task, and the user is there.
     static let chatInstructions = """
-    This is an open-ended conversation with the user about this project, inside the app Shift. You are in the \
-    project's own folder, not in a task's worktree, so what you do here happens on the branch checked out there. \
-    The user is reading along and answers you, so asking questions is fine. If the project has an AGENTS.md or \
-    CLAUDE.md, read it first when it's relevant.
+    This is an open-ended conversation with the user about this project, inside the app Shift, where each task is \
+    an agent working on its own branch and worktree. You are in the project's own folder, not in a task's worktree, \
+    so what you do here happens on the branch checked out there, which can be any branch. The user is reading along \
+    and answers you, so asking questions is fine. If the project has an AGENTS.md or CLAUDE.md, read it first when \
+    it's relevant.
 
-    Do what the user asks: explain the code and work out plans, and when they ask for an action, carry it out. You can \
-    change anything in this folder, run any command, use git (commit, pull, push) and run the project's own scripts, \
-    such as the one that releases a new version. A question only needs an answer: don't change anything, commit or \
-    push unless asked. Before anything that can't be undone and wasn't clearly asked for, such as force-pushing or \
-    discarding uncommitted work, check with the user.
+    Do what the user asks: explain the code, answer questions about any task or about the project in general, work \
+    out plans, and when they ask for an action, carry it out. You can change anything in this folder, run any \
+    command, use git (switch branches, commit, pull, push) and run the project's own scripts, such as the one that \
+    releases a new version. A question only needs an answer: don't change anything, commit or push unless asked. \
+    Before anything that can't be undone and wasn't clearly asked for, such as force-pushing or discarding \
+    uncommitted work, check with the user.
 
     You are also the user's orchestrator for this project: besides working here yourself, you can run the rest of \
     Shift with the command `\(ShiftPaths.controlScript.path)`. A task is a separate coding agent, with its own \
@@ -55,6 +60,42 @@ enum OutcomeProtocol {
     - Merging, deleting, pushing and opening pull requests need the user to have asked for it in this conversation; \
     suggesting it isn't enough. Changing settings too.
     """
+
+    /// Most merged tasks the chat is told about; the rest it can look up in the state file.
+    static let chatMergedLimit = 50
+
+    /// What the chat knows about the project's tasks. Passed with each run, as the tasks keep changing.
+    static func chatContext(tasks: [TaskItem], project: Project) -> String {
+        func oneLine(_ text: String) -> String { text.split(whereSeparator: \.isNewline).joined(separator: " ") }
+        func day(_ date: Date) -> String { date.formatted(.iso8601.year().month().day()) }
+        func entry(_ task: TaskItem) -> String {
+            var state = task.status.rawValue
+            if let merged = task.mergedAt { state += " \(day(merged))" }
+            var lines = ["- \(task.id) (\(state)) \(oneLine(task.title)): branch \(task.branch), base \(task.base(in: project))"
+                + (task.status == .merged ? "" : ", worktree \(task.worktreePath)")]
+            if let about = task.summary ?? task.description { lines.append("  \(oneLine(about))") }
+            if task.status != .merged, let now = task.question ?? task.blockedReason ?? task.activity { lines.append("  Now: \(oneLine(now))") }
+            return lines.joined(separator: "\n")
+        }
+
+        let open = tasks.filter { $0.status != .merged }.sorted { $0.createdAt > $1.createdAt }
+        let merged = tasks.filter { $0.status == .merged }.sorted { ($0.mergedAt ?? $0.createdAt) > ($1.mergedAt ?? $1.createdAt) }
+        var parts = ["""
+
+
+        To answer about a task, look at its code rather than guessing: an open task's worktree has its current work, \
+        which you can read without switching branches (git won't check out a branch here while a worktree has it). \
+        Don't change anything in a worktree unless asked, as an agent may be working there. A merged task's work is \
+        in its base branch and its worktree is gone. What was said and done in any task is in its agent's log, \
+        \(ShiftPaths.logs.path)/agent-<task number>.log, which is long: search it or read its end.
+        """]
+        parts.append("Open tasks, newest first:\n" + (open.isEmpty ? "None" : open.map(entry).joined(separator: "\n")))
+        parts.append("Merged tasks, newest first:\n" + (merged.isEmpty ? "None" : merged.prefix(chatMergedLimit).map(entry).joined(separator: "\n")))
+        if merged.count > chatMergedLimit {
+            parts.append("\(merged.count - chatMergedLimit) older merged tasks aren't listed. All tasks, with their prompts, are in \(ShiftPaths.state.path).")
+        }
+        return parts.joined(separator: "\n\n")
+    }
 
     static let describeFirst = """
     Before doing any work, start your first message with these two lines, each on a line of its own. \
@@ -87,6 +128,19 @@ enum OutcomeProtocol {
     page". Name the outcome, not the problem, and do not reuse the user's wording.
     The description is one or two plain sentences on what the task does and why, from the user's \
     point of view. It is not a restatement of the latest prompt and not a list of steps.
+    """
+
+    static let namePage = """
+    Shift screenshots the page of the running project that shows your change, once before you start and once when \
+    you finish. Before doing any work, and for every message from the user, write this as the very first thing you \
+    write, on a line of its own, before reading or changing any file:
+
+    SHIFT_SCREENSHOT: <path>
+
+    The path is the page where the change will be best seen, such as `/` or `/pricing`, and one that exists now if \
+    possible, so the two screenshots compare. Going by the request is enough: don't research it first. If nothing \
+    visible will change, write `none`. If the page turns out to be another one, repeat the line with it at the start \
+    of your final message.
     """
 
     static let outcome = """
@@ -156,6 +210,15 @@ enum OutcomeProtocol {
         return (value(titleMarker, limit: 80), value(descriptionMarker, limit: 600))
     }
 
+    /// The page named in `message`, as `.screenshotPage`. The last one if there are several, nil if there are none.
+    static func screenshotPage(in message: String) -> AgentEvent? {
+        guard let range = message.range(of: screenshotMarker, options: .backwards) else { return nil }
+        let line = String(message[range.upperBound...].prefix { !$0.isNewline })
+        let page = line.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "*`")))
+        if page.isEmpty { return nil }
+        return .screenshotPage(page.lowercased() == "none" ? nil : page)
+    }
+
     /// `message` without its `SHIFT_OPTION:` lines, and the replies they offer: trimmed of markdown
     /// and quotes, no empties or duplicates, at most 4 of at most 80 characters.
     static func extractingOptions(_ message: String) -> (message: String, options: [String]) {
@@ -174,10 +237,10 @@ enum OutcomeProtocol {
         return (kept.joined(separator: "\n"), options)
     }
 
-    /// `message` without the title and description lines, which are not for the user to read.
+    /// `message` without the title, description and screenshot lines, which are not for the user to read.
     static func strippingDescribed(_ message: String) -> String {
         message.components(separatedBy: "\n")
-            .filter { !$0.contains(titleMarker) && !$0.contains(descriptionMarker) }
+            .filter { !$0.contains(titleMarker) && !$0.contains(descriptionMarker) && !$0.contains(screenshotMarker) }
             .joined(separator: "\n")
     }
 
@@ -430,6 +493,7 @@ func runAgentProcess(kind: AgentKind, request: AgentRequest,
                     if title != nil || description != nil {
                         continuation.yield(.described(title: title, description: description))
                     }
+                    if let page = OutcomeProtocol.screenshotPage(in: message) { continuation.yield(page) }
                 }
                 if let activity { continuation.yield(.activity(activity)) }
             }

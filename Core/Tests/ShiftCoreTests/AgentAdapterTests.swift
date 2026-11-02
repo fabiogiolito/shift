@@ -469,6 +469,27 @@ final class AgentAdapterTests: XCTestCase {
         XCTAssertTrue(OutcomeProtocol.chatInstructions.contains("project's own folder"))
     }
 
+    func testChatContextListsTasksOpenAndMerged() {
+        let project = Project(name: "Spot", repoPath: "/r", baseBranch: "main")
+        let open = TaskItem(id: 3002, projectID: project.id, title: "Open one", status: .needsInput, agent: .claudeCode,
+                            branch: "shift/3002", worktreePath: "/w/3002", description: "Adds\nthings", question: "Which?")
+        let merged = (0...OutcomeProtocol.chatMergedLimit).map {
+            TaskItem(id: 4000 + $0, projectID: project.id, title: "Merged \($0)", status: .merged, agent: .claudeCode,
+                     branch: "shift/\(4000 + $0)", worktreePath: "/w/\(4000 + $0)", mergedAt: Date(timeIntervalSince1970: Double($0)))
+        }
+        let context = OutcomeProtocol.chatContext(tasks: merged + [open], project: project)
+        XCTAssertTrue(context.contains("- 3002 (needsInput) Open one: branch shift/3002, base main, worktree /w/3002\n  Adds things\n  Now: Which?"))
+        // Newest kept, and it says where the rest is.
+        XCTAssertTrue(context.contains("(merged 1970-01-01) Merged \(OutcomeProtocol.chatMergedLimit): branch"))
+        XCTAssertFalse(context.contains("Merged 0:"))
+        XCTAssertFalse(context.contains("/w/4001"))
+        XCTAssertTrue(context.contains("1 older merged tasks"))
+
+        let request = AgentRequest(prompt: "Hi", worktree: URL(fileURLWithPath: "/w"), chat: true, chatContext: context)
+        let claude = ClaudeCodeAdapter.arguments(for: request)
+        XCTAssertTrue(claude.contains { $0.hasPrefix(OutcomeProtocol.chatInstructions) && $0.hasSuffix(context) })
+    }
+
     // MARK: Live chat (SHIFT_LIVE_AGENT_TESTS=1)
 
     func testLiveClaudeCodeChatCommitsAndPushes() async throws { try await liveChat(ClaudeCodeAdapter()) }
@@ -692,7 +713,7 @@ final class AgentAdapterTests: XCTestCase {
         var events: [AgentEvent] = [], sessions: [String] = [], activities: [String] = [], finished: [AgentEvent] = []
         for await event in stream {
             switch event {
-            case .rawOutput: continue
+            case .rawOutput, .screenshotPage: continue
             case .sessionStarted(let id): sessions.append(id)
             case .activity(let text): activities.append(text)
             case .described, .approvalRequested: break

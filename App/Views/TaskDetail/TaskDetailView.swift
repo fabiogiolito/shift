@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 import ShiftCore
 
@@ -40,6 +41,8 @@ struct TaskDetailView: View {
     @State private var turns: [TranscriptTurn] = []
     /// The prompts showing what the agent did about them.
     @State private var openPrompts: Set<Prompt.ID> = []
+    /// The screenshot open in Quick Look.
+    @State private var screenshotPreview: URL?
 
     private let apps = ExternalApps()
 
@@ -68,6 +71,7 @@ struct TaskDetailView: View {
                                 }
                                 .foregroundStyle(.secondary)
                             }
+                            screenshotsRow(task)
                             if task.status == .completed { changesSection }
                             if !task.prompts.isEmpty { promptList(task) }
                         }
@@ -100,11 +104,10 @@ struct TaskDetailView: View {
                 }
             }
             .sheet(item: $output) { output in
-                OutputSheet(title: output.rawValue, hasRaw: output == .agentOutput) { raw in
+                OutputSheet(title: output.rawValue) {
                     switch output {
                     case .appLog: await model.serverLog(taskID: taskID)
                     case .buildLog: model.buildLog(taskID: taskID)
-                    case .agentOutput: raw ? await model.rawOutput(taskID: taskID) : await model.readableOutput(taskID: taskID)
                     }
                 }
             }
@@ -217,6 +220,7 @@ struct TaskDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Its changes conflict with changes made to \(task.base(in: project)) since it started\(conflicts.isEmpty ? "." : ", in:")")
                 ForEach(conflicts, id: \.self) { Text($0).monospaced().textSelection(.enabled) }
+                if let line = pullRequestLine { Text(line) }
             }
             .foregroundStyle(.secondary)
         case .merged:
@@ -226,7 +230,17 @@ struct TaskDetailView: View {
                  : "Merged into \(base). The project folder has \(checkedOut ?? "") checked out, so it doesn't show there.")
                 .foregroundStyle(.secondary)
         default:
-            EmptyView()
+            if let line = pullRequestLine { Text(line).foregroundStyle(.secondary) }
+        }
+    }
+
+    private var pullRequestLine: String? {
+        guard let pullRequest = model.pullRequests[taskID] else { return nil }
+        let name = "Pull request #\(pullRequest.number)"
+        return switch pullRequest.state {
+        case .open: pullRequest.hasNewWork ? "\(name) is open. The latest changes here aren't in it yet." : "\(name) is open."
+        case .merged: "\(name) was merged without the latest changes here. They are still in this task."
+        case .closed: "\(name) was closed without merging. This task's changes are still here."
         }
     }
 
@@ -378,22 +392,38 @@ struct TaskDetailView: View {
     }
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
+        let pullRequest = model.pullRequests[taskID]
         if task.status == .completed {
-            // Without a remote there is nowhere to open a pull request: merging stays the main action.
-            let opensPR = project.opensPullRequests && model.pushStates[project.id]?.remote != nil
             let mergeTitle = "Merge into \(task.base(in: project))"
-            SplitButton(prominent: true, action: opensPR ? openPullRequest : merge) {
-                Text(opensPR ? "Open Pull Request" : mergeTitle)
-            } menu: {
-                Button(opensPR ? mergeTitle : "Open Pull Request", action: opensPR ? merge : openPullRequest)
-                Divider()
-                branchItems(task, project)
+            if let pullRequest, pullRequest.state == .open {
+                let view = { apps.openInBrowser(pullRequest.url) }
+                SplitButton(prominent: true, action: pullRequest.hasNewWork ? pushToPullRequest : view) {
+                    Text(pullRequest.hasNewWork ? "Push to Pull Request" : "View Pull Request")
+                } menu: {
+                    if pullRequest.hasNewWork { Button("View Pull Request", action: view) }
+                    Button(mergeTitle, action: merge)
+                    Divider()
+                    branchItems(task, project)
+                }
+                .disabled(isMerging)
+            } else {
+                // Without a remote there is nowhere to open a pull request: merging stays the main action.
+                let opensPR = (project.opensPullRequests || pullRequest != nil) && model.pushStates[project.id]?.remote != nil
+                SplitButton(prominent: true, action: opensPR ? openPullRequest : merge) {
+                    Text(opensPR ? "Open Pull Request" : mergeTitle)
+                } menu: {
+                    Button(opensPR ? mergeTitle : "Open Pull Request", action: opensPR ? merge : openPullRequest)
+                    if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
+                    Divider()
+                    branchItems(task, project)
+                }
+                .disabled(isMerging)
             }
-            .disabled(isMerging)
         } else if task.status == .conflict {
             SplitButton(prominent: true, tint: TaskStatus.conflict.color) { model.resolveConflict(taskID: taskID) } label: {
                 Text("Resolve")
             } menu: {
+                if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
                 branchItems(task, project)
             }
         } else if task.status == .working || task.approvalRequest != nil {
@@ -413,9 +443,19 @@ struct TaskDetailView: View {
     private func openPullRequest() {
         isMerging = true
         Task {
+            defer { isMerging = false }
+            // Its squashed commit is on the base now: without it, the new pull request repeats all of that work.
+            if model.pullRequests[taskID]?.state == .merged {
+                syncConflicts = await model.syncBase(taskID: taskID)
+                guard syncConflicts.isEmpty else { return }
+            }
             if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
-            isMerging = false
         }
+    }
+
+    private func pushToPullRequest() {
+        isMerging = true
+        Task { await model.pushBranch(taskID: taskID); isMerging = false }
     }
 
     /// What can be done with the task's branch, in the dropdown of its main action.
@@ -436,6 +476,33 @@ struct TaskDetailView: View {
         if let remote = model.pushStates[project.id]?.remote {
             Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
                 .help("Push \(task.branch) to \(remote)")
+        }
+    }
+
+    /// Most recent first. Quick Look's arrow keys walk through them all, to compare.
+    @ViewBuilder private func screenshotsRow(_ task: TaskItem) -> some View {
+        let shots = (task.screenshots ?? []).reversed().map { $0 }
+        if !shots.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(shots) { shot in
+                        Button { screenshotPreview = shot.url } label: {
+                            VStack(spacing: 4) {
+                                AsyncImage(url: shot.url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                                    .frame(width: 96, height: 60, alignment: .top)
+                                    .clipShape(.rect(cornerRadius: 8))
+                                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
+                                Text(shot.isBefore ? "Before" : "After").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help("\(shot.page), \(shot.date.formatted(date: .abbreviated, time: .shortened))")
+                    }
+                }
+            }
+            .scrollIndicators(.never)
+            .scrollBounceBehavior(.basedOnSize)
+            .quickLookPreview($screenshotPreview, in: shots.map(\.url))
         }
     }
 
@@ -599,7 +666,6 @@ struct TaskDetailView: View {
                 } else if project.isApp {
                     Button("Build Log") { output = .buildLog }
                 }
-                Button("Agent Output") { output = .agentOutput }
                 if task.status == .working || task.approvalRequest != nil {
                     Button("Stop Task") { model.stop(taskID: taskID) }
                 }
@@ -672,29 +738,22 @@ private enum ServerState {
 
 /// Debugging text, from the ••• menu.
 private enum Output: String, Identifiable {
-    case appLog = "App Log", buildLog = "Build Log", agentOutput = "Agent Output"
+    case appLog = "App Log", buildLog = "Build Log"
     var id: Self { self }
 }
 
 private struct OutputSheet: View {
     let title: String
-    /// Offers the unformatted text too, for debugging.
-    let hasRaw: Bool
-    let load: (_ raw: Bool) async -> String
+    let load: () async -> String
     @State private var text: String?
-    @State private var raw = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(title).font(.headline)
-                Spacer()
-                if hasRaw { Toggle("Raw", isOn: $raw).toggleStyle(.checkbox) }
-            }
+            Text(title).font(.headline)
             ScrollView {
                 Text(text.map { $0.isEmpty ? "No output." : $0 } ?? "Loading…")
-                    .font(hasRaw && !raw ? .body : .callout.monospaced())
+                    .font(.callout.monospaced())
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -715,6 +774,6 @@ private struct OutputSheet: View {
         }
         .padding(20)
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
-        .task(id: raw) { text = await load(raw) }
+        .task { text = await load() }
     }
 }

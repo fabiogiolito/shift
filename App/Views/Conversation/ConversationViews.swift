@@ -113,7 +113,7 @@ private struct StepRow: View {
                         }
                         .disabled(isLoading)
                     } else if output.count > Self.limit {
-                        Text("The rest is in Agent Output.").font(.callout).foregroundStyle(.secondary)
+                        Text("Too long to show in full.").font(.callout).foregroundStyle(.secondary)
                     }
                 }
             }

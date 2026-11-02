@@ -135,7 +135,10 @@ final class MockGit: GitServicing {
     func isTracked(repo: URL, path: String) async -> Bool { trackedPaths.contains(path) }
 
     var contained = true
-    func isContained(repo: URL, branch: String, in base: String) async throws -> Bool { contained }
+    func isContained(repo: URL, branch: String, in base: String) async throws -> Bool {
+        if headNeedsFetch, base == "head" { throw GitError(message: "bad object") }
+        return contained
+    }
 
     var rebaseClean = true
     func rebase(worktree: URL, from oldBase: String, onto newBase: String) async throws -> Bool {
@@ -163,6 +166,23 @@ final class MockGit: GitServicing {
         if let pushError { throw pushError }
         calls.append("push \(branch) to \(remote)")
         unpushed = 0
+    }
+
+    var openedPullRequests: [String: PullRequest] = [:]
+    var pullRequestError: Error?
+    /// The head commit is missing until it is fetched.
+    var headNeedsFetch = false
+    var fetchLeavesHeadMissing = false
+    func pullRequests(repo: URL, github: String) async throws -> [String: PullRequest] {
+        if let pullRequestError { throw pullRequestError }
+        return openedPullRequests
+    }
+    func fetchPullRequest(repo: URL, number: Int, remote: String) async throws {
+        calls.append("fetch pull request \(number)")
+        if !fetchLeavesHeadMissing { headNeedsFetch = false }
+    }
+    func fastForward(repo: URL, branch: String, remote: String) async throws {
+        calls.append("fast-forward \(branch)")
     }
 }
 
@@ -304,6 +324,17 @@ final class MockServers: ServerManaging {
         running = [:]
         baseRunning = []
         stoppedAll = true
+    }
+}
+
+@MainActor @Observable
+final class MockScreenshots: Screenshotting {
+    var fails = false
+    private(set) var captured: [URL] = []
+
+    func capture(url: URL, to file: URL) async -> Bool {
+        if !fails { captured.append(url) }
+        return !fails
     }
 }
 

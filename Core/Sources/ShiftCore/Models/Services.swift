@@ -10,6 +10,33 @@ public enum MergeResult: Equatable, Sendable {
     case conflict
 }
 
+/// A pull request on GitHub, as `gh pr list --json` gives it.
+public struct PullRequest: Decodable, Equatable, Sendable {
+    public enum State: String, Decodable, Sendable {
+        case open = "OPEN", merged = "MERGED", closed = "CLOSED"
+    }
+
+    public var number: Int
+    public var url: URL
+    public var state: State
+    public var headRefName: String
+    /// The commit the pull request is at: on a merged one, what was merged.
+    public var headRefOid: String
+    /// Set by the orchestrator: the task has work this pull request does not have.
+    public var hasNewWork = false
+
+    private enum CodingKeys: String, CodingKey { case number, url, state, headRefName, headRefOid }
+
+    public init(number: Int, url: URL, state: State, headRefName: String, headRefOid: String, hasNewWork: Bool = false) {
+        self.number = number
+        self.url = url
+        self.state = state
+        self.headRefName = headRefName
+        self.headRefOid = headRefOid
+        self.hasNewWork = hasNewWork
+    }
+}
+
 public protocol GitServicing: Sendable {
     func isRepository(_ url: URL) async -> Bool
     /// Makes the folder a repository and commits everything in it: tasks branch off a commit.
@@ -74,6 +101,15 @@ public protocol GitServicing: Sendable {
     /// branch is left as it was and it throws.
     /// Never waits for a password and gives up after a timeout. Throws a plain-language message.
     func push(repo: URL, branch: String, remote: String) async throws
+
+    /// The repo's pull requests by head branch, the newest for each, from the GitHub CLI. `github` is
+    /// "owner/repo". Throws if `gh` is missing, signed out or offline. Never asks for anything.
+    func pullRequests(repo: URL, github: String) async throws -> [String: PullRequest]
+    /// Brings a pull request's head commit into the repo, also when its branch is gone from the remote.
+    func fetchPullRequest(repo: URL, number: Int, remote: String) async throws
+    /// Moves `branch` up to what the remote has, if that is a fast-forward; otherwise leaves it alone.
+    /// Where it is checked out, keeps uncommitted changes or leaves it alone.
+    func fastForward(repo: URL, branch: String, remote: String) async throws
 }
 
 // MARK: - Agents
@@ -92,6 +128,9 @@ public enum AgentEvent: Equatable, Sendable {
     case activity(String)
     /// The agent's own words for what the task will accomplish. Either may be missing.
     case described(title: String?, description: String?)
+    /// Screenshots are on: the page this turn's change shows on, nil if nothing visible changes. The first one
+    /// comes before the agent's work; a later one replaces it.
+    case screenshotPage(String?)
     /// Raw output for the debugging view only.
     case rawOutput(String)
     /// Manual permissions: the agent waits to be allowed to do `summary`, one short human line such as
@@ -156,10 +195,15 @@ public struct AgentRequest: Sendable {
     public var approvals: ApprovalChannel
     /// The project chat: it gets the chat's instructions instead of the task ones, and its reply as it's written.
     public var chat: Bool
+    /// The project chat: what it's told about the project's tasks right now, after its instructions.
+    public var chatContext: String
+    /// The agent must say which page shows this turn's change (`.screenshotPage`).
+    public var screenshots: Bool
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
-                description: String? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false) {
+                description: String? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false,
+                chatContext: String = "", screenshots: Bool = false) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -170,6 +214,8 @@ public struct AgentRequest: Sendable {
         self.description = description
         self.approvals = approvals
         self.chat = chat
+        self.chatContext = chatContext
+        self.screenshots = screenshots
     }
 }
 
@@ -239,6 +285,11 @@ public protocol Notifying: Sendable {
     func setBadge(count: Int) async
 }
 
+public protocol Screenshotting: Sendable {
+    /// Saves a PNG of the page at `url` to `file`, making its folder if needed. False if the page did not load.
+    func capture(url: URL, to file: URL) async -> Bool
+}
+
 // MARK: - Persistence
 
 public struct AppState: Codable, Equatable, Sendable {
@@ -294,10 +345,12 @@ public struct Services: Sendable {
     public var tailscale: Tailscale?
     /// Lets the project chat's agent run Shift through `shiftctl`. Nil: it can't (tests).
     public var control: ControlServer?
+    /// Nil: no screenshots, whatever the project says.
+    public var screenshots: Screenshotting?
 
     public init(git: GitServicing, agents: [AgentKind: AgentAdapter], servers: ServerManaging,
                 ports: PortAllocating, notifier: Notifying, store: StateStoring, tailscale: Tailscale? = nil,
-                control: ControlServer? = nil) {
+                screenshots: Screenshotting? = nil, control: ControlServer? = nil) {
         self.git = git
         self.agents = agents
         self.servers = servers
@@ -306,6 +359,7 @@ public struct Services: Sendable {
         self.store = store
         self.tailscale = tailscale
         self.control = control
+        self.screenshots = screenshots
     }
 }
 
@@ -325,6 +379,7 @@ public enum ShiftPaths {
     public static let worktrees = root.appendingPathComponent("worktrees")
     /// The command the project chat's agent runs Shift with.
     public static let controlScript = root.appendingPathComponent("bin/shiftctl")
+    public static let screenshots = root.appendingPathComponent("screenshots")
     /// SHIFT_HOME of a task's build when Shift opens it, so a build of Shift keeps its own data.
     // ponytail: never cleaned up; delete it with the task if builds of Shift pile up.
     public static func build(taskID: Int) -> URL { root.appendingPathComponent("builds/\(taskID)") }

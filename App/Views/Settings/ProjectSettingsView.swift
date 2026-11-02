@@ -177,6 +177,16 @@ struct ProjectSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            if !usesBuild(current) {
+                Section {
+                    Toggle("Take screenshots", isOn: project.takesScreenshots)
+                } footer: {
+                    Text("Keeps a screenshot of the page each prompt changes, and of how it looked before the task's first change. They show above the changed files.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             if let remote = model.pushStates[projectID]?.remote {
                 Section {
                     Toggle("Push task branches to \(remote)", isOn: project.pushTaskBranches)
@@ -184,7 +194,7 @@ struct ProjectSettingsView: View {
                 } header: {
                     Text("Git")
                 } footer: {
-                    Text("Pushes each task's branch when the task is finished. With pull requests on, a finished task's main button opens one on GitHub, and merging moves to its dropdown.")
+                    Text("Pushes each task's branch when the task is finished. With pull requests on, a finished task's main button opens one on GitHub, and merging moves to its dropdown. With the GitHub CLI (gh) signed in, Shift follows the pull request: it shows when it's open, pushes new changes to it, and marks the task Merged once it's merged.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

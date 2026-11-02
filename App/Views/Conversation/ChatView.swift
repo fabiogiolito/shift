@@ -71,11 +71,10 @@ struct ChatView: View {
             .overlay {
                 if chat == nil {
                     ContentUnavailableView("Chat About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
-                                           description: Text("Plan with the agent, and it can start tasks, follow them and tell you how they went, merge them when you ask, and change the project's settings. It can also work in the project's folder, like pull, push or release. It has the project's permissions."))
+                                           description: Text("Ask about any task, open or merged, and plan with the agent. It can start tasks, follow them and tell you how they went, merge them when you ask, and change the project's settings. It can also work in the project's folder, like switch branches, pull, push or release. It has the project's permissions."))
                 }
             }
         }
-        .safeAreaBar(edge: .top) { branchNote }
         .safeAreaBar(edge: .bottom) {
             VStack(alignment: .trailing, spacing: 8) {
                 if let request = model.chatApprovalRequest(projectID: project.id) {
@@ -151,17 +150,5 @@ struct ChatView: View {
         }
         .padding(16)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
-    }
-
-    /// The agent works in the folder as it is: it matters when that isn't the project's base.
-    @ViewBuilder private var branchNote: some View {
-        if let branch, branch != project.baseBranch {
-            Label("The project's folder is on \(branch), not \(project.baseBranch). The agent works on \(branch).", systemImage: "exclamationmark.triangle")
-                .font(.callout)
-                .foregroundStyle(.orange)
-                .padding(.horizontal, TaskDetailView.margin)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 }

@@ -30,7 +30,7 @@ extension AppModel {
       pr <id>                  push its branch and print the page that opens a pull request
       project                  the project's settings, as JSON
       set <setting> "<value>"  change one: name, baseBranch, type, defaultAgent, model, serverCommand,
-                               setupCommand, buildCommand, pushTaskBranches, opensPullRequests
+                               setupCommand, buildCommand, pushTaskBranches, takesScreenshots, opensPullRequests
     """
 
     func handleControl(token: String, arguments: [String]) async -> ControlReply {
@@ -76,7 +76,8 @@ extension AppModel {
             detail.conflicts = conflicts.isEmpty ? nil : conflicts
             return json(detail)
         case "log":
-            let output = await readableOutput(taskID: try taskArgument().id)
+            let task = try taskArgument()
+            let output = Transcript.readable(await rawOutput(taskID: task.id), agent: task.agent)
             return output.isEmpty ? "Nothing yet." : String(output.suffix(8000))
         case "create":
             var agent: AgentKind?
@@ -231,6 +232,7 @@ extension AppModel {
             default: project.buildCommand = value
             }
         case "pushTaskBranches": project.pushTaskBranches = try flag()
+        case "takesScreenshots": project.takesScreenshots = try flag()
         case "opensPullRequests": project.opensPullRequests = try flag()
         case "permissions":
             throw Refusal("Only the user can change the project's permissions, in its settings: they limit what you can do.")

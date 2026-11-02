@@ -1811,6 +1811,94 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    /// A finished task with a pull request at state 1 in the given state; `contained`: nothing newer here.
+    func taskWithPullRequest(_ state: PullRequest.State, contained: Bool) async -> Int {
+        let id = await createCompletedTask()
+        git.contained = contained
+        git.openedPullRequests = ["shift/\(id)": PullRequest(number: 7, url: URL(string: "https://github.com/o/r/pull/7")!,
+                                                            state: state, headRefName: "shift/\(id)", headRefOid: "head")]
+        await model.refreshPullRequests(projectID: project.id)
+        return id
+    }
+
+    func testMergedPullRequestFinishesTheTask() async {
+        let id = await taskWithPullRequest(.merged, contained: true)
+        XCTAssertEqual(status(id), .merged)
+        XCTAssertNotNil(model.task(id)?.mergedAt)
+        XCTAssertNil(model.pullRequests[id])
+        XCTAssertTrue(git.calls.contains("remove shift/\(id)"))
+        XCTAssertTrue(git.calls.contains("fast-forward main"))
+    }
+
+    func testPullRequestMergedWithoutNewerWorkKeepsTheWork() async {
+        let id = await taskWithPullRequest(.merged, contained: false)
+        XCTAssertEqual(status(id), .completed)
+        XCTAssertEqual(model.pullRequests[id]?.hasNewWork, true)
+        XCTAssertFalse(git.calls.contains { $0.hasPrefix("remove") })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: model.task(id)!.worktreePath))
+    }
+
+    func testPullRequestMergedIsNotFinishedIfCommittingFails() async {
+        let id = await createCompletedTask()
+        git.commitError = GitError(message: "disk full")
+        git.openedPullRequests = ["shift/\(id)": PullRequest(number: 7, url: URL(string: "https://github.com/o/r/pull/7")!,
+                                                            state: .merged, headRefName: "shift/\(id)", headRefOid: "head")]
+        await model.refreshPullRequests(projectID: project.id)
+        XCTAssertEqual(status(id), .completed)
+        XCTAssertFalse(git.calls.contains { $0.hasPrefix("remove") })
+    }
+
+    func testPullRequestMergedWhileTheAgentWorksWaitsForIt() async {
+        let (id, gate) = await createPausedTask()
+        git.openedPullRequests = ["shift/\(id)": PullRequest(number: 7, url: URL(string: "https://github.com/o/r/pull/7")!,
+                                                            state: .merged, headRefName: "shift/\(id)", headRefOid: "head")]
+        await model.refreshPullRequests(projectID: project.id)
+        XCTAssertEqual(status(id), .working)
+        // Once finished, the known pull request is checked again: no new work here, so it is done.
+        gate.open()
+        await waitForStatus(id, .merged)
+    }
+
+    func testClosedPullRequestKeepsTheTask() async {
+        let id = await taskWithPullRequest(.closed, contained: true)
+        XCTAssertEqual(status(id), .completed)
+        XCTAssertEqual(model.pullRequests[id]?.state, .closed)
+        XCTAssertFalse(git.calls.contains { $0.hasPrefix("remove") })
+    }
+
+    func testPushingUpdatesAnOpenPullRequest() async {
+        let id = await taskWithPullRequest(.open, contained: false)
+        XCTAssertEqual(model.pullRequests[id]?.hasNewWork, true)
+        await model.pushBranch(taskID: id)
+        XCTAssertTrue(git.calls.contains("push shift/\(id) to origin"))
+        XCTAssertEqual(model.pullRequests[id]?.hasNewWork, false)
+    }
+
+    func testPullRequestHeadUpdatedOnGitHubIsFetchedBeforeJudging() async {
+        git.headNeedsFetch = true
+        let id = await taskWithPullRequest(.merged, contained: true)
+        XCTAssertTrue(git.calls.contains("fetch pull request 7"))
+        XCTAssertEqual(status(id), .merged)
+    }
+
+    func testUnknownPullRequestHeadCountsAsNewWork() async {
+        let id = await createCompletedTask()
+        git.fetchLeavesHeadMissing = true
+        git.headNeedsFetch = true
+        git.openedPullRequests = ["shift/\(id)": PullRequest(number: 7, url: URL(string: "https://github.com/o/r/pull/7")!,
+                                                            state: .merged, headRefName: "shift/\(id)", headRefOid: "head")]
+        await model.refreshPullRequests(projectID: project.id)
+        XCTAssertEqual(status(id), .completed)
+    }
+
+    func testPullRequestsStayKnownWhenGitHubCannotBeAsked() async {
+        let id = await taskWithPullRequest(.open, contained: true)
+        git.pullRequestError = GitError(message: "gh: command not found")
+        await model.refreshPullRequests(projectID: project.id)
+        XCTAssertEqual(model.pullRequests[id]?.number, 7)
+        XCTAssertNil(model.lastError)
+    }
+
     func testPullRequestURL() {
         func url(_ remote: String, title: String = "Fix A&B", body: String = "") -> String? {
             AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main", title: title, body: body)?.absoluteString
@@ -1885,6 +1973,7 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(request.permissions, .manual)
         XCTAssertEqual(request.worktree.path, project.repoPath)
         XCTAssertEqual(request.prompt, "Why?")
+        XCTAssertTrue(request.chatContext.contains("Open tasks"))
         XCTAssertEqual(request.model, "opus")
         XCTAssertFalse(request.needsDescription)
         XCTAssertNil(request.sessionID)
@@ -2290,6 +2379,10 @@ final class ChatControlTests: XCTestCase {
         var reply = await run("set", "pushTaskBranches", "true")
         XCTAssertTrue(reply.ok, reply.text)
         XCTAssertEqual(model.project(project.id)?.pushTaskBranches, true)
+
+        reply = await run("set", "takesScreenshots", "true")
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertEqual(model.project(project.id)?.takesScreenshots, true)
 
         reply = await run("set", "serverCommand", "pnpm", "dev")
         XCTAssertTrue(reply.ok, reply.text)
