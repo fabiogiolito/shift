@@ -7,4 +7,5 @@ xcuserdata/
 .claude/worktrees/
 dist/
 App/Info.plist
+iOS/Info.plist
 docs/

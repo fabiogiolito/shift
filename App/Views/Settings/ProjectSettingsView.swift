@@ -4,6 +4,7 @@ import ShiftCore
 struct ProjectSettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
     private let projectID: Project.ID
     @State private var draft: Project?
     @State private var branches: [String] = []
@@ -290,6 +291,16 @@ struct ProjectSettingsView: View {
 
             Section("Advanced") {
                 LabeledContent("Worktree location", value: "Managed automatically")
+            }
+
+            Section {
+                LabeledContent("Follow and steer tasks from your iPhone") {
+                    Button("Paired Devices…") { openWindow(id: PairedDevicesView.windowID) }
+                }
+            } footer: {
+                Text("For all of Shift, not just this project.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)

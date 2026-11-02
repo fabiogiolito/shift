@@ -3,8 +3,8 @@ import Foundation
 /// An agent's raw log as a person reads it: what it said, what it did, what failed.
 /// Reuses the adapters' own stream parsing, one line at a time. Lines that aren't the agent's JSON
 /// (setup commands, stderr) are kept as they are.
-enum Transcript {
-    static func readable(_ log: String, agent: AgentKind) -> String {
+package enum Transcript {
+    package static func readable(_ log: String, agent: AgentKind) -> String {
         // ponytail: earlier builds logged lines without a newline; `}{"` splits them, rarely also inside a string.
         let lines = log.replacingOccurrences(of: "}{\"", with: "}\n{\"").components(separatedBy: .newlines)
         var out: [String] = []
@@ -17,8 +17,8 @@ enum Transcript {
             if event["type"] as? String == RunMarker.type { continue }
             var state = TurnState()
             let activity = switch agent {
-            case .claudeCode: ClaudeCodeAdapter.parse(line: line, state: &state)
-            case .codex: CodexAdapter.parseAppServer(line, &state, prompt: "", resume: nil, cwd: "")
+            case .claudeCode: ClaudeStream.parse(line: line, state: &state)
+            case .codex: CodexStream.parseAppServer(line, &state, prompt: "", resume: nil, cwd: "")
             }
             if let text = state.finalMessage.map(withoutProtocol), !text.isEmpty, text != lastText {
                 out.append("\n\(text)\n")
@@ -43,7 +43,7 @@ enum Transcript {
     }
 
     /// Drops the SHIFT_… handoff lines, which Shift shows elsewhere. Agents sometimes wrap them in markdown.
-    static func withoutProtocol(_ text: String) -> String {
+    package static func withoutProtocol(_ text: String) -> String {
         text.components(separatedBy: .newlines)
             .filter { !$0.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "*_`"))).hasPrefix("SHIFT_") }
             .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -55,12 +55,12 @@ enum Transcript {
 /// The line Shift writes to an agent's log when prompts reach the agent, which is what ties prompts to
 /// what the agent did. The agents' `result` events can't: interrupted runs never emit one, and a prompt
 /// can arrive mid-run. Logs from before markers existed have none.
-enum RunMarker {
-    static let type = "shift_run"
+package enum RunMarker {
+    package static let type = "shift_run"
 
     /// `text`: Shift's own instructions, for a run no `Prompt` stands for ("Continue the task.").
     /// `note`: something to tell the user at this point in the conversation.
-    static func line(agent: AgentKind, promptIDs: [Prompt.ID], text: String? = nil, note: String? = nil) -> String {
+    package static func line(agent: AgentKind, promptIDs: [Prompt.ID], text: String? = nil, note: String? = nil) -> String {
         var marker: [String: Any] = ["type": type, "agent": agent.rawValue, "prompts": promptIDs.map(\.uuidString)]
         marker["text"] = text
         marker["note"] = note
@@ -87,7 +87,19 @@ public struct TranscriptStep: Identifiable, Hashable, Sendable {
     /// The failure, in one line. nil if it succeeded or is still running.
     public var failure: String?
     /// Where its output is in the log, in bytes.
-    var outputRange: Range<UInt64>?
+    package var outputRange: Range<UInt64>?
+
+    package init(id: String, kind: Kind, title: String, detail: String? = nil, preview: String = "", isTruncated: Bool = false,
+                 failure: String? = nil, outputRange: Range<UInt64>? = nil) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.detail = detail
+        self.preview = preview
+        self.isTruncated = isTruncated
+        self.failure = failure
+        self.outputRange = outputRange
+    }
 
     /// Say "Ran 6 commands, read 2 files" for these steps.
     public static func summary(_ steps: [TranscriptStep]) -> String {
@@ -157,10 +169,10 @@ public struct TranscriptTurn: Identifiable, Hashable, Sendable {
 }
 
 /// Turns a log into `TranscriptTurn`s, one chunk of bytes at a time. Holds on to no tool output beyond its previews.
-struct TranscriptParser {
-    static let previewLimit = 1_500
+public struct TranscriptParser: Sendable {
+    package static let previewLimit = 1_500
 
-    private(set) var turns: [TranscriptTurn] = []
+    public private(set) var turns: [TranscriptTurn] = []
     private var agent: AgentKind
     private var partial = Data()
     /// Where `partial` starts in the log.
@@ -175,10 +187,10 @@ struct TranscriptParser {
     /// Codex: the thread being read. Its subagents' threads report on the same stream.
     private var thread: String?
 
-    init(agent: AgentKind) { self.agent = agent }
+    public init(agent: AgentKind) { self.agent = agent }
 
     /// Takes the next bytes of the log. Returns true if any turn changed.
-    mutating func feed(_ data: Data) -> Bool {
+    public mutating func feed(_ data: Data) -> Bool {
         let before = turns
         partial.append(data)
         var start = partial.startIndex
@@ -314,7 +326,7 @@ struct TranscriptParser {
             }
         case "control_request", "result":
             var state = TurnState()
-            _ = ClaudeCodeAdapter.parse(line: line, state: &state)
+            _ = ClaudeStream.parse(line: line, state: &state)
             state.approvals.forEach { _ = append(.approval($0.summary)) }
             if let error = state.error { addError(error) }
             if event["type"] as? String == "result", !hasMarkers { endedTurn = true }
@@ -361,7 +373,7 @@ struct TranscriptParser {
 
     private mutating func codex(_ message: [String: Any], _ line: String, _ range: Range<UInt64>) {
         var state = TurnState()
-        _ = CodexAdapter.parseAppServer(line, &state, prompt: "", resume: nil, cwd: "")
+        _ = CodexStream.parseAppServer(line, &state, prompt: "", resume: nil, cwd: "")
         if let session = state.sessionID { thread = session }
         let params = message["params"] as? [String: Any] ?? [:]
         if let other = params["threadId"] as? String, let thread, other != thread { return }
@@ -395,7 +407,7 @@ struct TranscriptParser {
         guard let id = item["id"] as? String else { return nil }
         switch item["type"] as? String {
         case "commandExecution":
-            let command = CodexAdapter.unwrap(item["command"] as? String ?? "")
+            let command = CodexStream.unwrap(item["command"] as? String ?? "")
             let action = (item["commandActions"] as? [[String: Any]])?.first
             switch action?["type"] as? String {
             case "read":
@@ -422,13 +434,13 @@ struct TranscriptParser {
 extension Transcript {
     /// One line of the log as JSON lines: earlier builds logged lines without a newline; `}{"` splits them.
     // ponytail: rarely also inside a string; only lines that aren't valid JSON as they are get split.
-    static func pieces(of line: String) -> [String] {
+    package static func pieces(of line: String) -> [String] {
         guard line.contains("}{\""), jsonObject(line) == nil else { return [line] }
         return line.replacingOccurrences(of: "}{\"", with: "}\n{\"").components(separatedBy: "\n")
     }
 
     /// A step's whole output, from the line of the log its result is on.
-    static func output(ofStep id: String, line: String) -> String? {
+    package static func output(ofStep id: String, line: String) -> String? {
         for piece in pieces(of: line) {
             guard let event = jsonObject(piece) else { continue }
             let content = (event["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
@@ -463,44 +475,6 @@ extension Transcript {
             !$0.trimmingCharacters(in: .whitespaces).isEmpty && $0.range(of: #"^Exit code \d+$"#, options: .regularExpression) == nil
         }
         return OutcomeProtocol.short(line ?? "Failed", limit: 200)
-    }
-}
-
-/// Reads one agent log as a conversation, off the main thread. The first `update` parses the whole log;
-/// later ones only what was appended since.
-public actor TranscriptReader {
-    private static let chunk = 1_000_000
-
-    private let log: AgentLog
-    private let store: StateStoring
-    private var parser: TranscriptParser
-    private var offset: UInt64 = 0
-
-    init(log: AgentLog, store: StateStoring, agent: AgentKind) {
-        self.log = log
-        self.store = store
-        self.parser = TranscriptParser(agent: agent)
-    }
-
-    /// The turns so far, with nothing to show for turns that have nothing yet. nil if nothing changed.
-    public func update() async -> [TranscriptTurn]? {
-        var changed = false
-        while true {
-            let data = await store.logBytes(log, from: offset, length: Self.chunk)
-            if data.isEmpty { break }
-            offset += UInt64(data.count)
-            if parser.feed(data) { changed = true }
-            if data.count < Self.chunk { break }
-        }
-        return changed ? parser.turns : nil
-    }
-
-    /// A step's whole output, which only its preview is kept of.
-    public func fullOutput(of step: TranscriptStep) async -> String {
-        guard let range = step.outputRange else { return step.preview }
-        let data = await store.logBytes(log, from: range.lowerBound, length: Int(range.count))
-        return Transcript.output(ofStep: step.id, line: String(decoding: data, as: UTF8.self).trimmingCharacters(in: .newlines))?
-            .trimmingCharacters(in: .newlines) ?? step.preview
     }
 }
 

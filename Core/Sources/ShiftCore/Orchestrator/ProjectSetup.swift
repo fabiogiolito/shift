@@ -342,3 +342,26 @@ enum ProjectSetup {
         return tail.isEmpty ? headline : headline + "\n" + String(tail.suffix(400))
     }
 }
+
+extension Project {
+    /// The targets guessed from the files in the repo: see `ProjectSetup.targets`. Else, if there is an Xcode
+    /// project whose targets can't be read from here, a Debug `xcodebuild` of it (generated first when it comes
+    /// from XcodeGen) that prints the .app it built. Empty when there is nothing to guess.
+    /// ponytail: that last guess builds the project's default scheme, not a workspace; a CocoaPods app needs its own command.
+    public var defaultBuildTargets: [BuildTarget] {
+        let files = FileManager.default
+        let script = files.isExecutableFile(atPath: repoURL.appendingPathComponent(ProjectSetup.buildScript).path)
+        let yml = repoURL.appendingPathComponent("project.yml")
+        let hasYML = files.fileExists(atPath: yml.path)
+        let apps = ProjectSetup.applications(projectYML: (try? String(contentsOf: yml, encoding: .utf8)) ?? "")
+        let detected = ProjectSetup.targets(apps: apps, xcodeGen: hasYML, hasBuildScript: script)
+        guard detected.isEmpty else { return detected }
+        let xcodebuild = #"xcodebuild -configuration Debug SYMROOT="$PWD/build" -quiet && ls -d "$PWD"/build/Debug/*.app | head -1"#
+        if hasYML { return [BuildTarget(name: "App", command: "xcodegen -q && " + xcodebuild)] }
+        let entries = (try? files.contentsOfDirectory(atPath: repoPath)) ?? []
+        return entries.contains { $0.hasSuffix(".xcodeproj") } ? [BuildTarget(name: "App", command: xcodebuild)] : []
+    }
+
+    /// The command of the first target guessed from the repo. Empty when there is nothing to guess.
+    public var defaultBuildCommand: String { defaultBuildTargets.first?.command ?? "" }
+}

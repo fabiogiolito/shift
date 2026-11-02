@@ -177,30 +177,24 @@ final class ProjectSetupTests: XCTestCase {
         XCTAssertEqual(iOSOnly.first?.command, "scripts/build.sh")
     }
 
-    /// Shift's own repo: a build script, a Mac app, and a second application added to its real project.yml.
-    func testShiftsOwnRepoWithASecondApplicationIsTwoTargets() throws {
+    /// Shift's own repo: a build script, a Mac app and its iOS app, from its real project.yml.
+    func testShiftsOwnRepoIsTwoTargets() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let yml = try String(contentsOf: root.appendingPathComponent("project.yml"), encoding: .utf8)
-        XCTAssertEqual(ProjectSetup.applications(projectYML: yml), [.init(name: "Shift", kind: .macApp, paths: ["App/"])])
-
-        // Added under targets:, which is the file's last section.
-        let two = yml + """
-
-          Shift iOS:
-            type: application
-            platform: iOS
-            sources: [iOS]
-
-        """
         let hasScript = FileManager.default.isExecutableFile(atPath: root.appendingPathComponent("scripts/build.sh").path)
         XCTAssertTrue(hasScript)
-        let targets = ProjectSetup.suggest(rootFiles: ["project.yml"], projectYML: two, hasBuildScript: hasScript).targets
-        XCTAssertEqual(targets.map(\.name), ["Shift", "Shift iOS"])
+        let targets = ProjectSetup.suggest(rootFiles: ["project.yml"], projectYML: yml, hasBuildScript: hasScript).targets
+        XCTAssertEqual(targets.map(\.name), ["Shift", "ShiftMobile"])
         XCTAssertEqual(targets.map(\.kind), [.macApp, .iOSSimulator])
-        XCTAssertEqual(targets.map(\.paths), [["App/"], ["iOS/"]])
+        XCTAssertEqual(targets[0].paths, ["App/"])
         XCTAssertEqual(targets[0].command, "scripts/build.sh")
-        XCTAssertTrue(targets[1].command.contains("-scheme 'Shift iOS'"))
+        XCTAssertTrue(targets[1].command.contains("-scheme 'ShiftMobile'"))
+        // A change to a file both apps compile counts for each; a change to the iOS app's own, for it alone.
+        XCTAssertTrue(targets[1].matches(path: "App/Views/Shared/StatusIcon.swift"))
+        XCTAssertTrue(targets[1].matches(path: "iOS/RemoteModel.swift"))
+        XCTAssertFalse(targets[1].matches(path: "App/ShiftApp.swift"))
+        XCTAssertEqual(BuildTarget.suggested(among: targets, changed: ["iOS/RemoteModel.swift"], lastBuilt: nil)?.name, "ShiftMobile")
     }
 
     func testReadsSchemesFromXcodebuild() {

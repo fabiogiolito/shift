@@ -15,7 +15,8 @@ extension AppModel {
             tailscale: Tailscale(),
             screenshots: WebScreenshotter(),
             control: ControlServer(),
-            simulators: Simulators()
+            simulators: Simulators(),
+            remote: RemoteListener()
         ))
     }
 }

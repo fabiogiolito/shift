@@ -85,84 +85,11 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         return (jsonLine(response), !allow && message != nil)
     }
 
-    static func approvalSummary(_ request: [String: Any]) -> String {
-        let tool = request["tool_name"] as? String ?? "a tool"
-        let input = request["input"] as? [String: Any] ?? [:]
-        let description = request["description"] as? String
-        switch tool {
-        case "Bash":
-            return ShiftCore.approvalSummary("Run", input["command"] as? String ?? description ?? "a command")
-        case "Edit", "MultiEdit", "Write", "NotebookEdit":
-            let path = description ?? fileName(input["file_path"] as? String ?? input["notebook_path"] as? String) ?? "a file"
-            return ShiftCore.approvalSummary("Edit", path)
-        case "WebFetch":
-            return "Fetch \(OutcomeProtocol.short(input["url"] as? String ?? description ?? "a web page", limit: 80))"
-        case "WebSearch":
-            return "Search the web for “\(OutcomeProtocol.short(input["query"] as? String ?? "", limit: 60))”"
-        default:
-            return "Use \(request["display_name"] as? String ?? tool)"
-        }
-    }
-
     // MARK: Stream parsing
 
-    @Sendable static func parse(line: String, state: inout TurnState) -> String? {
-        guard let event = jsonObject(line) else { return nil }
-        if let id = event["session_id"] as? String, !id.isEmpty { state.sessionID = id }
-
-        switch event["type"] as? String {
-        case "assistant":
-            let content = (event["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
-            var activity: String?
-            for block in content {
-                if block["type"] as? String == "text", let text = block["text"] as? String,
-                   event["parent_tool_use_id"] is NSNull || event["parent_tool_use_id"] == nil {
-                    state.finalMessage = text
-                } else if block["type"] as? String == "tool_use", let name = block["name"] as? String {
-                    activity = Self.activity(tool: name, input: block["input"] as? [String: Any] ?? [:]) ?? activity
-                }
-            }
-            return activity
-        case "control_request":
-            let request = event["request"] as? [String: Any] ?? [:]
-            if let id = event["request_id"] as? String, request["subtype"] as? String == "can_use_tool" {
-                state.approvals.append(.init(id: id, summary: approvalSummary(request)))
-            }
-            return nil
-        case "result":
-            // The turn is over. Claude Code exits once its stdin closes, after answering whatever
-            // follow-up was already written to it (another turn, whose result then counts).
-            state.closeInput = true
-            if let result = event["result"] as? String, !result.isEmpty { state.finalMessage = result }
-            state.cliFailed = event["is_error"] as? Bool == true
-            state.error = nil
-            if state.cliFailed {
-                state.error = (event["errors"] as? [String])?.first ?? event["result"] as? String
-                    ?? "Claude Code reported an error (\(event["subtype"] as? String ?? "unknown"))."
-            }
-            return nil
-        default:
-            return nil
-        }
-    }
-
-    static func activity(tool: String, input: [String: Any]) -> String? {
-        switch tool {
-        case "Edit", "Write", "NotebookEdit":
-            return "Editing \(fileName(input["file_path"] as? String ?? input["notebook_path"] as? String) ?? "files")"
-        case "Read":
-            return "Reading \(fileName(input["file_path"] as? String) ?? "files")"
-        case "Bash":
-            let text = input["description"] as? String ?? (input["command"] as? String).map { "Running \($0)" }
-            return text.map { OutcomeProtocol.short($0.components(separatedBy: .newlines)[0], limit: 80) }
-        case "Grep", "Glob":
-            return "Searching the code…"
-        case "WebFetch", "WebSearch":
-            return "Searching the web…"
-        default:
-            return nil
-        }
-    }
+    @Sendable static func parse(line: String, state: inout TurnState) -> String? { ClaudeStream.parse(line: line, state: &state) }
+    static func approvalSummary(_ request: [String: Any]) -> String { ClaudeStream.approvalSummary(request) }
+    static func activity(tool: String, input: [String: Any]) -> String? { ClaudeStream.activity(tool: tool, input: input) }
 }
 
 // MARK: - Usage

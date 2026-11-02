@@ -104,108 +104,9 @@ public struct CodexAdapter: AgentAdapter {
 
     static let initialize = jsonLine(["id": 1, "method": "initialize", "params": ["clientInfo": ["name": "shift", "version": "1"]]])
 
-    /// Drives the app server through one turn: initialize (1) → start or resume the thread (2) →
-    /// start the turn (3) → events, approval requests and steers → `turn/completed`, then stdin closes.
-    /// A follow-up that missed the turn starts one more turn before that.
     static func parseAppServer(_ line: String, _ state: inout TurnState, prompt: String, resume: String?, cwd: String,
                                manual: Bool = true) -> String? {
-        guard let message = jsonObject(line) else { return nil }
-        let params = message["params"] as? [String: Any] ?? [:]
-        let item = params["item"] as? [String: Any] ?? [:]
-
-        guard let method = message["method"] as? String else {
-            // A response to one of our requests.
-            if let id = message["id"] as? Int, let text = state.steers.removeValue(forKey: id) {
-                // The turn had ended: the follow-up goes into the next one.
-                if message["error"] != nil { state.unsteered.append(text) }
-                if state.turnID == nil { endTurn(&state) }
-            } else if let error = message["error"] as? [String: Any] {
-                state.cliFailed = true
-                state.error = readable(error["message"] as? String) ?? "Codex refused the request."
-                state.closeInput = true
-            } else if message["id"] as? Int == 1 {
-                state.outgoing = [jsonLine(["method": "initialized"]), jsonLine(resume.map {
-                    ["id": 2, "method": "thread/resume", "params": ["threadId": $0, "cwd": cwd]]
-                } ?? ["id": 2, "method": "thread/start", "params": ["cwd": cwd]])]
-            } else if message["id"] as? Int == 2,
-                      let thread = ((message["result"] as? [String: Any])?["thread"] as? [String: Any])?["id"] as? String {
-                state.sessionID = thread
-                state.outgoing = [jsonLine(["id": 3, "method": "turn/start", "params": [
-                    "threadId": thread, "input": [["type": "text", "text": prompt]]]])]
-            }
-            return nil
-        }
-
-        if let id = message["id"] {
-            // A request from the server.
-            let isApproval = method == "item/commandExecution/requestApproval" || method == "item/fileChange/requestApproval"
-            if isApproval && !manual {
-                // Nobody is asked outside Manual: whatever would still prompt is denied.
-                state.outgoing = [jsonLine(["id": id, "result": ["decision": "decline"]])]
-                return nil
-            }
-            switch method {
-            case "item/commandExecution/requestApproval":
-                state.approvals.append(.init(id: "\(id)", summary: approvalSummary("Run", unwrap(params["command"] as? String ?? "a command"))))
-            case "item/fileChange/requestApproval":
-                let path = (params["itemId"] as? String).flatMap { state.files[$0] }
-                let relative = path.map { $0.hasPrefix(cwd + "/") ? String($0.dropFirst(cwd.count + 1)) : fileName($0) ?? $0 }
-                state.approvals.append(.init(id: "\(id)", summary: relative.map { approvalSummary("Edit", $0) } ?? "Edit files"))
-            default:
-                // Nothing else can be answered from here (questions, MCP forms); refuse rather than hang.
-                state.outgoing = [jsonLine(["id": id, "error": ["code": -32601, "message": "Not supported by Shift."]])]
-            }
-            return nil
-        }
-
-        switch method {
-        case "item/started":
-            switch item["type"] as? String {
-            case "commandExecution":
-                guard let command = item["command"] as? String else { return nil }
-                return OutcomeProtocol.short("Running \(unwrap(command))".components(separatedBy: .newlines)[0], limit: 80)
-            case "fileChange":
-                let path = (item["changes"] as? [[String: Any]])?.first?["path"] as? String
-                if let id = item["id"] as? String, let path { state.files[id] = path }
-                return "Editing \(fileName(path) ?? "files")"
-            case "webSearch":
-                return "Searching the web…"
-            default:
-                return nil
-            }
-        case "item/completed":
-            if item["type"] as? String == "agentMessage", let text = item["text"] as? String { state.finalMessage = text }
-        case "error":
-            state.error = readable((params["error"] as? [String: Any])?["message"] as? String) ?? state.error
-        case "turn/started":
-            state.turnID = (params["turn"] as? [String: Any])?["id"] as? String
-        case "turn/completed":
-            let turn = params["turn"] as? [String: Any] ?? [:]
-            state.turnID = nil
-            state.cliFailed = turn["status"] as? String == "failed"
-            if state.cliFailed {
-                state.error = readable((turn["error"] as? [String: Any])?["message"] as? String) ?? state.error
-            }
-            endTurn(&state)
-        default:
-            break
-        }
-        return nil
-    }
-
-    /// After a turn: once no steer is waiting for its response, either start a turn with the follow-ups
-    /// that missed the last one, or close stdin so the server exits.
-    static func endTurn(_ state: inout TurnState) {
-        guard state.steers.isEmpty else { return }
-        guard !state.unsteered.isEmpty, !state.cliFailed, let thread = state.sessionID else {
-            state.closeInput = true
-            return
-        }
-        let text = state.unsteered.joined(separator: "\n\n")
-        state.unsteered = []
-        state.outgoing.append(jsonLine(["id": state.nextRequestID, "method": "turn/start", "params": [
-            "threadId": thread, "input": [["type": "text", "text": text]]]]))
-        state.nextRequestID += 1
+        CodexStream.parseAppServer(line, &state, prompt: prompt, resume: resume, cwd: cwd, manual: manual)
     }
 
     /// A follow-up steers the turn in progress. nil when there is none (not started yet, or over).
@@ -224,22 +125,8 @@ public struct CodexAdapter: AgentAdapter {
         return (jsonLine(["id": id, "result": ["decision": allow ? "accept" : "decline"]]), false)
     }
 
-    /// `/bin/zsh -lc 'npm test'` → `npm test`
-    static func unwrap(_ command: String) -> String {
-        guard let range = command.range(of: #"^\S*sh -l?c "#, options: .regularExpression) else { return command }
-        var inner = String(command[range.upperBound...])
-        if inner.count >= 2, let quote = inner.first, quote == "'" || quote == "\"", inner.last == quote {
-            inner = String(inner.dropFirst().dropLast())
-        }
-        return inner
-    }
-
-    /// Codex wraps API errors as a JSON string; dig out the human message.
-    static func readable(_ message: String?) -> String? {
-        guard let message else { return nil }
-        guard let object = jsonObject(message) else { return message }
-        return (object["error"] as? [String: Any])?["message"] as? String ?? object["message"] as? String ?? message
-    }
+    static func unwrap(_ command: String) -> String { CodexStream.unwrap(command) }
+    static func readable(_ message: String?) -> String? { CodexStream.readable(message) }
 }
 
 // MARK: - Usage

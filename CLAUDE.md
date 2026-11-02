@@ -2,14 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Shift is a native macOS app (SwiftUI) that runs coding tasks in parallel using installed coding agents (Claude Code, Codex). One task = one Git worktree + branch + agent session + dev server. Product brief: `docs/BRIEF.md`. Architecture and rules: `docs/ARCHITECTURE.md`. Per-feature specs: `docs/specs/`. `docs/` is local only (gitignored, not in the public repo); it may be missing in a fresh clone.
+Shift is a native macOS app (SwiftUI) that runs coding tasks in parallel using installed coding agents (Claude Code, Codex). One task = one Git worktree + branch + agent session + dev server. An iOS companion app follows and steers tasks from a phone; all the work stays on the Mac. Product brief: `docs/BRIEF.md`. Architecture and rules: `docs/ARCHITECTURE.md`. Per-feature specs: `docs/specs/`. `docs/` is local only (gitignored, not in the public repo); it may be missing in a fresh clone.
 
 ## Commands
 
 ```sh
 cd Core && swift test                          # all core tests
 cd Core && swift test --filter GitServiceTests # one test class
-scripts/build.sh                               # generates Shift.xcodeproj (xcodegen) and builds; prints the .app path
+scripts/build.sh                               # generates Shift.xcodeproj (xcodegen) and builds; prints the Mac .app path, last
+                                               # if iOS/ or Core/ changed against main, also builds the iOS app and launches it in the booted simulator (not when run as the `Shift` build target: `ShiftMobile` has its own)
+scripts/build.sh --ios                         # the same, whatever changed
 open build/Build/Products/Debug/Shift.app
 scripts/build.sh --release build-release       # Release build (the only one that checks for updates)
 scripts/release.sh --publish                   # on main, clean tree: next patch version, AI-written notes, build, sign, notarize, publish
@@ -18,10 +20,13 @@ scripts/release.sh 0.2.0 notes.md              # explicit version and notes; wit
 
 Releasing, signing and the Sparkle key: `docs/RELEASING.md`.
 
-`Shift.xcodeproj` is generated from `project.yml` and is not checked in. New files under `App/` are picked up on the next `scripts/build.sh`.
+`Shift.xcodeproj` is generated from `project.yml` and is not checked in. New files under `App/` and `iOS/` are picked up on the next `scripts/build.sh`. To run on a real iPhone, open the project, set a team on the `ShiftMobile` target and run it from Xcode (regenerating the project clears the team).
+
+A simulator build talks to its own Mac build, with no pairing: `scripts/build.sh` launches it with `SIMCTL_CHILD_SHIFT_SERVER=http://127.0.0.1:<port>?token=<token>`, read in Debug builds as `SHIFT_SERVER`. An iOS Simulator build target gets the same variable from `AppModel`. The port and token are the files `remote-port` and `remote-dev-token` in that Mac build's `SHIFT_HOME`. The token only works straight over loopback.
 
 ## Layout
 
-- `Core/` — Swift package `ShiftCore`: models, service contracts, services, orchestrator. No SwiftUI.
-- `App/` — SwiftUI app target. Talks only to `AppModel`.
+- `Core/` — shared Swift package, no SwiftUI. Target `ShiftProtocol` builds for macOS and iOS: models, plain data, transcript parser, wire messages (`Wire.swift`); no Process or AppKit. Target `ShiftCore`, Mac only and re-exporting it: service contracts, services, orchestrator, `Remote/` (the server phones connect to, which only uses `AppModel`).
+- `App/` — macOS SwiftUI app, target `Shift`. Talks only to `AppModel`.
+- `iOS/` — iOS SwiftUI app, target `ShiftMobile`. Imports only `ShiftProtocol`, and talks only to `RemoteModel`. Also compiles `StatusIcon` and `MarkdownText` from `App/Views/Shared/`.
 - `Core/Sources/ShiftCore/Models/Services.swift` — the contracts between orchestrator and machinery. Read this first.

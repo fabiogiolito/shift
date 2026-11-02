@@ -21,8 +21,8 @@ public struct AgentModel: Hashable, Identifiable, Sendable {
 }
 
 /// How much of the user's agent subscription is used, per limit window (5 hours, a week…).
-public struct AgentUsage: Equatable, Sendable {
-    public struct Window: Equatable, Sendable {
+public struct AgentUsage: Codable, Equatable, Sendable {
+    public struct Window: Codable, Equatable, Sendable {
         /// "5-hour", "Weekly".
         public var name: String
         public var usedPercent: Double
@@ -185,22 +185,24 @@ public struct BuildTarget: Codable, Identifiable, Hashable, Sendable {
     }
 
     /// A native app with no command of its own: what to build is guessed from the task's files when it builds.
-    static let detected = BuildTarget(id: UUID(uuidString: "5B1F7A52-0000-4000-8000-000000000000")!, name: "App", command: "")
+    package static let detected = BuildTarget(id: UUID(uuidString: "5B1F7A52-0000-4000-8000-000000000000")!, name: "App", command: "")
 
-    var hasCommand: Bool { !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    package var hasCommand: Bool { !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// Whether `path`, relative to the repo, is covered by `paths`.
-    func matches(path: String) -> Bool {
+    package func matches(path: String) -> Bool {
         paths.contains { raw in
-            let prefix = raw.trimmingCharacters(in: .whitespaces)
+            // With or without its slash: project.yml's sources can be single files too.
+            var prefix = raw.trimmingCharacters(in: .whitespaces)
+            if prefix.hasSuffix("/") { prefix.removeLast() }
             guard !prefix.isEmpty else { return false }
-            return prefix.hasSuffix("/") ? path.hasPrefix(prefix) : path == prefix || path.hasPrefix(prefix + "/")
+            return path == prefix || path.hasPrefix(prefix + "/")
         }
     }
 
     /// The target whose paths match the most of `changed` (the first of them on a tie), else the last one
     /// built, else the first.
-    static func suggested(among targets: [BuildTarget], changed: [String], lastBuilt: BuildTarget.ID?) -> BuildTarget? {
+    package static func suggested(among targets: [BuildTarget], changed: [String], lastBuilt: BuildTarget.ID?) -> BuildTarget? {
         var best: (target: BuildTarget, matches: Int)?
         for target in targets {
             let matches = changed.filter(target.matches(path:)).count
@@ -316,27 +318,6 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
             }
         }
     }
-
-    /// The targets guessed from the files in the repo: see `ProjectSetup.targets`. Else, if there is an Xcode
-    /// project whose targets can't be read from here, a Debug `xcodebuild` of it (generated first when it comes
-    /// from XcodeGen) that prints the .app it built. Empty when there is nothing to guess.
-    /// ponytail: that last guess builds the project's default scheme, not a workspace; a CocoaPods app needs its own command.
-    public var defaultBuildTargets: [BuildTarget] {
-        let files = FileManager.default
-        let script = files.isExecutableFile(atPath: repoURL.appendingPathComponent(ProjectSetup.buildScript).path)
-        let yml = repoURL.appendingPathComponent("project.yml")
-        let hasYML = files.fileExists(atPath: yml.path)
-        let apps = ProjectSetup.applications(projectYML: (try? String(contentsOf: yml, encoding: .utf8)) ?? "")
-        let detected = ProjectSetup.targets(apps: apps, xcodeGen: hasYML, hasBuildScript: script)
-        guard detected.isEmpty else { return detected }
-        let xcodebuild = #"xcodebuild -configuration Debug SYMROOT="$PWD/build" -quiet && ls -d "$PWD"/build/Debug/*.app | head -1"#
-        if hasYML { return [BuildTarget(name: "App", command: "xcodegen -q && " + xcodebuild)] }
-        let entries = (try? files.contentsOfDirectory(atPath: repoPath)) ?? []
-        return entries.contains { $0.hasSuffix(".xcodeproj") } ? [BuildTarget(name: "App", command: xcodebuild)] : []
-    }
-
-    /// The command of the first target guessed from the repo. Empty when there is nothing to guess.
-    public var defaultBuildCommand: String { defaultBuildTargets.first?.command ?? "" }
 }
 
 public struct Prompt: Codable, Identifiable, Hashable, Sendable {
@@ -474,7 +455,7 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
 
     public static let interruptedReason = "Interrupted when Shift quit."
     /// Saved by earlier builds; still resumable.
-    static let legacyInterruptedReason = "Interrupted when Shift quit. Send a prompt to continue."
+    package static let legacyInterruptedReason = "Interrupted when Shift quit. Send a prompt to continue."
     public static let stoppedReason = "Stopped"
 
     /// Blocked because it was stopped or interrupted, so `AppModel.resume(taskID:)` can carry on.
@@ -491,15 +472,34 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     }
 
     /// What a task is called until the agent or the user names it.
-    static func localTitle(id: Int, prompt: String, attachments: [String]) -> String {
-        let title = AppModel.title(for: prompt.isEmpty ? attachments.first.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "" : prompt)
+    package static func localTitle(id: Int, prompt: String, attachments: [String]) -> String {
+        let title = Self.title(for: prompt.isEmpty ? attachments.first.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "" : prompt)
         return title.isEmpty ? "Task \(id)" : title
     }
 
     /// Nobody has named it yet, so the agent still may.
-    var hasLocalTitle: Bool {
+    package var hasLocalTitle: Bool {
         guard let first = prompts.first else { return false }
         return title == Self.localTitle(id: id, prompt: first.text, attachments: first.attachments)
+    }
+
+    /// The title until the agent or the user gives one (see `hasLocalTitle`), and the fallback if neither does.
+    package static func title(for prompt: String) -> String {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        var sentence = ""
+        for (index, character) in zip(text.indices, text) {
+            if character.isNewline { break }
+            if ".!?".contains(character) {
+                let next = text.index(after: index)
+                if next == text.endIndex || text[next].isWhitespace { break }
+            }
+            sentence.append(character)
+        }
+        if sentence.count > 50 {
+            let cut = sentence.prefix(50)
+            sentence = String(cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut)
+        }
+        return sentence.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     }
 
     /// The branch this task merges into: its own, else (state from before tasks had one) the project's.
