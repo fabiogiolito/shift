@@ -513,8 +513,8 @@ public enum MarkdownBlock: Hashable, Sendable {
     /// `marker`: "•" or "1."
     case listItem(level: Int, marker: String, String)
     case code(String)
-    /// Shown as is, in a fixed-width font.
-    case table(String)
+    /// `rows` all have as many cells as `header`.
+    case table(header: [String], rows: [[String]])
     case quote(String)
     case rule
 
@@ -537,20 +537,23 @@ public enum MarkdownBlock: Hashable, Sendable {
                 blocks.append(.code(code.joined(separator: "\n")))
             } else if trimmed.isEmpty {
                 flush()
+            } else if trimmed.contains("|"), let next = lines.first, isTableDelimiter(next, columns: tableCells(trimmed).count) {
+                flush()
+                lines.removeFirst()
+                let header = tableCells(trimmed)
+                var rows: [[String]] = []
+                while let row = lines.first, row.contains("|") {
+                    let cells = tableCells(row)
+                    rows.append(Array((cells + Array(repeating: "", count: header.count)).prefix(header.count)))
+                    lines.removeFirst()
+                }
+                blocks.append(.table(header: header, rows: rows))
             } else if let match = trimmed.wholeMatch(of: #/(#{1,6})\s+(.*?)\s*#*/#) {
                 flush()
                 blocks.append(.heading(level: match.1.count, String(match.2)))
             } else if trimmed.wholeMatch(of: #/(-{3,}|\*{3,}|_{3,})/#) != nil {
                 flush()
                 blocks.append(.rule)
-            } else if trimmed.hasPrefix("|") {
-                flush()
-                var rows = [trimmed]
-                while let next = lines.first?.trimmingCharacters(in: .whitespaces), next.hasPrefix("|") {
-                    rows.append(next)
-                    lines.removeFirst()
-                }
-                blocks.append(.table(rows.joined(separator: "\n")))
             } else if trimmed.hasPrefix(">") {
                 flush()
                 var quote = [trimmed]
@@ -576,5 +579,21 @@ public enum MarkdownBlock: Hashable, Sendable {
         }
         flush()
         return blocks
+    }
+
+    /// A table row's cells. The outer pipes are optional, and `\\|` is a pipe inside a cell.
+    private static func tableCells(_ row: String) -> [String] {
+        var row = row.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\\|", with: "\0")
+        if row.hasPrefix("|") { row.removeFirst() }
+        if row.hasSuffix("|") { row.removeLast() }
+        return row.split(separator: "|", omittingEmptySubsequences: false).map {
+            $0.replacingOccurrences(of: "\0", with: "|").trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    /// The `|---|:--|` line that makes the line above it a table header.
+    private static func isTableDelimiter(_ line: String, columns: Int) -> Bool {
+        let cells = tableCells(line)
+        return line.contains("|") && cells.count == columns && cells.allSatisfy { $0.wholeMatch(of: #/:?-+:?/#) != nil }
     }
 }

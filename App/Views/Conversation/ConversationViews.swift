@@ -143,7 +143,7 @@ private extension TranscriptStep {
     }
 }
 
-/// An agent's message as formatted text: paragraphs, lists, inline styles and code blocks. Tables stay plain text.
+/// An agent's message as formatted text: paragraphs, lists, tables, inline styles and code blocks.
 struct MarkdownText: View {
     let text: String
 
@@ -168,7 +168,23 @@ struct MarkdownText: View {
                 inline(text)
             }
             .padding(.leading, CGFloat(level) * 8)
-        case .code(let text), .table(let text):
+        case .table(let header, let rows):
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
+                GridRow {
+                    ForEach(Array(header.enumerated()), id: \.offset) { inline($0.element).fontWeight(.semibold) }
+                }
+                ForEach(Array(rows.enumerated()), id: \.offset) { row in
+                    Divider()
+                    GridRow {
+                        ForEach(Array(row.element.enumerated()), id: \.offset) { inline($0.element) }
+                    }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true) // Otherwise long cells truncate instead of wrapping.
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quinary, in: .rect(cornerRadius: 8))
+        case .code(let text):
             ScrollView(.horizontal) {
                 Text(text).font(.callout.monospaced()).padding(10)
             }

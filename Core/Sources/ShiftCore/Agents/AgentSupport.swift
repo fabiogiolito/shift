@@ -14,9 +14,10 @@ enum OutcomeProtocol {
 
     /// Appended to every prompt (Codex) or to the system prompt (Claude Code).
     /// `firstTurn`: the task has no title or description of its own yet (new, or created before agents wrote them).
+    /// `description`: the one it has, for the agent to build on; a new session has no memory of writing it.
     /// `screenshots`: Shift takes screenshots of the task's server, of the page the agent names.
-    static func instructions(firstTurn: Bool, screenshots: Bool = false) -> String {
-        outcome + "\n\n" + (firstTurn ? describeFirst : describeAgain) + "\n\n" + describeRules
+    static func instructions(firstTurn: Bool, description: String? = nil, screenshots: Bool = false) -> String {
+        outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
             + (screenshots ? "\n\n" + namePage : "")
     }
 
@@ -42,15 +43,22 @@ enum OutcomeProtocol {
     SHIFT_DESCRIPTION: <description>
     """
 
-    static let describeAgain = """
-    This task already has a title and a description. Only if this message changes what the task as a whole \
-    is meant to accomplish, start your first message with these two lines, each on a line of its own; otherwise \
-    do not write them at all. They replace the old ones, so cover the work across every message in this \
-    conversation, not only this one:
+    static func describeAgain(_ description: String?) -> String {
+        let current = description.map { "Its description so far: \"\($0)\"\n\n" } ?? ""
+        return current + """
+        This task already has a title, so never write a new one. Only if this message changes or adds to what the \
+        task does, start your first message with this line, on a line of its own; otherwise, such as for a question \
+        or a fix to the same work, do not write it at all:
 
-    SHIFT_TITLE: <title>
-    SHIFT_DESCRIPTION: <description>
-    """
+        SHIFT_DESCRIPTION: <description>
+
+        It replaces the old description, so it must cover the whole task: what is different compared with where the \
+        task started, for someone who wants to know what the task is about. Keep what still holds, add what is new, \
+        and drop what was undone or replaced: a button changed from blue to green to red is simply a red button. \
+        Generalize instead of listing every change, and do not describe files or steps. Plain sentences on that one \
+        line, under about 500 characters.
+        """
+    }
 
     static let describeRules = """
     The title says what the task will accomplish, written like a changelog entry: at most about six \
@@ -137,7 +145,7 @@ enum OutcomeProtocol {
             let value = line.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "*_`")))
             return value.isEmpty ? nil : short(value, limit: limit)
         }
-        return (value(titleMarker, limit: 80), value(descriptionMarker, limit: 400))
+        return (value(titleMarker, limit: 80), value(descriptionMarker, limit: 600))
     }
 
     /// The page named in `message`, as `.screenshotPage`. The last one if there are several, nil if there are none.

@@ -13,6 +13,7 @@ struct TaskDetailView: View {
     /// The file the diff opens at, when opened from a row of the changed files.
     @State private var diffPath: String?
     @State private var confirmingDelete = false
+    @State private var renaming = false
     /// The base picked in the merge dropdown, waiting for confirmation.
     @State private var newBase: String?
     @State private var branches: [String] = []
@@ -63,6 +64,13 @@ struct TaskDetailView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             header(task, project)
+                            if task.status == .working {
+                                HStack(spacing: 8) {
+                                    ProgressView().controlSize(.small)
+                                    Text(task.activity ?? (task.isResolvingConflict ? "Resolving conflict…" : "Working…"))
+                                }
+                                .foregroundStyle(.secondary)
+                            }
                             screenshotsRow(task)
                             if task.status == .completed { changesSection }
                             if !task.prompts.isEmpty { promptList(task) }
@@ -87,6 +95,14 @@ struct TaskDetailView: View {
                 }
             }
             .toolbar { toolbar(task, project) }
+            // The latest prompt the agent has opens in place of the one before it; any others opened by hand stay.
+            // A queued prompt waits for delivery, so the work in progress stays visible until then.
+            .onChange(of: task.prompts.last { !$0.isPending }?.id, initial: true) { old, new in
+                withAnimation(reduceMotion || old == new ? nil : .snappy(duration: 0.2)) {
+                    if let old, old != new { openPrompts.remove(old) }
+                    if let new { openPrompts.insert(new) }
+                }
+            }
             .sheet(item: $output) { output in
                 OutputSheet(title: output.rawValue, hasRaw: output == .agentOutput) { raw in
                     switch output {
@@ -107,6 +123,7 @@ struct TaskDetailView: View {
             }
             .task(id: task.status) { changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil }
             .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
+            .renameTaskAlert(task, isPresented: $renaming)
             .confirmationDialog("Delete “\(task.title)”?", isPresented: $confirmingDelete) {
                 Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: taskID) } }
             } message: {
@@ -166,12 +183,13 @@ struct TaskDetailView: View {
             NSPasteboard.general.setString(task.branch, forType: .string)
             branchCopied = true
         } label: {
-            Label(task.branch, systemImage: "arrow.triangle.branch")
-                .labelStyle(.titleAndIcon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            // Not a Label: its icon column can't be tightened.
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.triangle.branch").imageScale(.small)
+                Text(task.branch).lineLimit(1).truncationMode(.middle)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         .buttonStyle(.accessoryBar)
         .help("This task's branch. Click to copy it.")
@@ -186,7 +204,7 @@ struct TaskDetailView: View {
     }
 
     /// The same structure for every status, directly on the window background: the task's own text,
-    /// a status line, the action row, then what the agent is doing. What the task needs from the user is in the bottom bar.
+    /// a status line, then the action row. What the task needs from the user is in the bottom bar.
     private func header(_ task: TaskItem, _ project: Project) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             if let headline = headline(task) {
@@ -194,13 +212,6 @@ struct TaskDetailView: View {
             }
             statusLine(task, project)
             actions(task, project)
-            if task.status == .working {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(task.activity ?? (task.isResolvingConflict ? "Resolving conflict…" : "Working…"))
-                }
-                .foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -223,7 +234,7 @@ struct TaskDetailView: View {
         }
     }
 
-    /// The status's main action first, then the server button (the Build button for an app) and the branch. Hidden when there is neither.
+    /// The status's main action first, then the server button (the Build button for an app). Hidden when there is neither.
     /// Every task with a port has a preview server, whether or not the project has a server command.
     @ViewBuilder private func actions(_ task: TaskItem, _ project: Project) -> some View {
         let hasPrimary = task.status == .completed || task.status == .conflict || task.status == .working || task.approvalRequest != nil
@@ -261,17 +272,6 @@ struct TaskDetailView: View {
                             .buttonStyle(.glass).controlSize(.small)
                         }
                     }
-                    Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(task.branch, forType: .string)
-                    } label: {
-                        Label(task.branch, systemImage: "arrow.triangle.branch")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("The branch this server runs. Click to copy.")
                 }
                 Spacer()
             }
@@ -383,19 +383,13 @@ struct TaskDetailView: View {
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         if task.status == .completed {
-            SplitButton(prominent: true) {
-                isMerging = true
-                Task { await model.merge(taskID: taskID); isMerging = false }
-            } label: {
-                Text("Merge into \(task.base(in: project))")
+            // Without a remote there is nowhere to open a pull request: merging stays the main action.
+            let opensPR = project.opensPullRequests && model.pushStates[project.id]?.remote != nil
+            let mergeTitle = "Merge into \(task.base(in: project))"
+            SplitButton(prominent: true, action: opensPR ? openPullRequest : merge) {
+                Text(opensPR ? "Open Pull Request" : mergeTitle)
             } menu: {
-                Button("Open Pull Request") {
-                    isMerging = true
-                    Task {
-                        if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
-                        isMerging = false
-                    }
-                }
+                Button(opensPR ? mergeTitle : "Open Pull Request", action: opensPR ? merge : openPullRequest)
                 Divider()
                 branchItems(task, project)
             }
@@ -412,6 +406,19 @@ struct TaskDetailView: View {
                 Label("Stop Task", systemImage: "stop.fill")
             }
             .buttonStyle(.glass)
+        }
+    }
+
+    private func merge() {
+        isMerging = true
+        Task { await model.merge(taskID: taskID); isMerging = false }
+    }
+
+    private func openPullRequest() {
+        isMerging = true
+        Task {
+            if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
+            isMerging = false
         }
     }
 
@@ -629,6 +636,7 @@ struct TaskDetailView: View {
                 }
                 Divider()
             }
+            Button("Rename Task…") { renaming = true }
             Button("Delete Task…", role: .destructive) { confirmingDelete = true }
         } label: {
             Label("More", systemImage: "ellipsis.circle")

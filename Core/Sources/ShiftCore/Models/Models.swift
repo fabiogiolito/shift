@@ -159,11 +159,13 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var pushTaskBranches: Bool
     /// Keep screenshots of what each prompt changes. Not for apps: they have no page to load.
     public var takesScreenshots: Bool
+    /// A finished task's main button opens a pull request, and merging moves to its dropdown.
+    public var opensPullRequests: Bool
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
-                pushTaskBranches: Bool = false, takesScreenshots: Bool = false) {
+                pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -177,6 +179,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.models = models
         self.pushTaskBranches = pushTaskBranches
         self.takesScreenshots = takesScreenshots
+        self.opensPullRequests = opensPullRequests
     }
 
     public init(from decoder: Decoder) throws {
@@ -194,6 +197,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         models = try values.decodeIfPresent([AgentKind: String].self, forKey: .models) ?? [:]
         pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
         takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
+        opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!buildCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
@@ -363,6 +367,18 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var isUsageLimited: Bool {
         status == .blocked && blockedReason?.range(of: "usage limit|hit your limit|limit reached",
                                                    options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// What a task is called until the agent or the user names it.
+    static func localTitle(id: Int, prompt: String, attachments: [String]) -> String {
+        let title = AppModel.title(for: prompt.isEmpty ? attachments.first.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "" : prompt)
+        return title.isEmpty ? "Task \(id)" : title
+    }
+
+    /// Nobody has named it yet, so the agent still may.
+    var hasLocalTitle: Bool {
+        guard let first = prompts.first else { return false }
+        return title == Self.localTitle(id: id, prompt: first.text, attachments: first.attachments)
     }
 
     /// The branch this task merges into: its own, else (state from before tasks had one) the project's.

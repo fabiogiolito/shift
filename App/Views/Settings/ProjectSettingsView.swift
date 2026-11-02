@@ -190,10 +190,11 @@ struct ProjectSettingsView: View {
             if let remote = model.pushStates[projectID]?.remote {
                 Section {
                     Toggle("Push task branches to \(remote)", isOn: project.pushTaskBranches)
+                    Toggle("Open pull requests instead of merging", isOn: project.opensPullRequests)
                 } header: {
                     Text("Git")
                 } footer: {
-                    Text("Pushes each task's branch when the task is finished.")
+                    Text("Pushes each task's branch when the task is finished. With pull requests on, a finished task's main button opens one on GitHub, and merging moves to its dropdown.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
