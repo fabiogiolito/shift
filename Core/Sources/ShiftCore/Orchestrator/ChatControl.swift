@@ -30,7 +30,9 @@ extension AppModel {
       pr <id>                  push its branch and print the page that opens a pull request
       project                  the project's settings, as JSON
       set <setting> "<value>"  change one: name, baseBranch, type, defaultAgent, model, serverCommand,
-                               setupCommand, buildCommand, pushTaskBranches, takesScreenshots, opensPullRequests
+                               setupCommand, buildCommand, buildTargets, pushTaskBranches, takesScreenshots,
+                               opensPullRequests. buildTargets is a JSON list of {"name", "command", "kind", "paths"};
+                               kind is macApp, iOSSimulator, run or script. buildCommand is for a single target.
     """
 
     func handleControl(token: String, arguments: [String]) async -> ControlReply {
@@ -221,7 +223,7 @@ extension AppModel {
                 throw Refusal("\(kind.displayName) offers: default, \(offered.map(\.id).joined(separator: ", ")).")
             }
             project.models[kind] = value == "default" ? nil : value
-        case "serverCommand", "setupCommand", "buildCommand":
+        case "serverCommand", "setupCommand", "buildCommand", "buildTargets":
             // These run outside any sandbox and unasked, so with less than Bypass they'd be a way around the permissions.
             guard project.permissions == .bypass else {
                 throw Refusal("With \(project.permissions.displayName) permissions only the user can change commands, in the project's settings.")
@@ -229,7 +231,16 @@ extension AppModel {
             switch setting {
             case "serverCommand": project.serverCommand = value
             case "setupCommand": project.setupCommand = value
-            default: project.buildCommand = value
+            case "buildCommand":
+                guard project.buildTargets.count <= 1 else {
+                    throw Refusal("This project has several build targets. Change them with buildTargets.")
+                }
+                project.buildCommand = value
+            default:
+                guard let targets = try? JSONDecoder().decode([BuildTarget].self, from: Data(value.utf8)) else {
+                    throw Refusal(#"buildTargets takes a JSON list of {"name", "command", "kind", "paths"}."#)
+                }
+                project.buildTargets = targets
             }
         case "pushTaskBranches": project.pushTaskBranches = try flag()
         case "takesScreenshots": project.takesScreenshots = try flag()

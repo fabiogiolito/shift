@@ -35,6 +35,83 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(try decoded(#""serverCommand": "", "setupCommand": "pnpm install""#), .other)
     }
 
+    func testSavedBuildCommandBecomesASingleTarget() throws {
+        func decoded(_ fields: String) throws -> Project {
+            let json = #"{"id": "00000000-0000-0000-0000-000000000000", "name": "A", "repoPath": "/a", "baseBranch": "main", "defaultAgent": "codex", "serverCommand": "", \#(fields)}"#
+            return try JSONDecoder().decode(Project.self, from: Data(json.utf8))
+        }
+        let native = try decoded(#""type": "nativeApp", "buildCommand": "scripts/build.sh""#)
+        XCTAssertEqual(native.buildTargets.map(\.command), ["scripts/build.sh"])
+        XCTAssertEqual(native.buildTargets.first?.kind, .macApp)
+        XCTAssertTrue(native.isApp)
+        XCTAssertFalse(native.runsApp)
+
+        let electron = try decoded(#""type": "electronApp", "buildCommand": "pnpm run dev""#)
+        XCTAssertEqual(electron.buildTargets.first?.kind, .run)
+        XCTAssertTrue(electron.runsApp)
+
+        // An app because of its command alone, with no type saved.
+        let untyped = try decoded(#""buildCommand": "make""#)
+        XCTAssertEqual(untyped.type, .nativeApp)
+        XCTAssertEqual(untyped.targets.map(\.command), ["make"])
+
+        // Nothing to migrate: a web project stays one; a native app detects its command when it builds.
+        for blank in [#""type": "other", "buildCommand": "  ""#, #""type": "other""#] {
+            let web = try decoded(blank)
+            XCTAssertEqual(web.buildTargets, [])
+            XCTAssertFalse(web.isApp)
+        }
+        let detecting = try decoded(#""type": "nativeApp", "buildCommand": """#)
+        XCTAssertEqual(detecting.buildTargets, [])
+        XCTAssertTrue(detecting.isApp)
+        XCTAssertEqual(detecting.targets, [.detected])
+        // An Electron app without its command is not an app yet, but its settings still ask for what it runs.
+        let electronWithout = try decoded(#""type": "electronApp""#)
+        XCTAssertFalse(electronWithout.isApp)
+        XCTAssertTrue(electronWithout.runsApp)
+
+        // What's saved from now on comes back the same, keeping its ids.
+        let roundTripped = try JSONDecoder().decode(Project.self, from: JSONEncoder().encode(native))
+        XCTAssertEqual(roundTripped, native)
+        // New state wins over a leftover old command.
+        let both = try decoded(#""buildCommand": "old", "buildTargets": [{"name": "iOS", "command": "new", "kind": "iOSSimulator", "paths": ["iOS/"]}]"#)
+        XCTAssertEqual(both.buildTargets.map(\.command), ["new"])
+        XCTAssertEqual(both.buildTargets.first?.paths, ["iOS/"])
+    }
+
+    func testBuildCommandEditsASingleTarget() {
+        var project = Project(name: "A", repoPath: "/a", baseBranch: "main", type: .electronApp)
+        project.buildCommand = "pnpm dev"
+        XCTAssertEqual(project.buildTargets.first?.kind, .run)
+        let id = project.buildTargets[0].id
+        project.buildCommand = "pnpm start"
+        XCTAssertEqual(project.buildTargets.map(\.id), [id])
+        project.buildCommand = " "
+        XCTAssertEqual(project.buildTargets, [])
+    }
+
+    func testTargetPathsAndSuggestion() {
+        let mac = BuildTarget(name: "Mac", command: "m", paths: ["App/", " Shared"])
+        XCTAssertTrue(mac.matches(path: "App/A.swift"))
+        XCTAssertTrue(mac.matches(path: "Shared/A.swift"))
+        XCTAssertTrue(mac.matches(path: "Shared"))
+        XCTAssertFalse(mac.matches(path: "AppTests/A.swift"))
+        XCTAssertFalse(mac.matches(path: "SharedKit/A.swift"))
+        let empty = BuildTarget(name: "E", command: "e", paths: ["", " "])
+        XCTAssertFalse(empty.matches(path: "App/A.swift"))
+
+        let iOS = BuildTarget(name: "iOS", command: "i", paths: ["iOS/"])
+        let targets = [mac, iOS]
+        func suggested(_ changed: [String], lastBuilt: UUID? = nil) -> String? {
+            BuildTarget.suggested(among: targets, changed: changed, lastBuilt: lastBuilt)?.name
+        }
+        XCTAssertEqual(suggested(["iOS/a", "iOS/b", "App/c"]), "iOS")
+        XCTAssertEqual(suggested(["iOS/a", "App/c"], lastBuilt: iOS.id), "Mac", "a tie goes to the first")
+        XCTAssertEqual(suggested(["README.md"], lastBuilt: iOS.id), "iOS")
+        XCTAssertEqual(suggested(["README.md"], lastBuilt: UUID()), "Mac", "a removed target is forgotten")
+        XCTAssertNil(BuildTarget.suggested(among: [], changed: [], lastBuilt: nil))
+    }
+
     func testDefaultBuildCommandComesFromTheRepo() throws {
         let repo = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
