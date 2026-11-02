@@ -12,6 +12,7 @@ struct TaskDetailView: View {
     /// The file the diff opens at, when opened from a row of the changed files.
     @State private var diffPath: String?
     @State private var confirmingDelete = false
+    @State private var renaming = false
     /// The base picked in the merge dropdown, waiting for confirmation.
     @State private var newBase: String?
     @State private var branches: [String] = []
@@ -118,6 +119,7 @@ struct TaskDetailView: View {
             }
             .task(id: task.status) { changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil }
             .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
+            .renameTaskAlert(task, isPresented: $renaming)
             .confirmationDialog("Delete “\(task.title)”?", isPresented: $confirmingDelete) {
                 Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: taskID) } }
             } message: {
@@ -606,6 +608,7 @@ struct TaskDetailView: View {
                 }
                 Divider()
             }
+            Button("Rename Task…") { renaming = true }
             Button("Delete Task…", role: .destructive) { confirmingDelete = true }
         } label: {
             Label("More", systemImage: "ellipsis.circle")
