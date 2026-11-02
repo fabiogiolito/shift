@@ -15,6 +15,7 @@ final class DemoProjectTests: XCTestCase {
         try await DemoProject.seed(root: root, git: git)
         var state = await store.load()
         XCTAssertEqual(state.projects.map(\.name), ["Other", "Shift Demo"])
+        XCTAssertEqual(state.projects.last?.takesScreenshots, true, "the demo is there to try them")
         XCTAssertEqual(state.tasks.map(\.id), [3100, 3101])
         XCTAssertEqual(state.nextTaskID, 3102)
         let repo = try XCTUnwrap(state.projects.last).repoURL

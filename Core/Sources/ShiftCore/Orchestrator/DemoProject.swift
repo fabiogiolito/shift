@@ -28,7 +28,7 @@ public enum DemoProject {
 
         let worktrees = root.appendingPathComponent("worktrees")
         var project = Project(name: name, repoPath: repo.path, baseBranch: base, type: .dynamicWebsite,
-                              serverCommand: "npm install && npm run dev")
+                              serverCommand: "npm install && npm run dev", takesScreenshots: true)
         if let existing {
             project.id = existing.id
             state.projects.removeAll { $0.id == existing.id }
