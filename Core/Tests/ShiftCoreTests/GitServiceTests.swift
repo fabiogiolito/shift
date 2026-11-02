@@ -669,6 +669,68 @@ final class GitServiceTests: XCTestCase {
         return bare
     }
 
+    func testParsePullRequestsKeepsTheNewestAndSkipsShellOutput() throws {
+        func row(_ number: Int, _ state: String) -> String {
+            #"{"headRefName":"shift/1","headRefOid":"abc","number":\#(number),"state":"\#(state)","url":"https://github.com/o/r/pull/\#(number)"}"#
+        }
+        let found = try GitService.parsePullRequests("welcome to my shell\n[\(row(9, "OPEN")),\(row(4, "MERGED"))]\n")
+        XCTAssertEqual(found["shift/1"]?.number, 9)
+        XCTAssertEqual(found["shift/1"]?.state, .open)
+        XCTAssertEqual(try GitService.parsePullRequests("[]\n"), [:])
+    }
+
+    func testFastForwardFollowsTheRemoteOnly() async throws {
+        let bare = root.appendingPathComponent("remote.git")
+        try sh("init", "--bare", bare.path)
+        try sh("remote", "add", "origin", bare.path)
+        try sh("push", "origin", "main")
+        // Merged on GitHub: the remote's main moves ahead, seen from a second clone.
+        let other = root.appendingPathComponent("other")
+        try sh("clone", bare.path, other.path)
+        try sh("config", "user.name", "Test", in: other)
+        try sh("config", "user.email", "test@example.com", in: other)
+        try "squashed\n".write(to: other.appendingPathComponent("s.txt"), atomically: true, encoding: .utf8)
+        try sh("add", "-A", in: other)
+        try sh("commit", "-m", "squash", in: other)
+        try sh("push", "origin", "main", in: other)
+        let head = try sh("rev-parse", "HEAD", in: other)
+
+        // Checked out here: the working tree moves with it.
+        try await service.fastForward(repo: repo, branch: "main", remote: "origin")
+        XCTAssertEqual(try sh("rev-parse", "main"), head)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repo.appendingPathComponent("s.txt").path))
+
+        // A local commit of its own: left alone.
+        try write("mine.txt", "mine\n")
+        try sh("add", "-A")
+        try sh("commit", "-m", "mine")
+        let mine = try sh("rev-parse", "main")
+        try await service.fastForward(repo: repo, branch: "main", remote: "origin")
+        XCTAssertEqual(try sh("rev-parse", "main"), mine)
+    }
+
+    func testFetchPullRequestBringsItsHeadCommit() async throws {
+        let bare = root.appendingPathComponent("remote.git")
+        try sh("init", "--bare", bare.path)
+        try sh("remote", "add", "origin", bare.path)
+        try sh("checkout", "-b", "pr")
+        try write("pr.txt", "pr\n")
+        try sh("add", "-A")
+        try sh("commit", "-m", "pr")
+        let head = try sh("rev-parse", "HEAD")
+        try sh("push", "origin", "HEAD:refs/pull/5/head")
+        try sh("checkout", "main")
+        try sh("branch", "-D", "pr")
+        try sh("gc", "--prune=now")
+        try sh("reflog", "expire", "--expire=now", "--all")
+        try sh("gc", "--prune=now")
+        let missing = try? await service.isContained(repo: repo, branch: "main", in: head)
+        XCTAssertNil(missing)
+        try await service.fetchPullRequest(repo: repo, number: 5, remote: "origin")
+        let contained = try await service.isContained(repo: repo, branch: "main", in: head)
+        XCTAssertTrue(contained)
+    }
+
     func testPushMergesInWhatTheRemoteHas() async throws {
         let bare = try await pushFromElsewhere { try write("theirs.txt", "theirs\n", in: $0) }
         try write("mine.txt", "mine\n")

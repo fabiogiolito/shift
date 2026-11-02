@@ -70,6 +70,8 @@ struct TaskListView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in activations += 1 }
         .task(id: "\(project.id)|\(model.bases(of: project.id))|\(activations)") {
             await model.refreshPushState(projectID: project.id)
+            // Likely back from the browser, where a pull request was opened or merged.
+            await model.refreshPullRequests(projectID: project.id)
         }
     }
 

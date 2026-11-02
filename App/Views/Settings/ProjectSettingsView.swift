@@ -194,7 +194,7 @@ struct ProjectSettingsView: View {
                 } header: {
                     Text("Git")
                 } footer: {
-                    Text("Pushes each task's branch when the task is finished. With pull requests on, a finished task's main button opens one on GitHub, and merging moves to its dropdown.")
+                    Text("Pushes each task's branch when the task is finished. With pull requests on, a finished task's main button opens one on GitHub, and merging moves to its dropdown. With the GitHub CLI (gh) signed in, Shift follows the pull request: it shows when it's open, pushes new changes to it, and marks the task Merged once it's merged.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

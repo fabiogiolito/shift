@@ -10,6 +10,33 @@ public enum MergeResult: Equatable, Sendable {
     case conflict
 }
 
+/// A pull request on GitHub, as `gh pr list --json` gives it.
+public struct PullRequest: Decodable, Equatable, Sendable {
+    public enum State: String, Decodable, Sendable {
+        case open = "OPEN", merged = "MERGED", closed = "CLOSED"
+    }
+
+    public var number: Int
+    public var url: URL
+    public var state: State
+    public var headRefName: String
+    /// The commit the pull request is at: on a merged one, what was merged.
+    public var headRefOid: String
+    /// Set by the orchestrator: the task has work this pull request does not have.
+    public var hasNewWork = false
+
+    private enum CodingKeys: String, CodingKey { case number, url, state, headRefName, headRefOid }
+
+    public init(number: Int, url: URL, state: State, headRefName: String, headRefOid: String, hasNewWork: Bool = false) {
+        self.number = number
+        self.url = url
+        self.state = state
+        self.headRefName = headRefName
+        self.headRefOid = headRefOid
+        self.hasNewWork = hasNewWork
+    }
+}
+
 public protocol GitServicing: Sendable {
     func isRepository(_ url: URL) async -> Bool
     /// Makes the folder a repository and commits everything in it: tasks branch off a commit.
@@ -74,6 +101,15 @@ public protocol GitServicing: Sendable {
     /// branch is left as it was and it throws.
     /// Never waits for a password and gives up after a timeout. Throws a plain-language message.
     func push(repo: URL, branch: String, remote: String) async throws
+
+    /// The repo's pull requests by head branch, the newest for each, from the GitHub CLI. `github` is
+    /// "owner/repo". Throws if `gh` is missing, signed out or offline. Never asks for anything.
+    func pullRequests(repo: URL, github: String) async throws -> [String: PullRequest]
+    /// Brings a pull request's head commit into the repo, also when its branch is gone from the remote.
+    func fetchPullRequest(repo: URL, number: Int, remote: String) async throws
+    /// Moves `branch` up to what the remote has, if that is a fast-forward; otherwise leaves it alone.
+    /// Where it is checked out, keeps uncommitted changes or leaves it alone.
+    func fastForward(repo: URL, branch: String, remote: String) async throws
 }
 
 // MARK: - Agents
