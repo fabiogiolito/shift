@@ -28,5 +28,5 @@ A simulator build talks to its own Mac build, with no pairing: `scripts/build.sh
 
 - `Core/` — shared Swift package, no SwiftUI. Target `ShiftProtocol` builds for macOS and iOS: models, plain data, transcript parser, wire messages (`Wire.swift`); no Process or AppKit. Target `ShiftCore`, Mac only and re-exporting it: service contracts, services, orchestrator, `Remote/` (the server phones connect to, which only uses `AppModel`).
 - `App/` — macOS SwiftUI app, target `Shift`. Talks only to `AppModel`.
-- `iOS/` — iOS SwiftUI app, target `ShiftMobile`. Imports only `ShiftProtocol`, and talks only to `RemoteModel`. Also compiles `StatusIcon` and `MarkdownText` from `App/Views/Shared/`.
+- `iOS/` — iOS SwiftUI app, target `ShiftMobile`. Imports only `ShiftProtocol`, and talks only to `RemoteModel`. Also compiles `StatusIcon`, `MarkdownText` and `EmptyState` from `App/Views/Shared/`.
 - `Core/Sources/ShiftCore/Models/Services.swift` — the contracts between orchestrator and machinery. Read this first.

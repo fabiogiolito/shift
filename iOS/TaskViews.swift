@@ -12,7 +12,7 @@ struct ProjectsView: View {
             if !model.hasState {
                 ProgressView()
             } else if model.state.projects.isEmpty {
-                ContentUnavailableView("No Projects", systemImage: "folder", description: Text("Add a project in Shift on your Mac."))
+                EmptyState("No Projects", systemImage: "folder", description: Text("Add a project in Shift on your Mac."))
             } else {
                 List(model.state.projects) { project in
                     NavigationLink(value: project.id) {
@@ -58,7 +58,7 @@ struct TaskListView: View {
             }
         }
         .overlay {
-            if tasks.isEmpty { ContentUnavailableView("No Tasks", systemImage: "checklist") }
+            if tasks.isEmpty { EmptyState("No Tasks", systemImage: "tray", description: Text("Start a task in Shift on your Mac.")) }
         }
         .navigationTitle(model.state.projects.first { $0.id == projectID }?.name ?? "Tasks")
     }
@@ -120,7 +120,7 @@ struct TaskDetailView: View {
             }
             .onDisappear { model.closeLog(.task(taskID)) }
         } else {
-            ContentUnavailableView("Task Not Found", systemImage: "questionmark.folder", description: Text("It was deleted on your Mac."))
+            EmptyState("Task Not Found", systemImage: "questionmark.folder", description: Text("It was deleted on your Mac."))
         }
     }
 }

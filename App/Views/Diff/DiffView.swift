@@ -40,11 +40,7 @@ struct DiffView: View {
             .padding()
             Divider()
             if isSettled, let loadError {
-                ContentUnavailableView {
-                    Label("Couldn't Load Changes", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(loadError)
-                } actions: {
+                EmptyState(title: "Couldn't Load Changes", systemImage: "exclamationmark.triangle", description: Text(loadError)) {
                     Button("Try Again") {
                         self.loadError = nil
                         attempt += 1
@@ -53,8 +49,8 @@ struct DiffView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let files = ready {
                 if files.isEmpty {
-                    ContentUnavailableView("No changes", systemImage: "doc.text.magnifyingglass",
-                                           description: Text("This task has not changed any files."))
+                    EmptyState("No changes", systemImage: "doc.text.magnifyingglass",
+                               description: Text("This task has not changed any files."))
                 } else {
                     content(files)
                 }
