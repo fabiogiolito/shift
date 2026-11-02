@@ -328,6 +328,18 @@ final class MockServers: ServerManaging {
 }
 
 @MainActor @Observable
+final class MockSimulators: SimulatorRunning {
+    struct Run: Equatable { var app: URL; var environment: [String: String] }
+
+    var error: Error?
+    private(set) var runs: [Run] = []
+
+    func run(app: URL, environment: [String: String]) async throws {
+        if let error { throw error }
+        runs.append(Run(app: app, environment: environment))
+    }
+}
+
 final class MockScreenshots: Screenshotting {
     var fails = false
     private(set) var captured: [URL] = []
