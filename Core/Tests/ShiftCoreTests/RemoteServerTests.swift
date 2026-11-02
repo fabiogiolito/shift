@@ -21,7 +21,9 @@ final class WireTests: XCTestCase {
         snapshot.chats = [ProjectChat(projectID: project.id, agent: .codex, prompts: [Prompt(text: "hi", date: date)])]
         snapshot.pullRequests = [3001: PullRequest(number: 7, url: URL(string: "https://github.com/a/b/pull/7")!, state: .open,
                                                    headRefName: "shift/3001", headRefOid: "abc", hasNewWork: true)]
-        snapshot.builds = [3001: .succeeded(app: URL(fileURLWithPath: "/a.app")), 3002: .failed("no"), 3003: .building]
+        let target = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        snapshot.builds = [BuildKey(taskID: 3001, targetID: target): .succeeded(app: URL(fileURLWithPath: "/a.app")),
+                           BuildKey(taskID: 3002, targetID: target): .failed("no"), BuildKey(taskID: 3003, targetID: target): .building]
         snapshot.usage = [.claudeCode: AgentUsage(windows: [.init(name: "5-hour", usedPercent: 10, resetsAt: date)])]
         snapshot.chatApprovals = [project.id: "Edit `a`"]
         snapshot.replyingChats = [project.id]
@@ -35,7 +37,7 @@ final class WireTests: XCTestCase {
         let server: [ServerMessage] = [
             .hello(version: Wire.version), .snapshot(snapshot), .projects(snapshot.projects), .task(snapshot.tasks[0]), .taskRemoved(1),
             .chat(snapshot.chats[0]), .chatRemoved(id), .pullRequest(taskID: 1, nil), .pullRequest(taskID: 1, snapshot.pullRequests[3001]),
-            .build(taskID: 1, .building), .usage(.codex, nil), .chatApproval(projectID: id, "x"), .replyingChats([id]),
+            .build(BuildKey(taskID: 1, targetID: id), .building), .usage(.codex, nil), .chatApproval(projectID: id, "x"), .replyingChats([id]),
             .reply(id: 1, result: .diff(diff), error: nil), .reply(id: 2, result: nil, error: "no"), .reply(id: 3, result: .changes(DiffSummary()), error: nil),
             .reply(id: 4, result: .url(nil), error: nil), .reply(id: 5, result: .taskID(4), error: nil),
             .log(.task(1), offset: 9, data: Data([0, 255])), .log(.chat(id), offset: 0, data: Data()),
@@ -45,7 +47,7 @@ final class WireTests: XCTestCase {
             .createTask(projectID: id, prompt: "p", attachments: ["/a"], agent: nil), .sendPrompt(taskID: 1, text: "t", attachments: []),
             .answerApproval(taskID: 1, allow: false), .stop(taskID: 1), .resume(taskID: 1), .rename(taskID: 1, title: "t"), .merge(taskID: 1),
             .delete(taskID: 1), .resolveConflict(taskID: 1), .conflictedFiles(taskID: 1), .pushBranch(taskID: 1), .pullRequestURL(taskID: 1),
-            .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1), .buildLog(taskID: 1),
+            .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1, target: id), .buildLog(taskID: 1, target: id),
             .sendChat(projectID: id, text: "t", attachments: []), .answerChatApproval(projectID: id, allow: true), .stopChat(projectID: id), .newChat(projectID: id),
         ]
         commands.forEach { roundTrip(ClientMessage.command(CommandRequest(id: 1, command: $0))) }
@@ -77,7 +79,7 @@ final class WireTests: XCTestCase {
                                   createdAt: Date(timeIntervalSince1970: 1_800_000_000)))
         new.chats = []
         new.pullRequests = [:]
-        new.builds[3003] = .failed("x")
+        new.builds[BuildKey(taskID: 3003, targetID: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)] = .failed("x")
         new.usage = [:]
         new.chatApprovals = [:]
         new.replyingChats = []
@@ -85,7 +87,7 @@ final class WireTests: XCTestCase {
         let messages = new.changes(since: old)
         // Whole entities, and only the ones that changed.
         XCTAssertTrue(messages.contains { if case .task(let task) = $0 { task.id == 3001 && task.title == "Renamed" } else { false } })
-        XCTAssertFalse(messages.contains { if case .build(let id, _) = $0 { id == 3001 } else { false } })
+        XCTAssertFalse(messages.contains { if case .build(let key, _) = $0 { key.taskID == 3001 } else { false } })
         var phone = old
         messages.forEach { phone.apply($0) }
         XCTAssertEqual(phone, new)
@@ -322,7 +324,7 @@ final class RemoteServerTests: XCTestCase {
         XCTAssertEqual(model.task(id)?.prompts.last?.attachments, ["/tmp/a.png"])
         await waitUntil("the second run") { self.model.task(id)?.summary == "Again" }
 
-        let log = await server.perform(.buildLog(taskID: id))
+        let log = await server.perform(.buildLog(taskID: id, target: UUID()))
         XCTAssertEqual(log.0, .text(""))
         _ = await server.perform(.delete(taskID: id))
         XCTAssertNil(model.task(id))
@@ -529,6 +531,20 @@ final class RemoteServerTests: XCTestCase {
         XCTAssertNotNil(second.port)
         XCTAssertNotEqual(second.port, port)
         XCTAssertEqual(try String(contentsOf: other.appendingPathComponent("remote-port"), encoding: .utf8), String(second.port!))
+    }
+
+    func testSimulatorBuildGetsItsMacBuildsAddress() throws {
+        let home = temp.appendingPathComponent("builds/9001")
+        let address = try XCTUnwrap(RemoteListener.localServer(home: home, taskID: 9001))
+        let pairing = try XCTUnwrap(Pairing(shiftServer: address))
+        XCTAssertEqual(pairing.server.port, 29001)
+        // The Mac build lets it in, on loopback only, and takes the port it was given.
+        XCTAssertEqual(RemoteAuth(home: home).caller(headers: ["authorization": "Bearer \(pairing.token)"]), .local)
+        XCTAssertEqual(try String(contentsOf: home.appendingPathComponent("remote-port"), encoding: .utf8), "29001")
+        // Running it again keeps them, whoever chose them.
+        XCTAssertEqual(RemoteListener.localServer(home: home, taskID: 9001), address)
+        try "5555\n".write(to: home.appendingPathComponent("remote-port"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(try XCTUnwrap(Pairing(shiftServer: RemoteListener.localServer(home: home, taskID: 9001)!)).server.port, 5555)
     }
 
     func testKeepAwakeHeldWhileATaskWorks() async throws {

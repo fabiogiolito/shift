@@ -222,6 +222,14 @@ public protocol Screenshotting: Sendable {
 
 // MARK: - Persistence
 
+/// Puts a built iOS app on a simulator.
+public protocol SimulatorRunning: Sendable {
+    /// Installs `app` on the booted simulator (else boots the newest available iPhone), launches it in place of
+    /// the copy already running, and brings Simulator.app forward. `environment` holds the variables for
+    /// `simctl`: its `SIMCTL_CHILD_` ones reach the app.
+    func run(app: URL, environment: [String: String]) async throws
+}
+
 public protocol StateStoring: Sendable {
     func load() async -> AppState
     func save(_ state: AppState) async
@@ -250,10 +258,13 @@ public struct Services: Sendable {
     public var screenshots: Screenshotting?
     /// Lets a paired phone follow and steer tasks. Nil: it can't (tests).
     public var remote: RemoteListener?
+    /// Nil: iOS builds can't be run.
+    public var simulators: SimulatorRunning?
 
     public init(git: GitServicing, agents: [AgentKind: AgentAdapter], servers: ServerManaging,
                 ports: PortAllocating, notifier: Notifying, store: StateStoring, tailscale: Tailscale? = nil,
-                screenshots: Screenshotting? = nil, control: ControlServer? = nil, remote: RemoteListener? = nil) {
+                screenshots: Screenshotting? = nil, control: ControlServer? = nil, simulators: SimulatorRunning? = nil,
+                remote: RemoteListener? = nil) {
         self.git = git
         self.agents = agents
         self.servers = servers
@@ -264,6 +275,7 @@ public struct Services: Sendable {
         self.control = control
         self.screenshots = screenshots
         self.remote = remote
+        self.simulators = simulators
     }
 }
 

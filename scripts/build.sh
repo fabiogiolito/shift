@@ -22,7 +22,8 @@ sed -i '' 's|path = AppIcon.icon;|lastKnownFileType = folder.iconcomposer.icon; 
 xcodebuild -project Shift.xcodeproj -scheme Shift -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" -quiet build ${SHIFT_FEED_URL:+SHIFT_FEED_URL=$SHIFT_FEED_URL} >&2
 
-if [ "$CONFIG" = Debug ] && [ -z "$IOS" ]; then
+# Run as the Mac app's own build target (detected from project.yml), the iOS app has a target of its own.
+if [ "$CONFIG" = Debug ] && [ -z "$IOS" ] && [ "$SHIFT_TARGET" != Shift ]; then
   BASE=$(git merge-base HEAD main 2>/dev/null || true)
   if [ -n "$BASE" ] && { git diff --name-only "$BASE"; git ls-files --others --exclude-standard; } | grep -qE '^(iOS|Core)/'; then IOS=1; fi
 fi

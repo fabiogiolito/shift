@@ -49,8 +49,12 @@ public final class AppModel {
     /// Projects whose base server is coming up to be opened in the browser.
     public private(set) var openingBase: Set<Project.ID> = []
 
-    /// App projects: each task's latest build since launch. No entry: not built yet.
-    public private(set) var builds: [TaskItem.ID: BuildState] = [:]
+    /// App projects: the latest build of each task's targets since launch. No entry: not built yet.
+    public private(set) var builds: [BuildKey: BuildState] = [:]
+    /// The `.run` target each task has open. Its server slot holds one, so starting another replaces it.
+    public private(set) var runningTargets: [TaskItem.ID: BuildTarget.ID] = [:]
+
+    public typealias BuildKey = ShiftProtocol.BuildKey
 
     public typealias BuildState = ShiftProtocol.BuildState
 
@@ -119,8 +123,8 @@ public final class AppModel {
     @ObservationIgnored private var serverFailures: [TaskItem.ID: String] = [:]
     /// The command each task's dev server was last started with.
     @ObservationIgnored private var serverCommands: [TaskItem.ID: String] = [:]
-    @ObservationIgnored private var buildRuns: [TaskItem.ID: Task<CommandResult, Error>] = [:]
-    @ObservationIgnored private var buildLogs: [TaskItem.ID: String] = [:]
+    @ObservationIgnored private var buildRuns: [BuildKey: Task<CommandResult, Error>] = [:]
+    @ObservationIgnored private var buildLogs: [BuildKey: String] = [:]
     /// Tasks with a merge or delete in progress.
     @ObservationIgnored private var busy: Set<TaskItem.ID> = []
     /// Manual permissions: how to answer the running agent, and its unanswered requests, oldest first.
@@ -323,11 +327,11 @@ public final class AppModel {
             lastError = "Could not find a branch in \(url.lastPathComponent)."
             return nil
         }
-        let suggested = await ProjectSetup.suggest(repo: url, git: services.git)
+        let suggested = await ProjectSetup.suggest(repo: url, git: services.git, servers: services.servers)
         if let existing = projects.first(where: { $0.repoPath == path }) { return existing }
         let project = Project(name: url.lastPathComponent, repoPath: path, baseBranch: base, type: suggested.type,
                               defaultAgent: AgentKind.allCases.first { installedAgents[$0] != nil } ?? .claudeCode,
-                              serverCommand: suggested.server, setupCommand: suggested.setup, buildCommand: suggested.build)
+                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets)
         projects.append(project)
         changed()
         return project
@@ -338,7 +342,7 @@ public final class AppModel {
         let old = projects[index]
         projects[index] = project
         if basePorts[project.id] != nil,
-           (old.serverCommand, old.buildCommand, old.isApp) != (project.serverCommand, project.buildCommand, project.isApp) {
+           (old.serverCommand, old.buildTargets, old.isApp) != (project.serverCommand, project.buildTargets, project.isApp) {
             Task { await startBaseServer(project.id, restart: true) }
         }
         // Now an app: its tasks are tested by building, so their dev servers and ports go. A running app goes
@@ -346,11 +350,18 @@ public final class AppModel {
         if project.isApp ? !old.isApp : old.runsApp && !project.runsApp {
             for task in tasks(in: project.id) where task.serverPID != nil || task.port != nil {
                 update(task.id) { $0.serverPID = nil; $0.port = nil }
+                runningTargets[task.id] = nil
                 Task {
                     await services.servers.stop(taskID: task.id)
                     if let port = task.port { await services.tailscale?.unserve(port: port) }
                 }
             }
+        }
+        // The target a task has open is gone, or no longer one that stays open.
+        let runnable = project.targets.filter { $0.kind == .run }.map(\.id)
+        for task in tasks(in: project.id) {
+            guard let running = runningTargets[task.id], !runnable.contains(running) else { continue }
+            Task { await stopApp(taskID: task.id) }
         }
         changed()
     }
@@ -360,10 +371,10 @@ public final class AppModel {
         var project = project
         project.type = type
         guard let services, type != .other else { return project }
-        let suggested = await ProjectSetup.suggest(repo: project.repoURL, git: services.git, as: type)
+        let suggested = await ProjectSetup.suggest(repo: project.repoURL, git: services.git, servers: services.servers, as: type)
         project.setupCommand = suggested.setup
         project.serverCommand = suggested.server
-        project.buildCommand = suggested.build
+        project.buildTargets = suggested.targets
         return project
     }
 
@@ -1005,82 +1016,147 @@ public final class AppModel {
         return log.isEmpty ? failure : log + "\n" + failure
     }
 
-    /// App projects: runs the build command in the task's worktree. Returns the .app it built, to open:
-    /// the last line of the output, if that is the path of one. Does nothing while a build is running.
-    public func build(taskID: TaskItem.ID) async -> URL? {
+    /// App projects: runs the target's command in the task's worktree. A task can build different targets at the
+    /// same time; this does nothing while the target is already building. Returns the Mac app to open: the last
+    /// line of the output, if that is the path of a .app. An iOS app is run on a simulator right here instead.
+    public func build(taskID: TaskItem.ID, target targetID: BuildTarget.ID) async -> URL? {
+        let key = BuildKey(taskID: taskID, targetID: targetID)
         guard let services, let task = task(taskID), task.status != .merged, let project = project(task.projectID),
-              project.isApp, builds[taskID] != .building else { return nil }
+              project.isApp, builds[key] != .building,
+              let chosen = project.targets.first(where: { $0.id == targetID }), chosen.kind != .run else { return nil }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
-            builds[taskID] = .failed("The task's folder is recreated the next time the agent runs.")
+            builds[key] = .failed("The task's folder is recreated the next time the agent runs.")
             return nil
         }
-        let command = ProjectSetup.buildCommand(for: project, in: task.worktreeURL)
+        let target = ProjectSetup.resolved(chosen, in: task.worktreeURL)
+        let command = target.command
         guard !command.isEmpty else {
-            builds[taskID] = .failed("Nothing to build yet. Add a build command in the project's settings.")
+            builds[key] = .failed("Nothing to build yet. Add a build command in the project's settings.")
             return nil
         }
-        builds[taskID] = .building
+        builds[key] = .building
+        update(taskID) { $0.lastBuiltTargetID = targetID }
         let run = Task {
             try await services.servers.run(command: command, directory: task.worktreeURL, environment: [
-                "SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath, "SHIFT_TASK": String(taskID)])
+                "SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath, "SHIFT_TASK": String(taskID),
+                "SHIFT_TARGET": target.name])
         }
-        buildRuns[taskID] = run
+        buildRuns[key] = run
         let result = await run.result
         // Deleted or merged meanwhile: nothing left to report on.
-        guard buildRuns[taskID] == run else { return nil }
-        buildRuns[taskID] = nil
+        guard buildRuns[key] == run else { return nil }
+        buildRuns[key] = nil
         switch result {
         case .success(let result):
-            buildLogs[taskID] = "$ \(command)\n" + result.output
+            buildLogs[key] = "$ \(command)\n" + result.output
             guard result.exitCode == 0 else {
-                builds[taskID] = .failed("Build failed (exit code \(result.exitCode)).")
+                builds[key] = .failed("Build failed (exit code \(result.exitCode)).")
+                return nil
+            }
+            guard target.kind != .script else {
+                builds[key] = .succeeded(app: nil)
                 return nil
             }
             let last = result.output.split(whereSeparator: \.isNewline).last
                 .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
             let app = last.hasSuffix(".app") && FileManager.default.fileExists(atPath: last)
                 ? URL(fileURLWithPath: last) : nil
-            builds[taskID] = .succeeded(app: app)
-            return app
+            guard target.kind == .iOSSimulator else {
+                builds[key] = .succeeded(app: app)
+                return app
+            }
+            guard let app else {
+                builds[key] = .failed("The build didn't print the path of a .app, so there is nothing to run.")
+                return nil
+            }
+            await runOnSimulator(app, key: key, services: services)
+            return nil
         case .failure(let error):
-            builds[taskID] = .failed("Build could not start: \(Self.describe(error))")
+            builds[key] = .failed("Build could not start: \(Self.describe(error))")
             return nil
         }
     }
 
-    /// Electron projects: opens the task's app. It gets a home folder of its own, so copies from different tasks
+    /// With the same isolation a Mac build gets from SHIFT_HOME. The target counts as building until it's launched.
+    private func runOnSimulator(_ app: URL, key: BuildKey, services: Services) async {
+        var failure: String?
+        if let simulators = services.simulators {
+            do {
+                let home = ShiftPaths.build(taskID: key.taskID)
+                var environment = ["SIMCTL_CHILD_SHIFT_HOME": home.path]
+                // A build of Shift's own iOS app talks to the task's Mac build. Other apps ignore it.
+                if services.remote != nil { environment["SIMCTL_CHILD_SHIFT_SERVER"] = RemoteListener.localServer(home: home, taskID: key.taskID) }
+                try await simulators.run(app: app, environment: environment)
+            } catch {
+                failure = Self.describe(error)
+            }
+        } else {
+            failure = "This version of Shift can't run iOS apps."
+        }
+        // Deleted or merged meanwhile: nothing left to report on.
+        guard builds[key] == .building else { return }
+        if let failure {
+            buildLogs[key, default: ""] += "\n" + failure
+            builds[key] = .failed("Could not run on the simulator: \(Self.firstLine(failure))")
+        } else {
+            builds[key] = .succeeded(app: app)
+        }
+    }
+
+    /// Electron and the like: opens the task's app. It gets a home folder of its own, so copies from different tasks
     /// run side by side: no shared data and no single-instance lock. It starts with empty data, kept between runs.
     /// Runs as the task's server, for its log and to be stopped with the task, but it has no port.
+    // ponytail: one per task, since that's what the server slot holds; starting another `.run` target replaces it.
     // ponytail: macOS only hook (CoreFoundation's home override), fine while Shift is a Mac app.
-    public func runApp(taskID: TaskItem.ID) async {
-        guard let services, let task = task(taskID), task.status != .merged,
-              let project = project(task.projectID), project.runsApp else { return }
+    public func runApp(taskID: TaskItem.ID, target targetID: BuildTarget.ID) async {
+        let key = BuildKey(taskID: taskID, targetID: targetID)
+        guard let services, let task = task(taskID), task.status != .merged, let project = project(task.projectID),
+              let target = project.targets.first(where: { $0.id == targetID }), target.kind == .run else { return }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
-            builds[taskID] = .failed("The task's folder is recreated the next time the agent runs.")
+            builds[key] = .failed("The task's folder is recreated the next time the agent runs.")
             return
         }
-        builds[taskID] = nil
-        let command = "export CFFIXED_USER_HOME=\"\(ShiftPaths.build(taskID: taskID).path)\"; \(project.buildCommand)"
+        builds[key] = nil
+        let command = "export CFFIXED_USER_HOME=\"\(ShiftPaths.build(taskID: taskID).path)\"; "
+            + "export SHIFT_TARGET=\(ProjectSetup.quoted(target.name)); \(target.command)"
         do {
             let pid = try await services.servers.start(taskID: taskID, command: command, directory: task.worktreeURL, port: 0)
             guard self.task(taskID)?.status != .merged else {
                 await services.servers.stop(taskID: taskID)
                 return
             }
-            update(taskID) { $0.serverPID = pid }
+            runningTargets[taskID] = targetID
+            update(taskID) { $0.serverPID = pid; $0.lastBuiltTargetID = targetID }
         } catch {
-            builds[taskID] = .failed("The app could not start: \(Self.firstLine(Self.describe(error)))")
+            builds[key] = .failed("The app could not start: \(Self.firstLine(Self.describe(error)))")
         }
     }
 
     public func stopApp(taskID: TaskItem.ID) async {
         await services?.servers.stop(taskID: taskID)
+        runningTargets[taskID] = nil
         update(taskID) { $0.serverPID = nil }
     }
 
-    /// The output of the task's last build.
-    public func buildLog(taskID: TaskItem.ID) -> String {
-        buildLogs[taskID] ?? (builds[taskID] == .building ? "Building…" : "")
+    /// The latest build of the target since launch. Nil: not built yet.
+    public func buildState(taskID: TaskItem.ID, target: BuildTarget.ID) -> BuildState? {
+        builds[BuildKey(taskID: taskID, targetID: target)]
+    }
+
+    /// The output of the target's last build.
+    public func buildLog(taskID: TaskItem.ID, target: BuildTarget.ID) -> String {
+        let key = BuildKey(taskID: taskID, targetID: target)
+        return buildLogs[key] ?? (builds[key] == .building ? "Building…" : "")
+    }
+
+    /// What to build for this task: the target whose paths match the most files the task changed against its
+    /// base, else the one last built for it, else the first.
+    public func suggestedTarget(taskID: TaskItem.ID) async -> BuildTarget? {
+        guard let task = task(taskID), let targets = project(task.projectID)?.targets else { return nil }
+        // A question with one answer: no need to read the diff.
+        guard targets.count > 1 else { return targets.first }
+        let changed = await changes(taskID: taskID)?.files.map(\.path) ?? []
+        return BuildTarget.suggested(among: targets, changed: changed, lastBuilt: task.lastBuiltTargetID)
     }
 
     /// nil if they could not be read; `loadChanges` says why.
@@ -1854,9 +1930,10 @@ public final class AppModel {
         guard let services, let task = task(id) else { return }
         await cancelRun(id)
         serverFailures[id] = nil
-        buildRuns.removeValue(forKey: id)?.cancel()
-        builds[id] = nil
-        buildLogs[id] = nil
+        for key in buildRuns.keys where key.taskID == id { buildRuns.removeValue(forKey: key)?.cancel() }
+        builds = builds.filter { $0.key.taskID != id }
+        buildLogs = buildLogs.filter { $0.key.taskID != id }
+        runningTargets[id] = nil
         await services.servers.stop(taskID: id)
         if let port = task.port { await services.tailscale?.unserve(port: port) }
         if let pid = task.serverPID, !(await services.servers.isRunning(taskID: id)) {

@@ -31,7 +31,14 @@ struct ProjectSettingsView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") {
-                    if let draft { model.updateProject(draft) }
+                    if var draft {
+                        // The paths field keeps what's typed as is, separators included.
+                        for index in draft.buildTargets.indices {
+                            draft.buildTargets[index].paths = draft.buildTargets[index].paths
+                                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                        }
+                        model.updateProject(draft)
+                    }
                     dismiss()
                 }
                 // Other than a native app (its command can come later), an app is a project with a build command:
@@ -53,6 +60,71 @@ struct ProjectSettingsView: View {
         case .staticWebsite, .dynamicWebsite: false
         case .nativeApp, .electronApp: true
         case .other: isApp ?? project.isApp
+        }
+    }
+
+    /// One command stays one field. The list shows once there are more targets, or one that isn't what the type implies.
+    private func showsTargetList(_ project: Project) -> Bool {
+        project.buildTargets.count > 1 || project.buildTargets.first.map { $0.kind != project.defaultTargetKind } == true
+    }
+
+    /// Follows the target by id, so it stays right while the list is reordered or shrinks.
+    private func binding(_ target: BuildTarget, in project: Binding<Project>) -> Binding<BuildTarget> {
+        Binding(get: { project.wrappedValue.buildTargets.first { $0.id == target.id } ?? target },
+                set: { new in
+                    guard let index = project.wrappedValue.buildTargets.firstIndex(where: { $0.id == target.id }) else { return }
+                    project.wrappedValue.buildTargets[index] = new
+                })
+    }
+
+    /// The first one added to a single command joins it, so there are two to tell apart.
+    private func addTarget(to project: Binding<Project>) {
+        let kind = project.wrappedValue.defaultTargetKind
+        if project.wrappedValue.buildTargets.isEmpty {
+            project.wrappedValue.buildTargets = [BuildTarget(name: "App", command: "", kind: kind)]
+        }
+        let number = project.wrappedValue.buildTargets.count + 1
+        project.wrappedValue.buildTargets.append(BuildTarget(name: "Target \(number)", command: "", kind: kind))
+    }
+
+    private func moveTarget(_ target: BuildTarget, by offset: Int, in project: Binding<Project>) {
+        guard let index = project.wrappedValue.buildTargets.firstIndex(where: { $0.id == target.id }),
+              project.wrappedValue.buildTargets.indices.contains(index + offset) else { return }
+        project.wrappedValue.buildTargets.swapAt(index, index + offset)
+    }
+
+    @ViewBuilder private func targetSection(_ target: BuildTarget, in project: Binding<Project>) -> some View {
+        let row = binding(target, in: project)
+        let targets = project.wrappedValue.buildTargets
+        Section {
+            TextField("Name", text: row.name)
+            Picker("Kind", selection: row.kind) {
+                ForEach(BuildTarget.Kind.allCases) { Text($0.displayName).tag($0) }
+            }
+            commandField("Command", text: row.command, prompt: Text(verbatim: "scripts/build.sh"))
+            // Split on commas and kept as typed: tidying it here would undo the separator being typed. Done tidies it.
+            TextField("Paths", text: Binding(
+                get: { row.wrappedValue.paths.joined(separator: ",") },
+                set: { row.wrappedValue.paths = $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }),
+                      prompt: Text(verbatim: "App/, Shared/"))
+                .autocorrectionDisabled()
+        } header: {
+            HStack {
+                Text(target.name)
+                Spacer()
+                Button { moveTarget(target, by: -1, in: project) } label: {
+                    Label("Move Up", systemImage: "chevron.up").labelStyle(.iconOnly)
+                }
+                .disabled(targets.first?.id == target.id)
+                Button { moveTarget(target, by: 1, in: project) } label: {
+                    Label("Move Down", systemImage: "chevron.down").labelStyle(.iconOnly)
+                }
+                .disabled(targets.last?.id == target.id)
+                Button { project.wrappedValue.buildTargets.removeAll { $0.id == target.id } } label: {
+                    Label("Remove", systemImage: "trash").labelStyle(.iconOnly)
+                }
+            }
+            .buttonStyle(.borderless)
         }
     }
 
@@ -151,18 +223,22 @@ struct ProjectSettingsView: View {
                         get: { isApp ?? current.isApp },
                         set: {
                             isApp = $0
-                            if !$0 { project.wrappedValue.buildCommand = "" }
-                            else if !project.wrappedValue.isApp { project.wrappedValue.buildCommand = current.defaultBuildCommand }
+                            if !$0 { project.wrappedValue.buildTargets = [] }
+                            else if !project.wrappedValue.isApp { project.wrappedValue.buildTargets = current.defaultBuildTargets }
                         })) {
                         Text("Dev server").tag(false)
                         Text("App build").tag(true)
                     }
                 }
-                if current.runsApp {
+                if usesBuild(current) && showsTargetList(current) {
+                    // Each target has a section of its own, below.
+                } else if current.runsApp {
                     commandField("Run", text: project.buildCommand, prompt: Text("Required, e.g. pnpm run dev"))
+                    Button("Add Target") { addTarget(to: project) }
                 } else if usesBuild(current) {
                     commandField("Build", text: project.buildCommand,
                                  prompt: Text(current.type == .nativeApp ? "Detected when you build, e.g. scripts/build.sh" : "Required, e.g. scripts/build.sh"))
+                    Button("Add Target") { addTarget(to: project) }
                 } else if current.type != .staticWebsite {
                     commandField("Start server", text: project.serverCommand, prompt: Text("pnpm dev --port $PORT"))
                 }
@@ -171,11 +247,23 @@ struct ProjectSettingsView: View {
             } footer: {
                 Text(current.type == .staticWebsite ? "Each task's files are served on localhost, on a port of their own."
                      : "Setup runs once in each new task's worktree before the agent starts. " + (
-                    current.runsApp ? "Run opens the task's copy of the app when you click Run, with its own empty data, so tasks can run side by side."
+                    usesBuild(current) && showsTargetList(current) ? "Each target runs in the task's worktree when you click its button."
+                    : current.runsApp ? "Run opens the task's copy of the app when you click Run, with its own empty data, so tasks can run side by side."
                     : usesBuild(current) ? "Build runs in the task's worktree when you click Build; if the last line it prints is the path of a .app, Shift opens it."
                     : "The server runs in each task's worktree with PORT set; leave it empty if the project has no dev server."))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if usesBuild(current) && showsTargetList(current) {
+                ForEach(current.buildTargets) { targetSection($0, in: project) }
+                Section {
+                    Button("Add Target") { addTarget(to: project) }
+                } footer: {
+                    Text("Mac app and iOS Simulator targets print the path of their .app last, and Shift opens it. Run keeps running until you stop it. Script shows its log. The build button offers the target whose paths, such as App/, cover most of what a task changed. Commands get the target's name in SHIFT_TARGET.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
 
             if !usesBuild(current) {

@@ -34,6 +34,24 @@ public final class RemoteListener: @unchecked Sendable {
     /// (and may choose it for a build it hasn't launched yet).
     var portFile: URL { home.appendingPathComponent("remote-port") }
 
+    /// SHIFT_SERVER for a simulator build, pointing at the Mac build that keeps its data in `home`, which may not be
+    /// running yet: chooses its port and local token for it if it has none, as scripts/build.sh does.
+    /// nil if they can't be written.
+    static func localServer(home: URL, taskID: Int) -> String? {
+        let files = FileManager.default
+        let portFile = home.appendingPathComponent("remote-port"), tokenFile = home.appendingPathComponent("remote-dev-token")
+        func read(_ file: URL) -> String? {
+            (try? String(contentsOf: file, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+        }
+        try? files.createDirectory(at: home, withIntermediateDirectories: true)
+        if read(portFile) == nil { try? String(20000 + taskID % 20000).write(to: portFile, atomically: true, encoding: .utf8) }
+        if read(tokenFile) == nil {
+            files.createFile(atPath: tokenFile.path, contents: Data(RemoteAuth.newToken().utf8), attributes: [.posixPermissions: 0o600])
+        }
+        guard let port = read(portFile), let token = read(tokenFile) else { return nil }
+        return "http://127.0.0.1:\(port)?token=\(token)"
+    }
+
     /// Starts listening on the saved port, or else any free one, and saves it. nil if it could not listen at all.
     func start(_ handlers: Handlers) async -> Int? {
         let saved = (try? String(contentsOf: portFile, encoding: .utf8)).flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
@@ -243,4 +261,8 @@ final class RemoteConnection: Hashable, @unchecked Sendable {
 
     static func == (a: RemoteConnection, b: RemoteConnection) -> Bool { a === b }
     func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }

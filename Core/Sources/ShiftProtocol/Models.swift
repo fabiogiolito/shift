@@ -133,6 +133,85 @@ public enum ProjectType: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// One thing a project can build or run from a task's worktree, e.g. its Mac app or its iOS app.
+public struct BuildTarget: Codable, Identifiable, Hashable, Sendable {
+    /// Stored by name, so another case (say a physical iOS device) can join later.
+    public enum Kind: String, Codable, CaseIterable, Identifiable, Sendable {
+        /// Builds, then opens the .app it printed last, if it printed one.
+        case macApp
+        /// Builds, then runs the .app it printed last on a simulator.
+        case iOSSimulator
+        /// Keeps running while the app is open, so it is started and stopped, not awaited.
+        case run
+        /// Runs the command and shows its log.
+        case script
+
+        public var id: Self { self }
+        public var displayName: String {
+            switch self {
+            case .macApp: "Mac app"
+            case .iOSSimulator: "iOS Simulator"
+            case .run: "Run"
+            case .script: "Script"
+            }
+        }
+    }
+
+    public var id: UUID
+    public var name: String
+    /// Shell command run in the task's worktree, with `SHIFT_REPO`, `SHIFT_WORKTREE`, `SHIFT_TASK` and
+    /// `SHIFT_TARGET` in the environment.
+    public var command: String
+    public var kind: Kind
+    /// Path prefixes such as `App/`. The target whose paths match most of a task's changes is suggested for it.
+    public var paths: [String]
+
+    public init(id: UUID = UUID(), name: String, command: String, kind: Kind = .macApp, paths: [String] = []) {
+        self.id = id
+        self.name = name
+        self.command = command
+        self.kind = kind
+        self.paths = paths
+    }
+
+    /// Only the name and command are required, so the project chat's agent can write a target by hand.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try values.decode(String.self, forKey: .name)
+        command = try values.decode(String.self, forKey: .command)
+        kind = try values.decodeIfPresent(Kind.self, forKey: .kind) ?? .macApp
+        paths = try values.decodeIfPresent([String].self, forKey: .paths) ?? []
+    }
+
+    /// A native app with no command of its own: what to build is guessed from the task's files when it builds.
+    package static let detected = BuildTarget(id: UUID(uuidString: "5B1F7A52-0000-4000-8000-000000000000")!, name: "App", command: "")
+
+    package var hasCommand: Bool { !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// Whether `path`, relative to the repo, is covered by `paths`.
+    package func matches(path: String) -> Bool {
+        paths.contains { raw in
+            // With or without its slash: project.yml's sources can be single files too.
+            var prefix = raw.trimmingCharacters(in: .whitespaces)
+            if prefix.hasSuffix("/") { prefix.removeLast() }
+            guard !prefix.isEmpty else { return false }
+            return path == prefix || path.hasPrefix(prefix + "/")
+        }
+    }
+
+    /// The target whose paths match the most of `changed` (the first of them on a tie), else the last one
+    /// built, else the first.
+    package static func suggested(among targets: [BuildTarget], changed: [String], lastBuilt: BuildTarget.ID?) -> BuildTarget? {
+        var best: (target: BuildTarget, matches: Int)?
+        for target in targets {
+            let matches = changed.filter(target.matches(path:)).count
+            if matches > (best?.matches ?? 0) { best = (target, matches) }
+        }
+        return best?.target ?? targets.first { $0.id == lastBuilt } ?? targets.first
+    }
+}
+
 public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var name: String
@@ -147,11 +226,10 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// e.g. `pnpm install && cp "$SHIFT_REPO/.env" .`. Empty = nothing to prepare.
     /// Run with `SHIFT_REPO`, `SHIFT_WORKTREE` and `PORT` in the environment.
     public var setupCommand: String
-    /// Shell command that builds the app, for app projects (they have no dev server). Empty = a web project,
+    /// What builds or runs the app, for app projects (they have no dev server). Empty = a web project,
     /// except a native app, whose command is then guessed from the task's files when it builds.
-    /// If the last line of its output is the path of a `.app`, Shift opens it. Run with `SHIFT_REPO`,
-    /// `SHIFT_WORKTREE` and `SHIFT_TASK` in the environment.
-    public var buildCommand: String
+    /// Read `targets` for what can actually be built.
+    public var buildTargets: [BuildTarget]
     public var permissions: AgentPermissions
     /// The model each agent runs, by `AgentModel.id`. No entry: the agent's own default.
     public var models: [AgentKind: String]
@@ -164,7 +242,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
-                buildCommand: String = "", permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
+                buildTargets: [BuildTarget] = [], permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
                 pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false) {
         self.id = id
         self.name = name
@@ -174,7 +252,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.defaultAgent = defaultAgent
         self.serverCommand = serverCommand
         self.setupCommand = setupCommand
-        self.buildCommand = buildCommand
+        self.buildTargets = buildTargets
         self.permissions = permissions
         self.models = models
         self.pushTaskBranches = pushTaskBranches
@@ -192,33 +270,53 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         serverCommand = try values.decode(String.self, forKey: .serverCommand)
         // Absent in state saved before these existed.
         setupCommand = try values.decodeIfPresent(String.self, forKey: .setupCommand) ?? ""
-        buildCommand = try values.decodeIfPresent(String.self, forKey: .buildCommand) ?? ""
+        // State saved before there were targets has a single command.
+        let legacyCommand = try decoder.container(keyedBy: LegacyKeys.self)
+            .decodeIfPresent(String.self, forKey: .buildCommand) ?? ""
         permissions = try values.decodeIfPresent(AgentPermissions.self, forKey: .permissions) ?? .bypass
         models = try values.decodeIfPresent([AgentKind: String].self, forKey: .models) ?? [:]
         pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
         takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
-            ?? (!buildCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
+            ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
+        let migrated = BuildTarget(name: "App", command: legacyCommand, kind: type == .electronApp ? .run : .macApp)
+        buildTargets = try values.decodeIfPresent([BuildTarget].self, forKey: .buildTargets)
+            ?? (migrated.hasCommand ? [migrated] : [])
     }
+
+    private enum LegacyKeys: String, CodingKey { case buildCommand }
 
     public var repoURL: URL { URL(fileURLWithPath: repoPath) }
     /// An app is tested by building it, not on a dev server: its tasks get no server and no port.
-    public var isApp: Bool { type == .nativeApp || !buildCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    /// The app's `buildCommand` keeps running while the app is open, so it is started and stopped, not awaited.
-    public var runsApp: Bool { type == .electronApp }
+    public var isApp: Bool { type == .nativeApp || buildTargets.contains(where: \.hasCommand) }
+    /// Whether one of its targets keeps running while the app is open, or would once an Electron app has its command.
+    public var runsApp: Bool { type == .electronApp || targets.contains { $0.kind == .run } }
+    /// What a task can build or run. A native app without a command still has something to build:
+    /// whatever its worktree turns out to contain.
+    public var targets: [BuildTarget] {
+        let targets = buildTargets.filter(\.hasCommand)
+        return targets.isEmpty && type == .nativeApp ? [.detected] : targets
+    }
 
-    /// A build command guessed from the repo: its build script, else a Debug `xcodebuild` of its Xcode project
-    /// (generated first when it comes from XcodeGen) that prints the .app it built. Empty when there is nothing to guess.
-    /// ponytail: builds the project's default scheme, not a workspace; a CocoaPods app needs its own command.
-    public var defaultBuildCommand: String {
-        let files = FileManager.default
-        if files.isExecutableFile(atPath: repoURL.appendingPathComponent("scripts/build.sh").path) { return "scripts/build.sh" }
-        let xcodebuild = #"xcodebuild -configuration Debug SYMROOT="$PWD/build" -quiet && ls -d "$PWD"/build/Debug/*.app | head -1"#
-        if files.fileExists(atPath: repoURL.appendingPathComponent("project.yml").path) { return "xcodegen -q && " + xcodebuild }
-        let entries = (try? files.contentsOfDirectory(atPath: repoPath)) ?? []
-        return entries.contains { $0.hasSuffix(".xcodeproj") } ? xcodebuild : ""
+    /// The kind a target gets when all the user gave is a command.
+    public var defaultTargetKind: BuildTarget.Kind { type == .electronApp ? .run : .macApp }
+
+    /// The command of the first target: what editing a project with a single command reads and writes.
+    /// Writing to a project with no target creates one; emptying the only one removes it.
+    public var buildCommand: String {
+        get { buildTargets.first?.command ?? "" }
+        set {
+            let isBlank = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if buildTargets.isEmpty {
+                if !isBlank { buildTargets = [BuildTarget(name: "App", command: newValue, kind: defaultTargetKind)] }
+            } else if isBlank && buildTargets.count == 1 {
+                buildTargets = []
+            } else {
+                buildTargets[0].command = newValue
+            }
+        }
     }
 }
 
@@ -322,6 +420,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var chatID: ProjectChat.ID?
     /// Oldest first. Optional so state saved by earlier builds still decodes.
     public var screenshots: [TaskScreenshot]?
+    /// The target last built or run. Optional so state saved by earlier builds still decodes.
+    public var lastBuiltTargetID: BuildTarget.ID?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
                 agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,

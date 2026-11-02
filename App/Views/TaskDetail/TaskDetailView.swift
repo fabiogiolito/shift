@@ -26,6 +26,8 @@ struct TaskDetailView: View {
     /// Files a re-sync with the base conflicted in, while the user picks what to do.
     @State private var syncConflicts: [String] = []
     @State private var changes: Result<DiffSummary, Error>?
+    /// The target the build button offers, with several to choose from. nil until first checked.
+    @State private var suggestedTargetID: BuildTarget.ID?
     /// nil until first checked.
     @State private var server: ServerState?
     /// Whether the server button opens the tailnet link instead of localhost, when Tailscale is on.
@@ -104,10 +106,10 @@ struct TaskDetailView: View {
                 }
             }
             .sheet(item: $output) { output in
-                OutputSheet(title: output.rawValue) {
+                OutputSheet(title: output.title) {
                     switch output {
                     case .appLog: await model.serverLog(taskID: taskID)
-                    case .buildLog: model.buildLog(taskID: taskID)
+                    case .buildLog(let target, _): model.buildLog(taskID: taskID, target: target)
                     }
                 }
             }
@@ -252,10 +254,8 @@ struct TaskDetailView: View {
         if task.serverURL != nil || hasPrimary || canBuild {
             HStack {
                 primaryAction(task, project)
-                if canBuild && project.runsApp {
-                    runButton
-                } else if canBuild {
-                    buildButton
+                if canBuild {
+                    buildControls(task, project)
                 } else if let server = task.serverURL, let port = task.port {
                     let tailnet = model.tailnetHost.flatMap { URL(string: "https://\($0):\(port)") }
                     Group { serverButton(local: server, tailnet: tailnet, port: port) }
@@ -325,26 +325,28 @@ struct TaskDetailView: View {
         .help(help)
     }
 
-    /// Opens the task's copy of the app, or stops it. Says so when the app ends without being stopped: it may have
-    /// crashed on launch.
-    @ViewBuilder private var runButton: some View {
-        let running = server == .up
-        Button {
-            Task {
-                if running {
-                    await model.stopApp(taskID: taskID)
-                    server = nil
+    /// What builds or runs the app. One target gets a plain button; several get a split button that offers the one
+    /// the task's changes point to, and lists them all. Next to it: how each target's latest build went.
+    @ViewBuilder private func buildControls(_ task: TaskItem, _ project: Project) -> some View {
+        let targets = project.targets
+        let main = targets.first { $0.id == suggestedTargetID } ?? targets.first
+        let runs = targets.contains { $0.kind == .run }
+        Group {
+            if let main {
+                if targets.count > 1 {
+                    targetsButton(main, targets)
+                } else if main.kind == .run {
+                    runButton(main)
                 } else {
-                    await model.runApp(taskID: taskID)
-                    if await model.isServerRunning(taskID: taskID) { server = .up }
+                    buildButton(main)
                 }
             }
-        } label: {
-            Label(running ? "Stop" : "Run", systemImage: running ? "stop.fill" : "play.fill")
         }
-        .buttonStyle(.glass)
-        .help(running ? "Close this task's version of the app" : "Open this task's version of the app")
-        .task(id: taskID) {
+        .task(id: [AnyHashable(taskID), AnyHashable(task.status), AnyHashable(task.lastBuiltTargetID), AnyHashable(targets)]) {
+            suggestedTargetID = await model.suggestedTarget(taskID: taskID)?.id
+        }
+        .task(id: [AnyHashable(taskID), AnyHashable(runs)]) {
+            guard runs else { return }
             server = await model.isServerRunning(taskID: taskID) ? .up : nil
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -352,24 +354,119 @@ struct TaskDetailView: View {
                 if alive != (server == .up), server != nil || alive { server = alive ? .up : .stopped }
             }
         }
-        if server == .stopped {
+        // Says so when the app ends without being stopped: it may have crashed on launch.
+        if runs && server == .stopped {
             Text("Stopped").foregroundStyle(.secondary)
             Button("Log") { output = .appLog }.buttonStyle(.glass).controlSize(.small)
         }
-        if case .failed(let reason) = model.builds[taskID] {
-            Text(reason).foregroundStyle(.secondary).lineLimit(1)
+        ForEach(targets) { target in
+            buildStatus(target, isMain: target.id == main?.id, isOnly: targets.count == 1)
         }
     }
 
-    /// Builds the task's worktree and opens the app it built, replacing the one opened by the last build.
-    @ViewBuilder private var buildButton: some View {
-        let state = model.builds[taskID]
-        Button {
-            Task {
-                if let app = await model.build(taskID: taskID) {
-                    await apps.relaunch(app, environment: ["SHIFT_HOME": ShiftPaths.build(taskID: taskID).path])
+    /// A target's build in progress, unless its own button already says so, or why it failed.
+    @ViewBuilder private func buildStatus(_ target: BuildTarget, isMain: Bool, isOnly: Bool) -> some View {
+        let state = model.buildState(taskID: taskID, target: target.id)
+        if state == .building, !isMain {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Building \(target.name)…").foregroundStyle(.secondary)
+            }
+        }
+        if case .failed(let reason) = state {
+            Text(isOnly ? reason : "\(target.name): \(reason)").foregroundStyle(.secondary).lineLimit(1)
+            if target.kind != .run {
+                Button("Log") { output = logOutput(target) }.buttonStyle(.glass).controlSize(.small)
+            }
+        }
+    }
+
+    private func logOutput(_ target: BuildTarget) -> Output {
+        let several = (model.task(taskID)?.projectID).flatMap { model.project($0)?.targets.count }.map { $0 > 1 } ?? false
+        return .buildLog(target.id, title: several ? "Build Log: \(target.name)" : "Build Log")
+    }
+
+    private func isRunning(_ target: BuildTarget) -> Bool {
+        server == .up && model.runningTargets[taskID] == target.id
+    }
+
+    /// Builds the task's worktree and opens the app it built, replacing the one opened by the last build. An iOS
+    /// build is already on its simulator by the time this returns. A script's result is its log.
+    private func build(_ target: BuildTarget, showingLog: Bool = true) async {
+        if let app = await model.build(taskID: taskID, target: target.id) {
+            await apps.relaunch(app, environment: ["SHIFT_HOME": ShiftPaths.build(taskID: taskID).path])
+        }
+        if target.kind == .script && showingLog { output = logOutput(target) }
+    }
+
+    /// Opens the task's copy of the app, or stops it.
+    private func toggleRun(_ target: BuildTarget) async {
+        if isRunning(target) {
+            await model.stopApp(taskID: taskID)
+            server = nil
+        } else {
+            await model.runApp(taskID: taskID, target: target.id)
+            if await model.isServerRunning(taskID: taskID) { server = .up }
+        }
+    }
+
+    private func perform(_ target: BuildTarget) {
+        Task {
+            if target.kind == .run { await toggleRun(target) } else { await build(target) }
+        }
+    }
+
+    private func actionTitle(_ target: BuildTarget) -> String {
+        target.kind != .run ? "Build \(target.name)" : isRunning(target) ? "Stop \(target.name)" : "Run \(target.name)"
+    }
+
+    /// Several targets: the main action is the one the task's changes point to.
+    private func targetsButton(_ main: BuildTarget, _ targets: [BuildTarget]) -> some View {
+        let building = model.buildState(taskID: taskID, target: main.id) == .building
+        let buildable = targets.filter { $0.kind != .run }
+        return SplitButton {
+            perform(main)
+        } label: {
+            if building {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Building \(main.name)…")
+                }
+            } else {
+                Label(actionTitle(main), systemImage: main.kind != .run ? "hammer" : isRunning(main) ? "stop.fill" : "play.fill")
+            }
+        } menu: {
+            ForEach(targets) { target in
+                Button(actionTitle(target)) { perform(target) }
+                    .disabled(model.buildState(taskID: taskID, target: target.id) == .building)
+            }
+            Divider()
+            // One after the other: a repo's build script may regenerate the project the next build is reading.
+            Button("Build All") {
+                Task {
+                    for target in buildable { await build(target, showingLog: false) }
                 }
             }
+            .disabled(buildable.allSatisfy { model.buildState(taskID: taskID, target: $0.id) == .building })
+        }
+        .help(main.kind == .run ? "Open or close this task's version of \(main.name)" : "Build this task's version of \(main.name)")
+    }
+
+    @ViewBuilder private func runButton(_ target: BuildTarget) -> some View {
+        let running = isRunning(target)
+        Button {
+            perform(target)
+        } label: {
+            Label(running ? "Stop" : "Run", systemImage: running ? "stop.fill" : "play.fill")
+        }
+        .buttonStyle(.glass)
+        .help(running ? "Close this task's version of the app" : "Open this task's version of the app")
+    }
+
+    @ViewBuilder private func buildButton(_ target: BuildTarget) -> some View {
+        let state = model.buildState(taskID: taskID, target: target.id)
+        Button {
+            perform(target)
         } label: {
             Group {
                 if state == .building {
@@ -385,10 +482,6 @@ struct TaskDetailView: View {
         .buttonStyle(.glass)
         .disabled(state == .building)
         .help("Build this task's version of the app and open it")
-        if case .failed(let reason) = state {
-            Text(reason).foregroundStyle(.secondary).lineLimit(1)
-            Button("Log") { output = .buildLog }.buttonStyle(.glass).controlSize(.small)
-        }
     }
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
@@ -663,8 +756,18 @@ struct TaskDetailView: View {
                 .help(folderExists ? "" : "The task's folder is recreated the next time the agent runs.")
                 if project.runsApp {
                     Button("App Log") { output = .appLog }
-                } else if project.isApp {
-                    Button("Build Log") { output = .buildLog }
+                }
+                if project.isApp {
+                    let built = project.targets.filter { $0.kind != .run }
+                    if built.count > 1 {
+                        Menu("Build Log") {
+                            ForEach(built) { target in
+                                Button(target.name) { output = logOutput(target) }
+                            }
+                        }
+                    } else if let target = built.first {
+                        Button("Build Log") { output = logOutput(target) }
+                    }
                 }
                 if task.status == .working || task.approvalRequest != nil {
                     Button("Stop Task") { model.stop(taskID: taskID) }
@@ -737,9 +840,17 @@ private enum ServerState {
 }
 
 /// Debugging text, from the ••• menu.
-private enum Output: String, Identifiable {
-    case appLog = "App Log", buildLog = "Build Log"
+private enum Output: Hashable, Identifiable {
+    case appLog
+    case buildLog(BuildTarget.ID, title: String)
     var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .appLog: "App Log"
+        case .buildLog(_, let title): title
+        }
+    }
 }
 
 private struct OutputSheet: View {

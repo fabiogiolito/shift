@@ -75,8 +75,8 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     case loadDiff(taskID: Int)
     case restartServer(taskID: Int)
     case serverLog(taskID: Int)
-    case build(taskID: Int)
-    case buildLog(taskID: Int)
+    case build(taskID: Int, target: UUID)
+    case buildLog(taskID: Int, target: UUID)
     case sendChat(projectID: UUID, text: String, attachments: [String])
     case answerChatApproval(projectID: UUID, allow: Bool)
     case stopChat(projectID: UUID)
@@ -112,7 +112,7 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case chat(ProjectChat)
     case chatRemoved(UUID)
     case pullRequest(taskID: Int, PullRequest?)
-    case build(taskID: Int, BuildState?)
+    case build(BuildKey, BuildState?)
     case usage(AgentKind, AgentUsage?)
     case chatApproval(projectID: UUID, String?)
     case replyingChats(Set<UUID>)
@@ -128,7 +128,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
     public var tasks: [TaskItem] = []
     public var chats: [ProjectChat] = []
     public var pullRequests: [Int: PullRequest] = [:]
-    public var builds: [Int: BuildState] = [:]
+    public var builds: [BuildKey: BuildState] = [:]
     public var usage: [AgentKind: AgentUsage] = [:]
     /// What each project's chat agent is waiting to be allowed to do.
     public var chatApprovals: [UUID: String] = [:]
@@ -149,8 +149,8 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         for id in Set(pullRequests.keys).union(old.pullRequests.keys) where pullRequests[id] != old.pullRequests[id] {
             messages.append(.pullRequest(taskID: id, pullRequests[id]))
         }
-        for id in Set(builds.keys).union(old.builds.keys) where builds[id] != old.builds[id] {
-            messages.append(.build(taskID: id, builds[id]))
+        for key in Set(builds.keys).union(old.builds.keys) where builds[key] != old.builds[key] {
+            messages.append(.build(key, builds[key]))
         }
         for kind in Set(usage.keys).union(old.usage.keys) where usage[kind] != old.usage[kind] {
             messages.append(.usage(kind, usage[kind]))
@@ -174,7 +174,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
             if let index = chats.firstIndex(where: { $0.id == chat.id }) { chats[index] = chat } else { chats.append(chat) }
         case .chatRemoved(let id): chats.removeAll { $0.id == id }
         case .pullRequest(let id, let pullRequest): pullRequests[id] = pullRequest
-        case .build(let id, let build): builds[id] = build
+        case .build(let key, let build): builds[key] = build
         case .usage(let kind, let usage): self.usage[kind] = usage
         case .chatApproval(let id, let request): chatApprovals[id] = request
         case .replyingChats(let ids): replyingChats = ids

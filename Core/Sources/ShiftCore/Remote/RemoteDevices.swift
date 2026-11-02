@@ -42,12 +42,7 @@ final class RemoteAuth: @unchecked Sendable {
 
     /// Adds a device and returns the token to show it, once.
     func add() -> (device: RemoteDevice, token: String) {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
-            preconditionFailure("No secure random numbers")
-        }
-        let token = Data(bytes).base64EncodedString().replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        let token = Self.newToken()
         let device = RemoteDevice(id: UUID(), name: "New device", pairedAt: .now, tokenHash: Self.hash(token))
         lock.withLock {
             stored.append(device)
@@ -70,6 +65,15 @@ final class RemoteAuth: @unchecked Sendable {
             if let name, !name.isEmpty { stored[index].name = name }
             save()
         }
+    }
+
+    static func newToken() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+            preconditionFailure("No secure random numbers")
+        }
+        return Data(bytes).base64EncodedString().replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
     }
 
     /// The caller of a request with these (lowercased) headers. nil: refused.

@@ -82,7 +82,18 @@ public struct CommandResult: Equatable, Sendable {
     }
 }
 
-/// An app project's latest build of a task.
+/// A task's build of one of its project's targets.
+public struct BuildKey: Codable, Hashable, Sendable {
+    public var taskID: Int
+    public var targetID: UUID
+
+    public init(taskID: Int, targetID: UUID) {
+        self.taskID = taskID
+        self.targetID = targetID
+    }
+}
+
+/// An app project's latest build of a task's target.
 public enum BuildState: Codable, Equatable, Sendable {
     case building
     /// `app`: the .app it built, if the build command printed one.

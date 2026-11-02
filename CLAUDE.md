@@ -10,7 +10,7 @@ Shift is a native macOS app (SwiftUI) that runs coding tasks in parallel using i
 cd Core && swift test                          # all core tests
 cd Core && swift test --filter GitServiceTests # one test class
 scripts/build.sh                               # generates Shift.xcodeproj (xcodegen) and builds; prints the Mac .app path, last
-                                               # if iOS/ or Core/ changed against main, also builds the iOS app and launches it in the booted simulator
+                                               # if iOS/ or Core/ changed against main, also builds the iOS app and launches it in the booted simulator (not when run as the `Shift` build target: `ShiftMobile` has its own)
 scripts/build.sh --ios                         # the same, whatever changed
 open build/Build/Products/Debug/Shift.app
 scripts/build.sh --release build-release       # Release build (the only one that checks for updates)
@@ -22,7 +22,7 @@ Releasing, signing and the Sparkle key: `docs/RELEASING.md`.
 
 `Shift.xcodeproj` is generated from `project.yml` and is not checked in. New files under `App/` and `iOS/` are picked up on the next `scripts/build.sh`. To run on a real iPhone, open the project, set a team on the `ShiftMobile` target and run it from Xcode (regenerating the project clears the team).
 
-A simulator build talks to its own Mac build, with no pairing: `scripts/build.sh` launches it with `SIMCTL_CHILD_SHIFT_SERVER=http://127.0.0.1:<port>?token=<token>`, read in Debug builds as `SHIFT_SERVER`. The port and token are the files `remote-port` and `remote-dev-token` in that Mac build's `SHIFT_HOME`. The token only works straight over loopback.
+A simulator build talks to its own Mac build, with no pairing: `scripts/build.sh` launches it with `SIMCTL_CHILD_SHIFT_SERVER=http://127.0.0.1:<port>?token=<token>`, read in Debug builds as `SHIFT_SERVER`. An iOS Simulator build target gets the same variable from `AppModel`. The port and token are the files `remote-port` and `remote-dev-token` in that Mac build's `SHIFT_HOME`. The token only works straight over loopback.
 
 ## Layout
 
