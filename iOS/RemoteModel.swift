@@ -23,6 +23,8 @@ final class RemoteModel {
     /// A link opened from the Mac's QR code, until the user agrees to it.
     var proposedPairing: Pairing?
     var lastError: String?
+    /// Each project's icon, once asked for. nil inside: it has none.
+    private(set) var projectIcons: [UUID: UIImage?] = [:]
 
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var socket: URLSessionWebSocketTask?
@@ -172,9 +174,10 @@ final class RemoteModel {
 
     /// Sends the command and shows what went wrong, if anything.
     @discardableResult
-    private func perform(_ command: RemoteCommand) async -> RemoteResult? {
+    /// `quietly`: a failure isn't shown, for things the user didn't ask for.
+    private func perform(_ command: RemoteCommand, quietly: Bool = false) async -> RemoteResult? {
         guard link == .online else {
-            lastError = "Your Mac is offline."
+            if !quietly { lastError = "Your Mac is offline." }
             return nil
         }
         let id = nextID
@@ -183,7 +186,7 @@ final class RemoteModel {
             waiting[id] = continuation
             send(.command(CommandRequest(id: id, command: command)))
         }
-        if let error { lastError = error }
+        if let error, !quietly { lastError = error }
         return result
     }
 
@@ -260,6 +263,12 @@ final class RemoteModel {
             throw URLError(.badServerResponse)
         }
         return uploaded.path
+    }
+
+    /// Fetches the project's icon from the Mac, once. A Mac too old to send it leaves the folder.
+    func loadIcon(projectID: UUID) async {
+        guard projectIcons[projectID] == nil, case .data(let data)? = await perform(.projectIcon(projectID: projectID), quietly: true) else { return }
+        projectIcons[projectID] = data.flatMap { UIImage(data: $0, scale: 2) }
     }
 
     /// A task's screenshot, fetched from the Mac once. nil if it can't be had.

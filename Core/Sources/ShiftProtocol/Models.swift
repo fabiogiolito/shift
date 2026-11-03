@@ -320,6 +320,17 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+extension Project {
+    /// "No tasks", "2 tasks", "1 of 2 tasks running": the project's open tasks, given all of its tasks.
+    public static func summary(of tasks: [TaskItem]) -> String {
+        let open = tasks.filter { $0.status != .merged }
+        let running = open.filter { $0.status == .working }.count
+        let noun = open.count == 1 ? "task" : "tasks"
+        if open.isEmpty { return "No tasks" }
+        return running == 0 ? "\(open.count) \(noun)" : "\(running) of \(open.count) \(noun) running"
+    }
+}
+
 public struct Prompt: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var text: String

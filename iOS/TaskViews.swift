@@ -21,10 +21,29 @@ struct ProjectsView: View {
                             let waiting = tasks.filter(\.status.needsAttention).count
                             if waiting > 0 { Text(String(waiting)).monospacedDigit().foregroundStyle(.blue) }
                         } label: {
-                            Text(project.name)
-                            Text("\(tasks.filter { $0.status == .working }.count) working").foregroundStyle(.secondary)
+                            HStack(alignment: .firstLineCenter, spacing: 12) {
+                                Group {
+                                    if case let image?? = model.projectIcons[project.id] {
+                                        Image(uiImage: image).resizable().scaledToFit()
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                                            // The text's center sits above its x-height; this looks centered.
+                                            .offset(y: 2)
+                                    } else {
+                                        Image(systemName: "folder").foregroundStyle(.tint)
+                                    }
+                                }
+                                .frame(width: 28, height: 28)
+                                .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
+                                VStack(alignment: .leading) {
+                                    Text(project.name)
+                                        .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
+                                    Text(Project.summary(of: tasks)).font(.subheadline).foregroundStyle(.secondary)
+                                }
+                                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                            }
                         }
                     }
+                    .task(id: model.link) { await model.loadIcon(projectID: project.id) }
                 }
             }
         }
@@ -54,14 +73,18 @@ struct TaskListView: View {
         let active = tasks.filter { $0.status != .merged }, merged = tasks.filter { $0.status == .merged }
         let project = model.state.projects.first { $0.id == projectID }
         List {
-            if let project { ChatRow(project: project) }
-            ForEach(active) { TaskRow(task: $0) }
+            if let project { Section { ChatRow(project: project) } }
+            if !active.isEmpty {
+                Section { ForEach(active) { TaskRow(task: $0) } }
+            }
             if !merged.isEmpty {
                 Section("Merged") {
                     ForEach(merged) { TaskRow(task: $0) }
                 }
             }
         }
+        // Room between the large title and the first group.
+        .contentMargins(.top, 16, for: .scrollContent)
         .overlay {
             if tasks.isEmpty {
                 EmptyState(title: "No Tasks", systemImage: "tray", description: Text("Start one here or in Shift on your Mac.")) {
@@ -213,10 +236,13 @@ private struct TaskRow: View {
 
     var body: some View {
         NavigationLink(value: task.id) {
-            HStack(spacing: 12) {
+            HStack(alignment: .firstLineCenter, spacing: 12) {
                 StatusIcon(status: task.status, size: 18)
+                    .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                 VStack(alignment: .leading, spacing: 2) {
+                    // A title can wrap: center on its first line, a little above the baseline.
                     Text(task.title).lineLimit(2)
+                        .alignmentGuide(.firstLineCenter) { $0[.firstTextBaseline] - 6 }
                     Text(task.status == .working ? task.activity ?? task.status.label : task.status.label)
                         .font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                 }
@@ -911,4 +937,12 @@ private struct SafariView: UIViewControllerRepresentable {
     let url: URL
     func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
+}
+
+private extension VerticalAlignment {
+    /// The middle of a row's first line of text, for an icon beside a title and subtitle.
+    enum FirstLineCenter: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+    static let firstLineCenter = VerticalAlignment(FirstLineCenter.self)
 }

@@ -65,11 +65,7 @@ struct ProjectsSidebar: View {
     }
 
     private func subtitle(for project: Project) -> String {
-        let open = model.tasks(in: project.id).filter { $0.status != .merged }
-        let running = open.filter { $0.status == .working }.count
-        let noun = open.count == 1 ? "task" : "tasks"
-        if open.isEmpty { return "No tasks" }
-        return running == 0 ? "\(open.count) \(noun)" : "\(running) of \(open.count) \(noun) running"
+        Project.summary(of: model.tasks(in: project.id))
     }
 
     private func addProject() {
