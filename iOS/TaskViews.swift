@@ -453,32 +453,52 @@ private struct PromptBar: View {
     /// False if it didn't go through: what was written stays.
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
     @State private var text = ""
-    @FocusState private var isFocused: Bool
-    @State private var pictures: [PhotosPickerItem] = []
+    @State private var picked: [PhotosPickerItem] = []
+    @State private var images: [PromptImage] = []
+    @State private var viewing: PromptImage?
     @State private var isSending = false
 
     private static let controlSize: CGFloat = 30
 
-    private var canSend: Bool { (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pictures.isEmpty) && !isSending && model.link == .online }
+    private var canSend: Bool { (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty) && !isSending && model.link == .online }
 
     var body: some View {
-        // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
-        HStack(alignment: .bottom, spacing: 8) {
-            PhotosPicker(selection: $pictures, matching: .images) {
-                Image(systemName: pictures.isEmpty ? "photo" : "photo.badge.checkmark")
-                    .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
-                    .frame(width: Self.controlSize, height: Self.controlSize)
-                    .accessibilityLabel("Attach pictures")
+        VStack(alignment: .leading, spacing: 8) {
+            if !images.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(images) { image in
+                            Button { viewing = image } label: {
+                                Image(uiImage: image.image).resizable().scaledToFill()
+                                    .frame(width: 56, height: 56)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            .accessibilityLabel("Attached picture")
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .scrollIndicators(.hidden)
+                .padding(.top, 3)
             }
-            TextField(placeholder, text: $text, axis: .vertical)
-                .lineLimit(1...6)
-                .focused($isFocused)
+            // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
+            HStack(alignment: .bottom, spacing: 8) {
+                PhotosPicker(selection: $picked, matching: .images) {
+                    Image(systemName: "photo")
+                        .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
+                        .frame(width: Self.controlSize, height: Self.controlSize)
+                        .accessibilityLabel("Attach pictures")
+                }
+                PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
+                    images += pasted.map(PromptImage.init)
+                }
                 .padding(.vertical, 4)
-            Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
-                .labelStyle(.iconOnly)
-                .font(.system(size: Self.controlSize - 2))
-                .frame(width: Self.controlSize, height: Self.controlSize)
-                .disabled(!canSend)
+                Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: Self.controlSize - 2))
+                    .frame(width: Self.controlSize, height: Self.controlSize)
+                    .disabled(!canSend)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -486,31 +506,157 @@ private struct PromptBar: View {
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
         .padding(.horizontal, inset ? 16 : 0)
         .padding(.bottom, inset ? 8 : 0)
-        .onAppear { if focusesOnAppear { isFocused = true } }
+        .animation(.default, value: images)
+        .onChange(of: picked) {
+            guard !picked.isEmpty else { return }
+            let items = picked
+            picked = []
+            Task {
+                for item in items {
+                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                        images.append(PromptImage(image: image))
+                    }
+                }
+            }
+        }
+        .sheet(item: $viewing) { image in
+            PromptImageViewer(image: image.image) { images.removeAll { $0.id == image.id } }
+        }
     }
 
     private func send() {
         isSending = true
-        // Not `isFocused = false`: here it reads false with the field focused, and setting it does nothing.
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         Task {
             defer { isSending = false }
             do {
                 var paths: [String] = []
-                for picture in pictures {
+                for image in images {
                     // JPEG whatever the library holds: agents can't read HEIC.
-                    guard let data = try await picture.loadTransferable(type: Data.self),
-                          let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.8) else { continue }
+                    guard let jpeg = image.image.jpegData(compressionQuality: 0.8) else { continue }
                     paths.append(try await model.upload(jpeg, name: "photo.jpg"))
                 }
                 if await onSend(text, paths) {
                     text = ""
-                    pictures = []
+                    images = []
                 }
             } catch {
                 model.lastError = "Couldn't send the pictures to your Mac: \(error.localizedDescription)"
             }
         }
+    }
+}
+
+private struct PromptImage: Identifiable, Equatable {
+    let id = UUID()
+    let image: UIImage
+}
+
+/// A picture about to be sent, large. Swipe down or Close to go back.
+private struct PromptImageViewer: View {
+    let image: UIImage
+    let onRemove: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Image(uiImage: image).resizable().scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close", systemImage: "xmark") { dismiss() }
+                    }
+                    ToolbarItem(placement: .destructiveAction) {
+                        Button("Remove", systemImage: "trash", role: .destructive) {
+                            onRemove()
+                            dismiss()
+                        }
+                    }
+                }
+        }
+    }
+}
+
+/// A text field that also takes pasted pictures, which SwiftUI's doesn't. Grows to six lines, then scrolls.
+private struct PromptTextView: UIViewRepresentable {
+    let placeholder: String
+    @Binding var text: String
+    let focusesOnAppear: Bool
+    let onPasteImages: ([UIImage]) -> Void
+
+    final class TextView: UITextView {
+        var onPasteImages: ([UIImage]) -> Void = { _ in }
+        let placeholderLabel = UILabel()
+
+        override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+            if action == #selector(paste(_:)), UIPasteboard.general.hasImages { return true }
+            return super.canPerformAction(action, withSender: sender)
+        }
+
+        override func paste(_ sender: Any?) {
+            if UIPasteboard.general.hasImages, let images = UIPasteboard.general.images, !images.isEmpty {
+                onPasteImages(images)
+            } else {
+                super.paste(sender)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: PromptTextView
+        init(_ parent: PromptTextView) { self.parent = parent }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+            (textView as? TextView)?.placeholderLabel.isHidden = !textView.text.isEmpty
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> TextView {
+        let view = TextView()
+        view.delegate = context.coordinator
+        view.font = .preferredFont(forTextStyle: .body)
+        view.adjustsFontForContentSizeCategory = true
+        view.backgroundColor = .clear
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.isScrollEnabled = false
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let label = view.placeholderLabel
+        label.text = placeholder
+        label.font = view.font
+        label.adjustsFontForContentSizeCategory = true
+        label.textColor = .placeholderText
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: view.frameLayoutGuide.leadingAnchor),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: view.frameLayoutGuide.trailingAnchor),
+            label.topAnchor.constraint(equalTo: view.frameLayoutGuide.topAnchor),
+        ])
+        if focusesOnAppear { DispatchQueue.main.async { view.becomeFirstResponder() } }
+        return view
+    }
+
+    func updateUIView(_ view: TextView, context: Context) {
+        context.coordinator.parent = self
+        view.onPasteImages = onPasteImages
+        if view.text != text { view.text = text }
+        view.placeholderLabel.text = placeholder
+        view.placeholderLabel.isHidden = !text.isEmpty
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView view: TextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? 200
+        let lineHeight = view.font?.lineHeight ?? 20
+        let fitting = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let height = min(max(fitting, lineHeight), lineHeight * 6)
+        let scrolls = fitting > height + 1
+        if view.isScrollEnabled != scrolls { DispatchQueue.main.async { view.isScrollEnabled = scrolls } }
+        return CGSize(width: width, height: ceil(height))
     }
 }
 
