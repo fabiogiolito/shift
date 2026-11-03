@@ -242,7 +242,7 @@ struct TaskDetailView: View {
                     Text(task.title).font(.title2.bold())
                     if let about = task.summary ?? task.description { MarkdownText(text: about) }
                     TaskStatusView(task: task)
-                    if let changes, !changes.files.isEmpty { ChangesRow(changes: changes) }
+                    if let changes, !changes.files.isEmpty { ChangesRow(taskID: taskID, changes: changes) }
                     if let project = model.state.projects.first(where: { $0.id == task.projectID }) {
                         TaskActions(task: task, project: project)
                     }
@@ -490,16 +490,118 @@ private struct TaskActions: View {
 }
 
 private struct ChangesRow: View {
+    let taskID: Int
     let changes: DiffSummary
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text("\(changes.files.count) \(changes.files.count == 1 ? "file" : "files") changed").foregroundStyle(.secondary)
-            Text("+\(changes.additions)").foregroundStyle(.green)
-            Text("-\(changes.deletions)").foregroundStyle(.red)
+        NavigationLink {
+            ChangesView(taskID: taskID, changes: changes)
+        } label: {
+            HStack(spacing: 6) {
+                Text("\(changes.files.count) \(changes.files.count == 1 ? "file" : "files") changed").foregroundStyle(.secondary)
+                Text("+\(changes.additions)").foregroundStyle(.green)
+                Text("-\(changes.deletions)").foregroundStyle(.red)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .font(.subheadline)
+            .monospacedDigit()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The task's changed files, each opening its diff. The diff loads once for all of them.
+private struct ChangesView: View {
+    @Environment(RemoteModel.self) private var model
+    let taskID: Int
+    let changes: DiffSummary
+    @State private var diffs: [FileDiff]?
+
+    var body: some View {
+        List(changes.files) { file in
+            NavigationLink {
+                if let diff = diffs?.first(where: { $0.id == file.id }) {
+                    FileDiffView(diff: diff)
+                } else if diffs == nil {
+                    ProgressView()
+                } else {
+                    EmptyState("No Diff", systemImage: "doc", description: Text("Couldn't load this file's changes."))
+                }
+            } label: {
+                FileChangeRow(change: file)
+            }
+        }
+        .navigationTitle("\(changes.files.count) \(changes.files.count == 1 ? "File" : "Files") Changed")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { diffs = await model.diff(taskID: taskID) ?? [] }
+    }
+}
+
+private struct FileChangeRow: View {
+    let change: FileChange
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text((change.path as NSString).lastPathComponent).lineLimit(1)
+                let folder = (change.path as NSString).deletingLastPathComponent
+                if !folder.isEmpty {
+                    Text(folder).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                }
+            }
+            Spacer(minLength: 8)
+            if change.kind != .modified {
+                Text(change.kind.rawValue.capitalized).font(.caption).foregroundStyle(.secondary)
+            }
+            if change.isBinary {
+                Text("Binary").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("+\(change.additions)").foregroundStyle(.green)
+                Text("-\(change.deletions)").foregroundStyle(.red)
+            }
         }
         .font(.subheadline)
         .monospacedDigit()
+    }
+}
+
+/// One file's hunks, scrolling sideways for long lines.
+private struct FileDiffView: View {
+    let diff: FileDiff
+
+    var body: some View {
+        Group {
+            if diff.change.isBinary {
+                EmptyState("Binary File", systemImage: "doc", description: Text("No diff to show."))
+            } else if diff.hunks.isEmpty {
+                EmptyState("No Changes to Show", systemImage: "doc", description: Text(diff.change.kind.rawValue.capitalized))
+            } else {
+                ScrollView([.vertical, .horizontal]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
+                            Text(hunk.header)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(.secondarySystemBackground))
+                            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
+                                Text((line.kind == .added ? "+ " : line.kind == .removed ? "− " : "  ") + line.text)
+                                    .padding(.horizontal, 8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(line.kind == .added ? Color.green.opacity(0.15)
+                                                : line.kind == .removed ? Color.red.opacity(0.15) : Color.clear)
+                            }
+                        }
+                    }
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+        .navigationTitle((diff.change.path as NSString).lastPathComponent)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
