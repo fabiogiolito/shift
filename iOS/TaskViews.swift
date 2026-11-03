@@ -233,6 +233,7 @@ struct TaskDetailView: View {
     @State private var changes: DiffSummary?
     @State private var openPrompt: Prompt?
     @State private var scroll = ScrollPosition(edge: .top)
+    @State private var height: CGFloat = 0
 
     var body: some View {
         if let task = model.task(taskID) {
@@ -255,10 +256,15 @@ struct TaskDetailView: View {
             .onChange(of: task.prompts.count) { scroll.scrollTo(edge: .top) }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaBar(edge: .bottom) {
-                if task.status != .merged {
+                if ResponsePanel.shows(task) {
+                    ResponsePanel(task: task, maxHeight: height * 0.5)
+                        .id([task.question, task.blockedReason])
+                } else if task.status != .merged {
                     PromptBar { await model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
                 }
             }
+            // Measured outside the bottom bar, as on the Mac.
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 StatusIcon(status: task.status).accessibilityLabel(task.status.label)
@@ -308,10 +314,6 @@ private struct TaskStatusView: View {
             } else if task.status == .working {
                 Label { Text(task.activity ?? "Working…") } icon: { ProgressView() }
                     .foregroundStyle(.secondary)
-            } else if task.status == .needsInput, let question = task.question {
-                MarkdownText(text: question)
-            } else if task.status == .blocked, let reason = task.blockedReason {
-                Label(reason, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red)
             } else if task.status == .conflict {
                 Label("It doesn't merge cleanly into its base.", systemImage: "checkmark.circle.fill").foregroundStyle(.orange)
             } else if task.status == .merged, let project = model.state.projects.first(where: { $0.id == task.projectID }) {
@@ -320,11 +322,97 @@ private struct TaskStatusView: View {
             if task.canResume {
                 Button("Resume") { Task { await model.resume(taskID: task.id) } }.buttonStyle(.borderedProminent)
             }
-            if task.approvalRequest == nil, task.status == .needsInput || task.status == .blocked {
-                ForEach(task.options ?? [], id: \.self) { option in
-                    Button(option) { Task { await model.sendPrompt(taskID: task.id, text: option) } }.buttonStyle(.bordered)
+        }
+    }
+}
+
+/// The bottom bar of a task waiting on the user, in place of the prompt bar, as on the Mac:
+/// what the agent asks or couldn't do, its suggested replies to pick one of, and "Something else" to write one.
+private struct ResponsePanel: View {
+    @Environment(RemoteModel.self) private var model
+    let task: TaskItem
+    /// The tallest the panel gets before its content scrolls.
+    let maxHeight: CGFloat
+
+    /// Index into the options; `options.count` is "Something else". Nothing is chosen at first.
+    @State private var choice: Int?
+    @State private var isSending = false
+    @State private var contentHeight: CGFloat = 0
+
+    /// Approvals keep their Allow and Deny in the status, above.
+    static func shows(_ task: TaskItem) -> Bool {
+        task.approvalRequest == nil && (task.status == .blocked || (task.status == .needsInput && task.question != nil))
+    }
+
+    private var options: [String] { task.options ?? [] }
+    private var placeholder: String { task.status == .blocked ? "Give instructions…" : "Answer…" }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.status == .blocked ? "Couldn't continue" : "The agent needs a decision")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    MarkdownText(text: task.question ?? task.blockedReason ?? "")
+                }
+                if options.isEmpty {
+                    answerField
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(options.indices, id: \.self) { row($0, options[$0]) }
+                        row(options.count, "Something else")
+                    }
+                    if choice == options.count {
+                        answerField
+                    } else {
+                        Button(action: sendChoice) {
+                            Text(isSending ? "Sending…" : "Send").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .controlSize(.large)
+                        .disabled(choice == nil || isSending || model.link != .online)
+                    }
                 }
             }
+            .padding(16)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: maxHeight > 0 ? min(contentHeight, maxHeight) : contentHeight)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        // Blue or red like the task's status icon: the task is waiting on this.
+        .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(task.status.color, lineWidth: 1.5))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func row(_ index: Int, _ title: String) -> some View {
+        Button { choice = index } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: choice == index ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(choice == index ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                Text(title).foregroundStyle(.primary).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 8)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(choice == index ? .isSelected : [])
+    }
+
+    private var answerField: some View {
+        PromptBar(placeholder: placeholder, focusesOnAppear: !options.isEmpty, inset: false) {
+            await model.sendPrompt(taskID: task.id, text: $0, attachments: $1)
+        }
+    }
+
+    private func sendChoice() {
+        guard let choice, choice < options.count else { return }
+        isSending = true
+        Task {
+            if await model.sendPrompt(taskID: task.id, text: options[choice]) { self.choice = nil }
+            isSending = false
         }
     }
 }
@@ -333,6 +421,8 @@ private struct PromptBar: View {
     @Environment(RemoteModel.self) private var model
     var placeholder = "Ask for changes…"
     var focusesOnAppear = false
+    /// False inside the response panel: a plain fill, no glass or margins of its own.
+    var inset = true
     /// False if it didn't go through: what was written stays.
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
     @State private var text = ""
@@ -365,9 +455,12 @@ private struct PromptBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        .background {
+            if !inset { RoundedRectangle(cornerRadius: 22).fill(.fill.tertiary) }
+        }
+        .glassEffect(inset ? .regular.interactive() : .identity, in: .rect(cornerRadius: 22))
+        .padding(.horizontal, inset ? 16 : 0)
+        .padding(.bottom, inset ? 8 : 0)
         .onAppear { if focusesOnAppear { isFocused = true } }
     }
 
