@@ -243,6 +243,7 @@ struct TaskDetailView: View {
                     Text(task.title).font(.title2.bold())
                     if let about = task.summary ?? task.description { MarkdownText(text: about) }
                     TaskStatusView(task: task)
+                    if let shots = task.screenshots, !shots.isEmpty { ScreenshotsRow(shots: shots.reversed()) }
                     if let changes, !changes.files.isEmpty { ChangesRow(taskID: taskID, changes: changes) }
                     if let project = model.state.projects.first(where: { $0.id == task.projectID }) {
                         TaskActions(task: task, project: project)
@@ -667,6 +668,49 @@ private struct FileChangeRow: View {
     }
 }
 
+/// Most recent first, as on the Mac. A tap opens them full screen, to swipe through.
+private struct ScreenshotsRow: View {
+    let shots: [TaskScreenshot]
+    @State private var open: TaskScreenshot?
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(shots) { shot in
+                    Button { open = shot } label: {
+                        ScreenshotImage(shot: shot, fill: true)
+                            .frame(width: 120, height: 75, alignment: .top)
+                            .clipShape(.rect(cornerRadius: 8))
+                            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Screenshot of \(shot.page)")
+                }
+            }
+        }
+        .scrollIndicators(.never)
+        .fullScreenCover(item: $open) { ScreenshotViewer(shots: shots, selection: $0.id) }
+    }
+}
+
+private struct ScreenshotViewer: View {
+    let shots: [TaskScreenshot]
+    @State var selection: UUID
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            TabView(selection: $selection) {
+                ForEach(shots) { ScreenshotImage(shot: $0, fill: false).tag($0.id) }
+            }
+            .tabViewStyle(.page(indexDisplayMode: shots.count > 1 ? .automatic : .never))
+            .navigationTitle(shots.first { $0.id == selection }?.page ?? "")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Done", systemImage: "xmark") { dismiss() } }
+        }
+    }
+}
+
 /// One file's hunks, scrolling sideways for long lines.
 private struct FileDiffBody: View {
     let diff: FileDiff
@@ -704,6 +748,25 @@ private struct FileDiffBody: View {
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
+    }
+}
+
+private struct ScreenshotImage: View {
+    @Environment(RemoteModel.self) private var model
+    let shot: TaskScreenshot
+    let fill: Bool
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                let picture = Image(uiImage: image).resizable()
+                if fill { picture.scaledToFill() } else { picture.scaledToFit() }
+            } else {
+                Color(.secondarySystemBackground)
+            }
+        }
+        .task(id: shot.id) { image = await model.image(shot) }
     }
 }
 

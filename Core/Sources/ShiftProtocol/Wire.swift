@@ -11,6 +11,8 @@ public enum Wire {
     public static let socketPath = "/ws"
     /// POST an image's bytes here, `?name=photo.jpg`. The reply is `AttachmentUploaded`.
     public static let attachmentsPath = "/attachments"
+    /// GET a task's screenshot, `?name=` the last component of its `path`.
+    public static let screenshotsPath = "/screenshots"
     /// More than a WebSocket message may carry, for whoever reads them: a snapshot can be large.
     public static let maxMessage = 64 << 20
 

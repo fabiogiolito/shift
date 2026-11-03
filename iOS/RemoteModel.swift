@@ -29,6 +29,8 @@ final class RemoteModel {
     @ObservationIgnored private var nextID = 1
     @ObservationIgnored private var waiting: [Int: CheckedContinuation<(RemoteResult?, String?), Never>] = [:]
     @ObservationIgnored private var streams: [AgentLog: LogStream] = [:]
+    /// A screenshot never changes once taken.
+    @ObservationIgnored private var screenshots: [UUID: UIImage] = [:]
 
     init() {
         #if DEBUG
@@ -258,6 +260,19 @@ final class RemoteModel {
             throw URLError(.badServerResponse)
         }
         return uploaded.path
+    }
+
+    /// A task's screenshot, fetched from the Mac once. nil if it can't be had.
+    func image(_ shot: TaskScreenshot) async -> UIImage? {
+        if let image = screenshots[shot.id] { return image }
+        guard let pairing else { return nil }
+        let name = (shot.path as NSString).lastPathComponent
+        var request = URLRequest(url: pairing.url(path: Wire.screenshotsPath, query: [.init(name: "name", value: name)]))
+        request.setValue("Bearer \(pairing.token)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200, let image = UIImage(data: data) else { return nil }
+        screenshots[shot.id] = image
+        return image
     }
 
     // MARK: Queries
