@@ -229,7 +229,8 @@ final class RemoteServerTests: XCTestCase {
                          worktrees: temp.appendingPathComponent("worktrees"))
         await model.start()
         try localToken.write(to: temp.appendingPathComponent("remote-dev-token"), atomically: true, encoding: .utf8)
-        listener = RemoteListener(home: temp, attachments: temp.appendingPathComponent("attachments"))
+        listener = RemoteListener(home: temp, attachments: temp.appendingPathComponent("attachments"),
+                                  screenshots: temp.appendingPathComponent("screenshots"))
         server = RemoteServer(model: model, listener: listener)
         server.logPoll = .milliseconds(10)
         await server.start()
@@ -464,6 +465,27 @@ final class RemoteServerTests: XCTestCase {
             _ = try await again.next()
             XCTFail("Connected after being revoked")
         } catch {}
+    }
+
+    func testScreenshotIsServedOnlyFromItsFolder() async throws {
+        let folder = temp.appendingPathComponent("screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: folder.appendingPathComponent("7-a.png"))
+        try Data([4]).write(to: temp.appendingPathComponent("secret.png"))
+        func get(_ name: String, token: String? = "local") async throws -> (Int, Data) {
+            var components = URLComponents(string: "http://127.0.0.1:\(port)\(Wire.screenshotsPath)")!
+            components.queryItems = [.init(name: "name", value: name)]
+            var request = URLRequest(url: components.url!)
+            if token != nil { request.setValue("Bearer \(localToken)", forHTTPHeaderField: "Authorization") }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
+        }
+        let (ok, data) = try await get("7-a.png")
+        XCTAssertEqual(ok, 200)
+        XCTAssertEqual(data, Data([1, 2, 3]))
+        for name in ["../secret.png", "", "missing.png"] { let (status, _) = try await get(name); XCTAssertEqual(status, 404, name) }
+        let (refused, _) = try await get("7-a.png", token: nil)
+        XCTAssertEqual(refused, 401)
     }
 
     func testUpload() async throws {
