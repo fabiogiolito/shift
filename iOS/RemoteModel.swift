@@ -244,6 +244,11 @@ final class RemoteModel {
         return changes
     }
 
+    func diff(taskID: Int) async -> [FileDiff]? {
+        guard case .diff(let files)? = await perform(.loadDiff(taskID: taskID)) else { return nil }
+        return files
+    }
+
     /// Saves an image on the Mac. Its path there goes in a prompt's `attachments`.
     func upload(_ data: Data, name: String) async throws -> String {
         guard let pairing else { throw URLError(.notConnectedToInternet) }
