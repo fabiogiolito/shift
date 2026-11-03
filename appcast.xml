@@ -240,5 +240,16 @@
 - Chat's Working status and Stop button share a row above the prompt]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.2/Shift-0.2.2.zip" sparkle:edSignature="oqslc9C0FlfEGp6e3+q9Cn41hFiHPqxJvM0+BPPHgP5J0koF1Rc/TimAQ+R9Oe0pmhOsJTCcLczMudGRc18ECQ==" length="4505583" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.3</title>
+      <pubDate>Tue, 03 Nov 2026 09:55:06 +0000</pubDate>
+      <sparkle:version>19</sparkle:version>
+      <sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Dev servers that only listen on IPv6 localhost, like Astro, now load on the phone
+- Select text across paragraphs, headings and list items in the chat
+- A smaller folder icon in the project list]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.3/Shift-0.2.3.zip" sparkle:edSignature="SE9QXeXk76cFq/3P3XyAUMfMMeqz4dQAQHX98nfbS67Mlg657FB5OWbJ3C2MuxHfGrtKwqYShMiIIs5A6D2aAQ==" length="4512979" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
