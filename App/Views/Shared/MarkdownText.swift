@@ -10,7 +10,7 @@ struct MarkdownText: View {
         let groups = Self.group(MarkdownBlock.parse(text))
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(groups.enumerated()), id: \.offset) { group in
-                if let prose = group.element.prose { Text(prose) } else if let block = group.element.block { view(for: block) }
+                if let prose = group.element.prose { LinkedText(string: prose) } else if let block = group.element.block { view(for: block) }
             }
         }
         .textSelection(.enabled)
@@ -102,9 +102,50 @@ struct MarkdownText: View {
         }
     }
 
-    private func inline(_ text: String) -> Text { Text(Self.inline(text)) }
+    private func inline(_ text: String) -> LinkedText { LinkedText(string: Self.inline(text)) }
 
     private static func inline(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+    }
+}
+
+/// Text whose links show the pointing hand on hover, as they do in a browser.
+private struct LinkedText: View {
+    let string: AttributedString
+    @State private var links = LinkFrames.Box()
+    @State private var overLink = false
+
+    var body: some View {
+        #if os(macOS)
+        if string.runs[\.link].contains(where: { $0.0 != nil }) {
+            // Rebuilt from pieces so the renderer can tell which runs are links.
+            string.runs[\.link].reduce(Text("")) { text, run in
+                let piece = Text(AttributedString(string[run.1]))
+                return Text("\(text)\(run.0 == nil ? piece : piece.customAttribute(LinkRun()))")
+            }
+            .textRenderer(LinkFrames(box: links))
+            .onContinuousHover { phase in
+                if case .active(let point) = phase { overLink = links.rects.contains { $0.contains(point) } } else { overLink = false }
+            }
+            .pointerStyle(overLink ? .link : nil)
+        } else {
+            Text(string)
+        }
+        #else
+        Text(string) // No pointer to show on a phone.
+        #endif
+    }
+}
+
+private struct LinkRun: TextAttribute {}
+
+/// Draws text as usual, noting where its links ended up.
+private struct LinkFrames: TextRenderer {
+    final class Box { var rects: [CGRect] = [] }
+    let box: Box
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        box.rects = layout.flatMap { $0 }.filter { $0[LinkRun.self] != nil }.map(\.typographicBounds.rect)
+        for line in layout { context.draw(line) }
     }
 }
