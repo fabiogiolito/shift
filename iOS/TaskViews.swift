@@ -236,10 +236,13 @@ private struct TaskRow: View {
 
     var body: some View {
         NavigationLink(value: task.id) {
-            HStack(spacing: 12) {
+            HStack(alignment: .firstLineCenter, spacing: 12) {
                 StatusIcon(status: task.status, size: 18)
+                    .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                 VStack(alignment: .leading, spacing: 2) {
+                    // A title can wrap: center on its first line, a little above the baseline.
                     Text(task.title).lineLimit(2)
+                        .alignmentGuide(.firstLineCenter) { $0[.firstTextBaseline] - 6 }
                     Text(task.status == .working ? task.activity ?? task.status.label : task.status.label)
                         .font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                 }
