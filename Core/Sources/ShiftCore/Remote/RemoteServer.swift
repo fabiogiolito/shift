@@ -231,6 +231,9 @@ public final class RemoteServer {
         case .answerChatApproval(let id, let allow): model.answerChatApproval(projectID: id, allow: allow)
         case .stopChat(let id): model.stopChat(projectID: id)
         case .newChat(let id): await model.newChat(projectID: id)
+        case .projectIcon(let id):
+            guard let project = model.projects.first(where: { $0.id == id }) else { return .success(.data(nil)) }
+            return .success(.data(await ProjectIconFinder.png(in: URL(fileURLWithPath: project.repoPath))))
         case .baseServerURL(let id):
             let url = await model.baseServerURL(projectID: id)
             // ponytail: stays shared until Tailscale's serve config is reset; it only points at a port on this Mac,

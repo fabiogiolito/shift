@@ -21,10 +21,23 @@ struct ProjectsView: View {
                             let waiting = tasks.filter(\.status.needsAttention).count
                             if waiting > 0 { Text(String(waiting)).monospacedDigit().foregroundStyle(.blue) }
                         } label: {
-                            Text(project.name)
-                            Text("\(tasks.filter { $0.status == .working }.count) working").foregroundStyle(.secondary)
+                            Label {
+                                VStack(alignment: .leading) {
+                                    Text(project.name)
+                                    Text(Project.summary(of: tasks)).font(.subheadline).foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                if case let image?? = model.projectIcons[project.id] {
+                                    Image(uiImage: image).resizable().scaledToFit()
+                                        .frame(width: 28, height: 28)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                } else {
+                                    Image(systemName: "folder")
+                                }
+                            }
                         }
                     }
+                    .task(id: model.link) { await model.loadIcon(projectID: project.id) }
                 }
             }
         }

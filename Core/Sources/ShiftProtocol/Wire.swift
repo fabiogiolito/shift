@@ -86,6 +86,8 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     /// The branches a task in the project could merge into.
     case branches(projectID: UUID)
     case changeBase(taskID: Int, to: String)
+    /// The project's icon as a PNG, as the Mac's sidebar shows it. `.data(nil)` if it has none.
+    case projectIcon(projectID: UUID)
 }
 
 public enum RemoteResult: Codable, Equatable, Sendable {
@@ -96,6 +98,7 @@ public enum RemoteResult: Codable, Equatable, Sendable {
     case url(URL?)
     case changes(DiffSummary)
     case diff([FileDiff])
+    case data(Data?)
 }
 
 public struct AttachmentUploaded: Codable, Equatable, Sendable {
