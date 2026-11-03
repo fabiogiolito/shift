@@ -21,19 +21,23 @@ struct ProjectsView: View {
                             let waiting = tasks.filter(\.status.needsAttention).count
                             if waiting > 0 { Text(String(waiting)).monospacedDigit().foregroundStyle(.blue) }
                         } label: {
-                            Label {
+                            HStack(alignment: .firstLineCenter, spacing: 12) {
+                                Group {
+                                    if case let image?? = model.projectIcons[project.id] {
+                                        Image(uiImage: image).resizable().scaledToFit()
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    } else {
+                                        Image(systemName: "folder").foregroundStyle(.tint)
+                                    }
+                                }
+                                .frame(width: 28, height: 28)
+                                .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                                 VStack(alignment: .leading) {
                                     Text(project.name)
+                                        .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                                     Text(Project.summary(of: tasks)).font(.subheadline).foregroundStyle(.secondary)
                                 }
-                            } icon: {
-                                if case let image?? = model.projectIcons[project.id] {
-                                    Image(uiImage: image).resizable().scaledToFit()
-                                        .frame(width: 28, height: 28)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                } else {
-                                    Image(systemName: "folder")
-                                }
+                                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                             }
                         }
                     }
@@ -659,4 +663,12 @@ private struct SafariView: UIViewControllerRepresentable {
     let url: URL
     func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
+}
+
+private extension VerticalAlignment {
+    /// The middle of a row's first line of text, for an icon beside a title and subtitle.
+    enum FirstLineCenter: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+    static let firstLineCenter = VerticalAlignment(FirstLineCenter.self)
 }
