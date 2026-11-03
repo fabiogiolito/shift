@@ -18,7 +18,8 @@ struct ProjectIcon: View {
                 Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             } else {
-                Image(systemName: "folder")
+                // Smaller than the frame: an outline glyph filling 18pt reads heavier than a filled app icon.
+                Image(systemName: "folder").font(.system(size: 12))
             }
         }
         .frame(width: 18, height: 18)
