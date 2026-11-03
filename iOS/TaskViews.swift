@@ -45,6 +45,8 @@ struct ProjectsView: View {
                     }
                     .task(id: model.link) { await model.loadIcon(projectID: project.id) }
                 }
+                // Same room under the large title as the task list.
+                .contentMargins(.top, 16, for: .scrollContent)
             }
         }
         .navigationTitle("Projects")
