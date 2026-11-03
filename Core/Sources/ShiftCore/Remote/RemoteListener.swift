@@ -19,14 +19,17 @@ public final class RemoteListener: @unchecked Sendable {
     let auth: RemoteAuth
     private let home: URL
     private let attachments: URL
+    private let screenshots: URL
     private let queue = DispatchQueue(label: "shift.remote")
     private var listener: NWListener?
 
     public convenience init() { self.init(home: ShiftPaths.root) }
 
-    init(home: URL, attachments: URL = FileManager.default.temporaryDirectory.appendingPathComponent("shift-attachments")) {
+    init(home: URL, attachments: URL = FileManager.default.temporaryDirectory.appendingPathComponent("shift-attachments"),
+         screenshots: URL = ShiftPaths.screenshots) {
         self.home = home
         self.attachments = attachments
+        self.screenshots = screenshots
         auth = RemoteAuth(home: home)
     }
 
@@ -146,6 +149,14 @@ public final class RemoteListener: @unchecked Sendable {
                     return Self.respond(connection, status: "413 Content Too Large")
                 }
                 self.readBody(connection, rest, length: length) { self.saveAttachment($0, name: head.query["name"], connection) }
+            case ("GET", Wire.screenshotsPath):
+                // Only a file name: nothing from the client leads out of the folder.
+                let name = (head.query["name"] ?? "") as NSString
+                guard name.length > 0, name.lastPathComponent == name as String, !name.hasPrefix("."),
+                      let data = FileManager.default.contents(atPath: self.screenshots.appendingPathComponent(name as String).path) else {
+                    return Self.respond(connection, status: "404 Not Found")
+                }
+                Self.respond(connection, status: "200 OK", body: data, type: "image/png")
             default:
                 Self.respond(connection, status: "404 Not Found")
             }
@@ -174,8 +185,8 @@ public final class RemoteListener: @unchecked Sendable {
         }
     }
 
-    private static func respond(_ connection: NWConnection, status: String, body: Data = Data()) {
-        let head = "HTTP/1.1 \(status)\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+    private static func respond(_ connection: NWConnection, status: String, body: Data = Data(), type: String = "application/json") {
+        let head = "HTTP/1.1 \(status)\r\nContent-Type: \(type)\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in connection.cancel() })
     }
 
