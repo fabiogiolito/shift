@@ -422,7 +422,7 @@ private struct PromptBar: View {
     @Environment(RemoteModel.self) private var model
     var placeholder = "Ask for changes…"
     var focusesOnAppear = false
-    /// False inside the response panel: a plain fill, no glass or margins of its own.
+    /// False inside the response panel: no margins of its own.
     var inset = true
     /// False if it didn't go through: what was written stays.
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
@@ -456,10 +456,8 @@ private struct PromptBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background {
-            if !inset { RoundedRectangle(cornerRadius: 22).fill(.fill.tertiary) }
-        }
-        .glassEffect(inset ? .regular.interactive() : .identity, in: .rect(cornerRadius: 22))
+        // The same glass everywhere, so the answer field looks like the prompt bar.
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
         .padding(.horizontal, inset ? 16 : 0)
         .padding(.bottom, inset ? 8 : 0)
         .onAppear { if focusesOnAppear { isFocused = true } }
