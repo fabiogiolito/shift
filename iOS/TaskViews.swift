@@ -241,7 +241,7 @@ private struct TaskRow: View {
                     .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                 VStack(alignment: .leading, spacing: 2) {
                     // A title can wrap: center on its first line, a little above the baseline.
-                    Text(task.title).lineLimit(2)
+                    Text(task.title).lineLimit(2).lineHeight(.tight)
                         .alignmentGuide(.firstLineCenter) { $0[.firstTextBaseline] - 6 }
                     Text(task.status == .working ? task.activity ?? task.status.label : task.status.label)
                         .font(.footnote).foregroundStyle(.secondary).lineLimit(1)
