@@ -26,6 +26,8 @@ struct ProjectsView: View {
                                     if case let image?? = model.projectIcons[project.id] {
                                         Image(uiImage: image).resizable().scaledToFit()
                                             .clipShape(RoundedRectangle(cornerRadius: 6))
+                                            // Keeps white icons from fusing with the background.
+                                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5))
                                             // The text's center sits above its x-height; this looks centered.
                                             .offset(y: 2)
                                     } else {
