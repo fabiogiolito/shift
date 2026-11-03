@@ -73,14 +73,18 @@ struct TaskListView: View {
         let active = tasks.filter { $0.status != .merged }, merged = tasks.filter { $0.status == .merged }
         let project = model.state.projects.first { $0.id == projectID }
         List {
-            if let project { ChatRow(project: project) }
-            ForEach(active) { TaskRow(task: $0) }
+            if let project { Section { ChatRow(project: project) } }
+            if !active.isEmpty {
+                Section { ForEach(active) { TaskRow(task: $0) } }
+            }
             if !merged.isEmpty {
                 Section("Merged") {
                     ForEach(merged) { TaskRow(task: $0) }
                 }
             }
         }
+        // Room between the large title and the first group.
+        .contentMargins(.top, 16, for: .scrollContent)
         .overlay {
             if tasks.isEmpty {
                 EmptyState(title: "No Tasks", systemImage: "tray", description: Text("Start one here or in Shift on your Mac.")) {
