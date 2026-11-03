@@ -9,6 +9,11 @@ options:
     icon:
       file: true
       buildPhase: resources
+# Both apps ship the same version and build number. scripts/release.sh bumps them.
+settings:
+  base:
+    MARKETING_VERSION: "0.2.3"
+    CURRENT_PROJECT_VERSION: "19"
 packages:
   ShiftCore:
     path: Core
@@ -45,8 +50,6 @@ targets:
         ENABLE_HARDENED_RUNTIME: NO
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
-        MARKETING_VERSION: "0.2.3"
-        CURRENT_PROJECT_VERSION: "19"
         # scripts/release.sh overrides it only to test against a local feed.
         SHIFT_FEED_URL: https://raw.githubusercontent.com/fabiogiolito/shift/main/appcast.xml
       configs:
@@ -79,6 +82,10 @@ targets:
         CFBundleDisplayName: $(SHIFT_DISPLAY_NAME)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        # App Store Connect rejects an iPad-capable build without all four.
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        # Only HTTPS and system crypto, which is exempt; saves answering Missing Compliance on every build.
+        ITSAppUsesNonExemptEncryption: false
         # What the Mac's QR code opens.
         CFBundleURLTypes:
           - CFBundleURLName: com.fabiogiolito.shift.pairing
@@ -93,9 +100,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
-        # Not quoted on purpose: scripts/release.sh bumps the Mac app's, the quoted ones.
-        MARKETING_VERSION: 0.1
-        CURRENT_PROJECT_VERSION: 1
+        # Signs the TestFlight upload. Here, so regenerating the project keeps it.
+        DEVELOPMENT_TEAM: S9XPG3G4NU
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.fabiogiolito.shift.mobile.dev

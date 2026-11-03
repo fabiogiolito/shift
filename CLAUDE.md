@@ -14,13 +14,14 @@ scripts/build.sh                               # generates Shift.xcodeproj (xcod
 scripts/build.sh --ios                         # the same, whatever changed
 open build/Build/Products/Debug/Shift.app
 scripts/build.sh --release build-release       # Release build (the only one that checks for updates)
-scripts/release.sh --publish                   # on main, clean tree: next patch version, AI-written notes, build, sign, notarize, publish
+scripts/release.sh --publish                   # on main, clean tree: next patch version, AI-written notes, build, sign, notarize, publish,
+                                               # and upload the iPhone app to TestFlight with the same version and build
 scripts/release.sh 0.2.0 notes.md              # explicit version and notes; without --publish, stops before going online
 ```
 
 Releasing, signing and the Sparkle key: `docs/RELEASING.md`.
 
-`Shift.xcodeproj` is generated from `project.yml` and is not checked in. New files under `App/` and `iOS/` are picked up on the next `scripts/build.sh`. To run on a real iPhone, open the project, set a team on the `ShiftMobile` target and run it from Xcode (regenerating the project clears the team).
+`Shift.xcodeproj` is generated from `project.yml` and is not checked in. New files under `App/` and `iOS/` are picked up on the next `scripts/build.sh`. To run on a real iPhone, open the project and run the `ShiftMobile` target from Xcode (its team is set in `project.yml`).
 
 A simulator build talks to its own Mac build, with no pairing: `scripts/build.sh` launches it with `SIMCTL_CHILD_SHIFT_SERVER=http://127.0.0.1:<port>?token=<token>`, read in Debug builds as `SHIFT_SERVER`. An iOS Simulator build target gets the same variable from `AppModel`. The port and token are the files `remote-port` and `remote-dev-token` in that Mac build's `SHIFT_HOME`. The token only works straight over loopback.
 

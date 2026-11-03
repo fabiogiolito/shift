@@ -1,10 +1,12 @@
 #!/bin/sh
-# Builds, signs and packages a Shift release and adds it to appcast.xml. See docs/RELEASING.md.
+# Builds, signs and packages a Shift release and adds it to appcast.xml, and archives the iPhone app for TestFlight
+# with the same version and build. See docs/RELEASING.md.
 # Usage: scripts/release.sh [version] [release-notes.md|.html] [--publish]
 # Without a version, the patch number after the last release tag (0.1.1 -> 0.1.2).
 # Without notes, scripts/release-notes.sh writes them from the commits since the last release.
-# Without --publish nothing touches the network (except notarization when NOTARY_PROFILE is set);
-# the publish commands are printed instead.
+# Without --publish nothing touches the network (except notarization when NOTARY_PROFILE is set, and Xcode
+# fetching signing profiles for the iPhone archive); the publish commands are printed instead.
+# --publish also uploads the iPhone app to TestFlight, with the Apple ID signed in to Xcode.
 # Env: DEVELOPER_ID   "Developer ID Application: …" signs with it (hardened runtime); ad-hoc otherwise.
 #                     Defaults to the Developer ID Application certificate in the keychain, if there is one.
 #      NOTARY_PROFILE notarytool keychain profile; notarizes and staples when set. Defaults to
@@ -77,6 +79,22 @@ if [ -n "$NOTARY_PROFILE" ]; then
   xcrun stapler staple dist/Shift.app
 fi
 
+# The iPhone app, archived now so a signing failure stops the release before anything is committed.
+rm -rf dist/ShiftMobile.xcarchive
+xcodebuild -project Shift.xcodeproj -scheme ShiftMobile -configuration Release -destination generic/platform=iOS \
+  -archivePath dist/ShiftMobile.xcarchive -allowProvisioningUpdates -quiet archive >&2
+cat > dist/ExportOptions.plist <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>destination</key><string>upload</string>
+  <key>signingStyle</key><string>automatic</string>
+</dict>
+</plist>
+EOF
+
 ZIP=dist/Shift-$VERSION.zip
 rm -f "$ZIP"
 ditto -c -k --keepParent dist/Shift.app "$ZIP"
@@ -121,9 +139,10 @@ CMDS="git tag v$VERSION
 git push origin main v$VERSION
 gh release create v$VERSION $ZIP --title 'Shift $VERSION' $NOTES_ARG
 git add appcast.xml && git commit -m 'Appcast: $VERSION'
-git push origin main"
+git push origin main
+xcodebuild -exportArchive -archivePath dist/ShiftMobile.xcarchive -exportOptionsPlist dist/ExportOptions.plist -exportPath dist/testflight -allowProvisioningUpdates"
 
-echo "Built $ZIP (build $BUILD, signed ${DEVELOPER_ID:-ad-hoc}${NOTARY_PROFILE:+, notarized}); appcast.xml updated."
+echo "Built $ZIP (build $BUILD, signed ${DEVELOPER_ID:-ad-hoc}${NOTARY_PROFILE:+, notarized}) and dist/ShiftMobile.xcarchive; appcast.xml updated."
 if [ "$PUBLISH" = 1 ]; then
   echo "$CMDS" | sh -ex
 else
