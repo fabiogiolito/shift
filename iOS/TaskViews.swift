@@ -242,7 +242,7 @@ struct TaskDetailView: View {
                     Text(task.title).font(.title2.bold())
                     if let about = task.summary ?? task.description { MarkdownText(text: about) }
                     TaskStatusView(task: task)
-                    if let changes, !changes.files.isEmpty { ChangesRow(changes: changes) }
+                    if let changes, !changes.files.isEmpty { ChangesRow(taskID: taskID, changes: changes) }
                     if let project = model.state.projects.first(where: { $0.id == task.projectID }) {
                         TaskActions(task: task, project: project)
                     }
@@ -490,16 +490,127 @@ private struct TaskActions: View {
 }
 
 private struct ChangesRow: View {
+    let taskID: Int
     let changes: DiffSummary
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text("\(changes.files.count) \(changes.files.count == 1 ? "file" : "files") changed").foregroundStyle(.secondary)
-            Text("+\(changes.additions)").foregroundStyle(.green)
-            Text("-\(changes.deletions)").foregroundStyle(.red)
+        NavigationLink {
+            ChangesView(taskID: taskID, changes: changes)
+        } label: {
+            HStack(spacing: 6) {
+                Text("\(changes.files.count) \(changes.files.count == 1 ? "file" : "files") changed").foregroundStyle(.secondary)
+                Text("+\(changes.additions)").foregroundStyle(.green)
+                Text("-\(changes.deletions)").foregroundStyle(.red)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .font(.subheadline)
+            .monospacedDigit()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Every changed file's diff on one page, each under a heading with its stats.
+private struct ChangesView: View {
+    @Environment(RemoteModel.self) private var model
+    let taskID: Int
+    let changes: DiffSummary
+    @State private var diffs: [FileDiff]?
+
+    var body: some View {
+        Group {
+            if let diffs, !diffs.isEmpty {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+                        ForEach(diffs) { diff in
+                            Section {
+                                FileDiffBody(diff: diff).padding(.bottom, 16)
+                            } header: {
+                                FileChangeRow(change: diff.change)
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 10)
+                                    .background(.bar)
+                            }
+                        }
+                    }
+                }
+            } else if diffs == nil {
+                ProgressView()
+            } else {
+                EmptyState("No Diff", systemImage: "doc", description: Text("Couldn't load the changes."))
+            }
+        }
+        .navigationTitle("\(changes.files.count) \(changes.files.count == 1 ? "File" : "Files") Changed")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { diffs = await model.diff(taskID: taskID) ?? [] }
+    }
+}
+
+private struct FileChangeRow: View {
+    let change: FileChange
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text((change.path as NSString).lastPathComponent).fontWeight(.semibold).lineLimit(1)
+                let folder = (change.path as NSString).deletingLastPathComponent
+                if !folder.isEmpty {
+                    Text(folder).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                }
+            }
+            Spacer(minLength: 8)
+            if change.kind != .modified {
+                Text(change.kind.rawValue.capitalized).font(.caption).foregroundStyle(.secondary)
+            }
+            if change.isBinary {
+                Text("Binary").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("+\(change.additions)").foregroundStyle(.green)
+                Text("-\(change.deletions)").foregroundStyle(.red)
+            }
         }
         .font(.subheadline)
         .monospacedDigit()
+    }
+}
+
+/// One file's hunks, scrolling sideways for long lines.
+private struct FileDiffBody: View {
+    let diff: FileDiff
+    /// So short lines still color the full width.
+    @State private var width: CGFloat = 0
+
+    var body: some View {
+        if diff.change.isBinary || diff.hunks.isEmpty {
+            Text(diff.change.isBinary ? "Binary file, no diff to show." : "No changes to show.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding()
+        } else {
+            ScrollView(.horizontal) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
+                        Text(hunk.header)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .frame(minWidth: width, maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemBackground))
+                        ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
+                            Text((line.kind == .added ? "+ " : line.kind == .removed ? "− " : "  ") + line.text)
+                                .padding(.horizontal, 8)
+                                .frame(minWidth: width, maxWidth: .infinity, alignment: .leading)
+                                .background(line.kind == .added ? Color.green.opacity(0.15)
+                                            : line.kind == .removed ? Color.red.opacity(0.15) : Color.clear)
+                        }
+                    }
+                }
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        }
     }
 }
 
