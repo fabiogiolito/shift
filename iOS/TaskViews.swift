@@ -510,7 +510,7 @@ private struct ChangesRow: View {
     }
 }
 
-/// The task's changed files, each opening its diff. The diff loads once for all of them.
+/// Every changed file's diff on one page, each under a heading with its stats.
 private struct ChangesView: View {
     @Environment(RemoteModel.self) private var model
     let taskID: Int
@@ -518,17 +518,26 @@ private struct ChangesView: View {
     @State private var diffs: [FileDiff]?
 
     var body: some View {
-        List(changes.files) { file in
-            NavigationLink {
-                if let diff = diffs?.first(where: { $0.id == file.id }) {
-                    FileDiffView(diff: diff)
-                } else if diffs == nil {
-                    ProgressView()
-                } else {
-                    EmptyState("No Diff", systemImage: "doc", description: Text("Couldn't load this file's changes."))
+        Group {
+            if let diffs, !diffs.isEmpty {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+                        ForEach(diffs) { diff in
+                            Section {
+                                FileDiffBody(diff: diff).padding(.bottom, 16)
+                            } header: {
+                                FileChangeRow(change: diff.change)
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 10)
+                                    .background(.bar)
+                            }
+                        }
+                    }
                 }
-            } label: {
-                FileChangeRow(change: file)
+            } else if diffs == nil {
+                ProgressView()
+            } else {
+                EmptyState("No Diff", systemImage: "doc", description: Text("Couldn't load the changes."))
             }
         }
         .navigationTitle("\(changes.files.count) \(changes.files.count == 1 ? "File" : "Files") Changed")
@@ -543,7 +552,7 @@ private struct FileChangeRow: View {
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text((change.path as NSString).lastPathComponent).lineLimit(1)
+                Text((change.path as NSString).lastPathComponent).fontWeight(.semibold).lineLimit(1)
                 let folder = (change.path as NSString).deletingLastPathComponent
                 if !folder.isEmpty {
                     Text(folder).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
@@ -566,42 +575,42 @@ private struct FileChangeRow: View {
 }
 
 /// One file's hunks, scrolling sideways for long lines.
-private struct FileDiffView: View {
+private struct FileDiffBody: View {
     let diff: FileDiff
+    /// So short lines still color the full width.
+    @State private var width: CGFloat = 0
 
     var body: some View {
-        Group {
-            if diff.change.isBinary {
-                EmptyState("Binary File", systemImage: "doc", description: Text("No diff to show."))
-            } else if diff.hunks.isEmpty {
-                EmptyState("No Changes to Show", systemImage: "doc", description: Text(diff.change.kind.rawValue.capitalized))
-            } else {
-                ScrollView([.vertical, .horizontal]) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
-                            Text(hunk.header)
-                                .foregroundStyle(.secondary)
+        if diff.change.isBinary || diff.hunks.isEmpty {
+            Text(diff.change.isBinary ? "Binary file, no diff to show." : "No changes to show.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding()
+        } else {
+            ScrollView(.horizontal) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(diff.hunks.enumerated()), id: \.offset) { _, hunk in
+                        Text(hunk.header)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .frame(minWidth: width, maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemBackground))
+                        ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
+                            Text((line.kind == .added ? "+ " : line.kind == .removed ? "− " : "  ") + line.text)
                                 .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(.secondarySystemBackground))
-                            ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
-                                Text((line.kind == .added ? "+ " : line.kind == .removed ? "− " : "  ") + line.text)
-                                    .padding(.horizontal, 8)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(line.kind == .added ? Color.green.opacity(0.15)
-                                                : line.kind == .removed ? Color.red.opacity(0.15) : Color.clear)
-                            }
+                                .frame(minWidth: width, maxWidth: .infinity, alignment: .leading)
+                                .background(line.kind == .added ? Color.green.opacity(0.15)
+                                            : line.kind == .removed ? Color.red.opacity(0.15) : Color.clear)
                         }
                     }
-                    .font(.caption.monospaced())
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: true, vertical: false)
                 }
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+                .fixedSize(horizontal: true, vertical: false)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
-        .navigationTitle((diff.change.path as NSString).lastPathComponent)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
