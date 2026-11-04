@@ -243,8 +243,6 @@ struct TaskDetailView: View {
                     Group { serverButton(local: server, tailnet: tailnet, port: port) }
                     .task(id: task.port) {
                         while !Task.isCancelled {
-                            // Starts it if Shift left it off, and keeps it from being stopped while the task is open.
-                            await model.usingServer(taskID: taskID)
                             let alive = await model.isServerRunning(taskID: taskID)
                             let answers = alive ? await model.isServerAnswering(taskID: taskID) : false
                             // Once up, a server that stops answering has crashed inside a process that stayed alive.
@@ -256,10 +254,10 @@ struct TaskDetailView: View {
                     }
                     // The port may still come up, so the button stays.
                     if let state = self.server, state != .up {
-                        Text(state.label).foregroundStyle(state == .starting ? .secondary : state.color)
+                        Text(state.label).foregroundStyle(state == .notResponding ? state.color : .secondary)
                         if state != .starting {
                             Button("Log") { openWindow(id: "server-log", value: taskID) }.buttonStyle(.glass).controlSize(.small)
-                            Button("Restart") {
+                            Button(state == .stopped ? "Start" : "Restart") {
                                 self.server = .starting
                                 Task { await model.restartServer(taskID: taskID) }
                             }
@@ -287,7 +285,7 @@ struct TaskDetailView: View {
             Text(opened == tailnet ? "Tailscale" : "localhost:\(String(port))")
             Image(systemName: "arrow.up.right").imageScale(.small)
         }
-        return SplitButton { apps.openInBrowser(opened) } label: { label } menu: {
+        return SplitButton { open(opened) } label: { label } menu: {
             if let tailnet {
                 // A toggle for its checkmark. It fires on the chosen one too, which opens it again.
                 Toggle("Localhost", isOn: Binding(get: { !opensTailnet }, set: { _ in
@@ -307,6 +305,21 @@ struct TaskDetailView: View {
             Button("Server Log") { openWindow(id: "server-log", value: taskID) }
         }
         .help(help)
+    }
+
+    /// Opens the server in the browser, starting it first if it was stopped (idle for its project's TTL, or crashed).
+    private func open(_ url: URL) {
+        guard server == .stopped else { return apps.openInBrowser(url) }
+        server = .starting
+        Task {
+            await model.restartServer(taskID: taskID)
+            // Up to 30 seconds for it to answer; given up on if it exits.
+            for _ in 0..<30 {
+                if await model.isServerAnswering(taskID: taskID) { return apps.openInBrowser(url) }
+                guard await model.isServerRunning(taskID: taskID) else { return }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     /// What builds or runs the app. One target gets a plain button; several get a split button that offers the one
@@ -825,9 +838,10 @@ private enum ServerState {
 
     var color: Color {
         switch self {
-        case .starting: .orange
+        case .starting: .yellow
         case .up: .green
-        case .notResponding, .stopped: .red
+        case .notResponding: .red
+        case .stopped: .gray
         }
     }
 }

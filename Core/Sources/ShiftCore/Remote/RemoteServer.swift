@@ -25,11 +25,6 @@ public final class RemoteServer {
     @ObservationIgnored let keepAwake = KeepAwake()
     @ObservationIgnored private var tailnetShared = false
 
-    /// Tasks a phone has open.
-    var watchedTasks: Set<Int> {
-        Set(pumps.values.flatMap(\.keys).compactMap { if case .task(let id) = $0 { id } else { nil } })
-    }
-
     init(model: AppModel, listener: RemoteListener) {
         self.model = model
         self.listener = listener
@@ -173,7 +168,6 @@ public final class RemoteServer {
                 connection.post(.reply(id: request.id, result: result, error: error))
             }
         case .subscribe(let log, let offset):
-            if case .task(let id) = log { Task { await model?.usingServer(taskID: id) } }
             pumps[connection]?[log]?.cancel()
             pumps[connection, default: [:]][log] = Task { @MainActor [weak self] in await self?.pump(log, from: offset, to: connection) }
         case .unsubscribe(let log):
