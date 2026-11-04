@@ -168,6 +168,13 @@ public struct GitService: GitServicing {
         return Self.parse(nameStatus: status, patch: patch)
     }
 
+    public func baseContents(worktree: URL, base: String, path: String) async throws -> Data {
+        let mergeBase = try await git(["merge-base", base, "HEAD"], in: worktree)
+        let out = try await run(["show", "--no-textconv", "\(mergeBase):\(path)"], in: worktree)
+        guard out.status == 0 else { throw GitError(message: out.stderr.isEmpty ? "git show failed (\(out.status))" : out.stderr) }
+        return out.data
+    }
+
     /// `nameStatus` is `git diff --name-status -z`, `patch` is `git diff --patch` of the same diff.
     /// Paths come from the -z output (never quoted); the patch sections are in the same order.
     static func parse(nameStatus: String, patch: String) -> [FileDiff] {
@@ -524,7 +531,10 @@ public struct GitService: GitServicing {
 
     // MARK: - Process
 
-    private struct Output { var status: Int32; var stdout: String; var stderr: String }
+    private struct Output {
+        var status: Int32; var data: Data; var stderr: String
+        var stdout: String { String(decoding: data, as: UTF8.self) }
+    }
 
     /// Runs git and throws git's stderr on a non-zero exit. Returns trimmed stdout.
     @discardableResult
@@ -563,7 +573,7 @@ public struct GitService: GitServicing {
                 process.waitUntilExit()
                 continuation.resume(returning: Output(
                     status: process.terminationStatus,
-                    stdout: String(decoding: outData, as: UTF8.self),
+                    data: outData,
                     stderr: String(decoding: errData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)))
             }
         }

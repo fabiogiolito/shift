@@ -34,6 +34,8 @@ public protocol GitServicing: Sendable {
     /// Everything the task changed relative to the merge base with `base`, including uncommitted work.
     func changes(worktree: URL, base: String) async throws -> DiffSummary
     func diff(worktree: URL, base: String) async throws -> [FileDiff]
+    /// The contents of `path` at the merge base with `base`: the "before" side of the diff.
+    func baseContents(worktree: URL, base: String, path: String) async throws -> Data
 
     /// True if `branch` would merge into `base` without conflicts. Must not touch any working tree.
     func canMergeCleanly(repo: URL, branch: String, base: String) async throws -> Bool

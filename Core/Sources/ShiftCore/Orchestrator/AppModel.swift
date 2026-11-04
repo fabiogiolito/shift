@@ -1188,6 +1188,26 @@ public final class AppModel {
             ?? .success(Self.previewDiff(task(taskID)))
     }
 
+    /// Files for the two sides of a changed image, for thumbnails and Quick Look: the worktree's copy after,
+    /// and the base's copy before, written to a temporary folder. nil for a side that doesn't exist.
+    public func imageVersions(taskID: TaskItem.ID, change: FileChange) async -> (before: URL?, after: URL?) {
+        guard let task = task(taskID) else { return (nil, nil) }
+        let after = change.kind == .deleted ? nil : task.worktreeURL.appendingPathComponent(change.path)
+        guard change.kind != .added else { return (nil, after) }
+        let oldPath = change.oldPath ?? change.path
+        guard let data = await readDiff(taskID, { git, worktree, base in
+            try await git.baseContents(worktree: worktree, base: base, path: oldPath)
+        }).flatMap({ try? $0.get() }) else { return (nil, after) }
+        // Its own folder, so Quick Look shows the file's real name.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("shift-diff-\(UUID().uuidString)")
+        let before = folder.appendingPathComponent((oldPath as NSString).lastPathComponent)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: before)
+        } catch { return (nil, after) }
+        return (before, after)
+    }
+
     /// nil for the preview model.
     private func readDiff<T>(_ id: TaskItem.ID, _ read: (GitServicing, URL, String) async throws -> T) async -> Result<T, Error>? {
         guard let services else { return nil }

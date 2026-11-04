@@ -1,4 +1,6 @@
 import SwiftUI
+import QuickLook
+import UniformTypeIdentifiers
 import ShiftCore
 
 struct DiffView: View {
@@ -149,6 +151,17 @@ struct DiffView: View {
 
     @ViewBuilder
     private func fileBody(_ file: PreparedFile) -> some View {
+        if let taskID, UTType(filenameExtension: (file.change.path as NSString).pathExtension)?.conforms(to: .image) == true {
+            DiffImages(taskID: taskID, change: file.change)
+            // SVGs are text: their diff follows the pictures.
+            if !file.change.isBinary { lines(file) }
+        } else {
+            lines(file)
+        }
+    }
+
+    @ViewBuilder
+    private func lines(_ file: PreparedFile) -> some View {
         if file.change.isBinary {
             note("Binary file")
         } else if let collapsed = file.collapsed {
@@ -189,6 +202,48 @@ struct DiffView: View {
 
     private func note(_ text: String) -> some View {
         Text(text).foregroundStyle(.secondary).padding()
+    }
+}
+
+/// Thumbnails of a changed image: the new one if added, the old one if deleted, both side by side if
+/// modified. Clicking one opens it in Quick Look.
+private struct DiffImages: View {
+    @Environment(AppModel.self) private var model
+    let taskID: TaskItem.ID
+    let change: FileChange
+    @State private var versions: (before: URL?, after: URL?)?
+    @State private var preview: URL?
+
+    var body: some View {
+        let urls = [versions?.before, versions?.after].compactMap { $0 }
+        HStack(alignment: .top, spacing: 16) {
+            if let versions {
+                if let before = versions.before { thumbnail(before, label: versions.after == nil ? nil : "Before") }
+                if let after = versions.after { thumbnail(after, label: versions.before == nil ? nil : "After") }
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .quickLookPreview($preview, in: urls)
+        .task(id: change) { versions = await model.imageVersions(taskID: taskID, change: change) }
+    }
+
+    private func thumbnail(_ url: URL, label: String?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button { preview = url } label: {
+                AsyncImage(url: url) { $0.resizable().scaledToFit() } placeholder: {
+                    Image(systemName: "photo").foregroundStyle(.secondary).frame(width: 64, height: 64)
+                }
+                .frame(maxWidth: 240, maxHeight: 180)
+                .clipShape(.rect(cornerRadius: 8))
+                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator) }
+            }
+            .buttonStyle(.plain)
+            .help("Open in Quick Look")
+            if let label { Text(label).font(.caption).foregroundStyle(.secondary) }
+        }
     }
 }
 
