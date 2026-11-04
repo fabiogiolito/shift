@@ -54,12 +54,6 @@ struct ShiftApp: App {
         .defaultSize(width: 720, height: 480)
         .restorationBehavior(.disabled)
 
-        Window("Settings", id: AppSettingsView.windowID) {
-            AppSettingsView()
-        }
-        .windowResizability(.contentSize)
-        .restorationBehavior(.disabled)
-
         Window("Paired Devices", id: PairedDevicesView.windowID) {
             PairedDevicesView().environment(delegate.model)
         }
@@ -93,26 +87,17 @@ private struct NewTaskCommand: Commands {
     }
 }
 
-/// ⌘, opens the current project's settings; Settings… holds the few app-wide ones. Its own `Commands` for the reason above.
+/// ⌘, opens the current project's settings; Shift has no app-wide settings. Its own `Commands` for the reason above.
 private struct ProjectSettingsCommand: Commands {
     @FocusedValue(\.openProjectSettings) private var openProjectSettings
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
-            AppSettingsCommand()
             Button("Project Settings…") { openProjectSettings?() }
                 .keyboardShortcut(",")
                 .disabled(openProjectSettings == nil)
             PairedDevicesCommand()
         }
-    }
-}
-
-private struct AppSettingsCommand: View {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Button("Settings…") { openWindow(id: AppSettingsView.windowID) }
     }
 }
 

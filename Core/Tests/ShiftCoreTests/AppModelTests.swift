@@ -1813,6 +1813,21 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(other?.baseBranch, "develop")
     }
 
+    func testAddProjectTakesLastProjectsEditorAndTerminal() async throws {
+        var last = try XCTUnwrap(model.projects.last)
+        last.editorPath = "/Applications/Zed.app"
+        last.terminalPath = "/Applications/Ghostty.app"
+        model.updateProject(last)
+        let added = await model.addProject(at: temp.appendingPathComponent("site"))
+        XCTAssertEqual(added?.editorPath, "/Applications/Zed.app")
+        XCTAssertEqual(added?.terminalPath, "/Applications/Ghostty.app")
+
+        // Saved before these existed: none preferred.
+        let old = try JSONDecoder().decode(Project.self, from: Data(#"{"id":"\#(UUID())","name":"a","repoPath":"/a","baseBranch":"main","defaultAgent":"claudeCode","serverCommand":""}"#.utf8))
+        XCTAssertNil(old.editorPath)
+        XCTAssertNil(old.terminalPath)
+    }
+
     func testMoveProjectsPersistsOrder() async {
         await model.addProject(at: temp.appendingPathComponent("b"))
         await model.addProject(at: temp.appendingPathComponent("c"))
