@@ -13,6 +13,36 @@ public struct PortAllocator: PortAllocating {
 
     public func isListening(_ port: Int) async -> Bool { !Self.isFreeOnLoopback(port) }
 
+    public func hasClients(_ port: Int, besides group: Int32) async -> Bool {
+        let output: String = await withCheckedContinuation { continuation in
+            Thread.detachNewThread {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+                process.arguments = ["-nP", "-iTCP:\(port)", "-sTCP:ESTABLISHED", "-F", "pn"]
+                let out = Pipe()
+                process.standardOutput = out
+                process.standardError = FileHandle.nullDevice
+                guard (try? process.run()) != nil else { return continuation.resume(returning: "") }
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                continuation.resume(returning: String(decoding: data, as: UTF8.self))
+            }
+        }
+        // Dev servers connect to themselves (Next.js does): those don't count.
+        return Self.clients(in: output, port: port).contains { getpgid($0) != group }
+    }
+
+    /// The processes on the client end of connections to `port`, from `lsof -F pn`: a `p<pid>` line, then
+    /// an `n<local>-><remote>` line for each of its connections.
+    static func clients(in lsof: String, port: Int) -> Set<Int32> {
+        var pid: Int32 = 0, clients: Set<Int32> = []
+        for line in lsof.split(separator: "\n") {
+            if line.hasPrefix("p") { pid = Int32(line.dropFirst()) ?? 0 }
+            if line.hasPrefix("n"), line.hasSuffix(":\(port)") { clients.insert(pid) }
+        }
+        return clients
+    }
+
     /// Free for a server: on loopback, and on all interfaces, which is what most dev servers bind. `tailscale serve`,
     /// for one, holds a port on the tailnet addresses only: nothing on loopback, yet Next.js fails with EADDRINUSE.
     static func isFree(_ port: Int) -> Bool {

@@ -213,6 +213,9 @@ public protocol PortAllocating: Sendable {
     func allocate(preferred: Int, reserved: Set<Int>) async -> Int
     /// Whether something accepts connections on the port on loopback.
     func isListening(_ port: Int) async -> Bool
+    /// Whether a process outside the process group `group` (the server's own) has a connection open to the port:
+    /// a browser tab's live-reload socket, for one.
+    func hasClients(_ port: Int, besides group: Int32) async -> Bool
 }
 
 // MARK: - System

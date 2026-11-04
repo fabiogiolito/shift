@@ -39,6 +39,14 @@ struct ProjectsSidebar: View {
                             Button(apps.name(of: terminal)) { apps.open(project.repoURL, withApp: terminal) }
                         }
                     }
+                    if !project.isApp {
+                        // Stops the dev servers of its base and its tasks, for their memory.
+                        Button(project.serversOff ? "Turn Servers On" : "Turn Servers Off") {
+                            var updated = project
+                            updated.serversOff.toggle()
+                            model.updateProject(updated)
+                        }
+                    }
                     Button("Settings…") { settingsProject = project }
                     Button("Remove", role: .destructive) { removingProject = project }
                 }
@@ -65,7 +73,7 @@ struct ProjectsSidebar: View {
     }
 
     private func subtitle(for project: Project) -> String {
-        Project.summary(of: model.tasks(in: project.id))
+        Project.summary(of: model.tasks(in: project.id)) + (project.serversOff && !project.isApp ? " · Servers off" : "")
     }
 
     private func addProject() {

@@ -239,11 +239,14 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var takesScreenshots: Bool
     /// A finished task's main button opens a pull request, and merging moves to its dropdown.
     public var opensPullRequests: Bool
+    /// No dev servers run for it, its base's or its tasks', until turned back on.
+    public var serversOff: Bool
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildTargets: [BuildTarget] = [], permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
-                pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false) {
+                pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false,
+                serversOff: Bool = false) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -258,6 +261,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.pushTaskBranches = pushTaskBranches
         self.takesScreenshots = takesScreenshots
         self.opensPullRequests = opensPullRequests
+        self.serversOff = serversOff
     }
 
     public init(from decoder: Decoder) throws {
@@ -278,6 +282,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         pushTaskBranches = try values.decodeIfPresent(Bool.self, forKey: .pushTaskBranches) ?? false
         takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
+        serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
