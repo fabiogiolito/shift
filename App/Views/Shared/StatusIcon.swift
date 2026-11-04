@@ -38,7 +38,7 @@ struct StatusIcon: View {
     private var pullRequestIcon: some View {
         let height = (size ?? 16) * 0.96
         return Image("PullRequest").resizable()
-            .frame(width: height * 162 / 126, height: height)
+            .frame(width: height * 18 / 14, height: height)
             .foregroundStyle(status.color)
     }
 }

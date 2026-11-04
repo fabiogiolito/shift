@@ -1,5 +1,5 @@
 {
-  "images" : [ { "filename" : "PullRequest.png", "idiom" : "universal" } ],
+  "images" : [ { "filename" : "PullRequest.svg", "idiom" : "universal" } ],
   "info" : { "author" : "xcode", "version" : 1 },
-  "properties" : { "template-rendering-intent" : "template" }
+  "properties" : { "preserves-vector-representation" : true, "template-rendering-intent" : "template" }
 }
