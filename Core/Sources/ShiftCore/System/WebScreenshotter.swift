@@ -27,8 +27,8 @@ public final class WebScreenshotter: Screenshotting {
         // Dev servers compile a page the first time it's asked for.
         let loaded = await load.run(timeout: .seconds(30)) { webView.load(URLRequest(url: url)) }
         guard loaded else { return false }
-        // ponytail: fixed wait for scripts to draw; wait for network idle if pages get shot half loaded.
-        try? await Task.sleep(for: .seconds(1.5))
+        // ponytail: fixed wait for content to load and animate in; wait for network idle if pages still get shot half loaded.
+        try? await Task.sleep(for: .seconds(3))
         if let script {
             // The agent wrote it: it may return nothing, which WebKit can't hand over, or never finish.
             let body = """
