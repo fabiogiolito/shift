@@ -12,8 +12,8 @@ struct TaskDetailView: View {
     @State private var diffSettled = false
     /// The file the diff opens at, when opened from a row of the changed files.
     @State private var diffPath: String?
-    @State private var confirmingDelete = false
-    @State private var renaming = false
+    /// Rename, delete and log sheets, shared with the task list's context menu.
+    @State private var menu = TaskActions()
     /// The base picked in the merge dropdown, waiting for confirmation.
     @State private var newBase: String?
     @State private var branches: [String] = []
@@ -32,8 +32,6 @@ struct TaskDetailView: View {
     @State private var server: ServerState?
     /// Whether the server button opens the tailnet link instead of localhost, when Tailscale is on.
     @AppStorage("opensTailnet") private var opensTailnet = false
-    /// The "Copied" popover on the branch button.
-    @State private var output: Output?
     /// For capping the response panel's height.
     @State private var windowHeight: CGFloat = 0
     /// Height of the changed files' rows, for capping the list.
@@ -107,14 +105,6 @@ struct TaskDetailView: View {
                     if let new { openPrompts.insert(new) }
                 }
             }
-            .sheet(item: $output) { output in
-                OutputSheet(title: output.title) {
-                    switch output {
-                    case .appLog: await model.serverLog(taskID: taskID)
-                    case .buildLog(let target, _): model.buildLog(taskID: taskID, target: target)
-                    }
-                }
-            }
             // The whole log the first time, then only what's added while the agent works.
             .task(id: task.status == .working) {
                 if reader == nil { reader = model.transcript(taskID: taskID) }
@@ -126,12 +116,7 @@ struct TaskDetailView: View {
             }
             .task(id: task.status) { changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil }
             .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
-            .renameTaskAlert(task, isPresented: $renaming)
-            .confirmationDialog("Delete “\(task.title)”?", isPresented: $confirmingDelete) {
-                Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: taskID) } }
-            } message: {
-                Text("Its changes are discarded without merging.")
-            }
+            .taskActions(task, $menu)
             .confirmationDialog("Change the base of “\(task.title)” to \(newBase ?? "")?",
                                 isPresented: Binding(get: { newBase != nil }, set: { if !$0 { newBase = nil } })) {
                 Button("Change Base") {
@@ -244,8 +229,6 @@ struct TaskDetailView: View {
                     Group { serverButton(local: server, tailnet: tailnet, port: port) }
                     .task(id: task.port) {
                         while !Task.isCancelled {
-                            // Starts it if Shift left it off, and keeps it from being stopped while the task is open.
-                            await model.usingServer(taskID: taskID)
                             let alive = await model.isServerRunning(taskID: taskID)
                             let answers = alive ? await model.isServerAnswering(taskID: taskID) : false
                             // Once up, a server that stops answering has crashed inside a process that stayed alive.
@@ -257,10 +240,10 @@ struct TaskDetailView: View {
                     }
                     // The port may still come up, so the button stays.
                     if let state = self.server, state != .up {
-                        Text(state.label).foregroundStyle(state == .starting ? .secondary : state.color)
+                        Text(state.label).foregroundStyle(state == .notResponding ? state.color : .secondary)
                         if state != .starting {
                             Button("Log") { openWindow(id: "server-log", value: taskID) }.buttonStyle(.glass).controlSize(.small)
-                            Button("Restart") {
+                            Button(state == .stopped ? "Start" : "Restart") {
                                 self.server = .starting
                                 Task { await model.restartServer(taskID: taskID) }
                             }
@@ -288,7 +271,7 @@ struct TaskDetailView: View {
             Text(opened == tailnet ? "Tailscale" : "localhost:\(String(port))")
             Image(systemName: "arrow.up.right").imageScale(.small)
         }
-        return SplitButton { apps.openInBrowser(opened) } label: { label } menu: {
+        return SplitButton { open(opened) } label: { label } menu: {
             if let tailnet {
                 // A toggle for its checkmark. It fires on the chosen one too, which opens it again.
                 Toggle("Localhost", isOn: Binding(get: { !opensTailnet }, set: { _ in
@@ -328,7 +311,7 @@ struct TaskDetailView: View {
                 }
             }
         }
-        return previewURL(task, project).map { url in TitledAction(title: "Open in Browser") { apps.openInBrowser(url) } }
+        return previewURL(task, project).map { url in TitledAction(title: "Open in Browser") { open(url) } }
     }
 
     /// ⌘.: stops the app ⌘R ran.
@@ -355,9 +338,9 @@ struct TaskDetailView: View {
 
     /// ⇧⌘E and ⇧⌘O, into the same folder as ⇧⌘T.
     private func editorAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
-        guard let editor = apps.installedEditors().first(where: { $0 != .finder }) else { return nil }
+        guard let editor = OpenInMenu.editor(for: project) else { return nil }
         let folder = task.status == .merged ? project.repoURL : task.worktreeURL
-        return TitledAction(title: "Open in \(editor.displayName)") { apps.open(folder, in: editor) }
+        return TitledAction(title: "Open in \(apps.name(of: editor))") { apps.open(folder, withApp: editor) }
     }
 
     private func finderAction(_ task: TaskItem, _ project: Project) -> () -> Void {
@@ -367,9 +350,24 @@ struct TaskDetailView: View {
 
     /// ⇧⌘T. A merged task's folder is gone: its work is in the project's.
     private func terminalAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
-        guard let terminal = apps.installedTerminals().first else { return nil }
+        guard let terminal = OpenInMenu.terminal(for: project) else { return nil }
         let folder = task.status == .merged ? project.repoURL : task.worktreeURL
         return { apps.open(folder, withApp: terminal) }
+    }
+
+    /// Opens the server in the browser, starting it first if it was stopped (idle for its project's TTL, or crashed).
+    private func open(_ url: URL) {
+        guard server == .stopped else { return apps.openInBrowser(url) }
+        server = .starting
+        Task {
+            await model.restartServer(taskID: taskID)
+            // Up to 30 seconds for it to answer; given up on if it exits.
+            for _ in 0..<30 {
+                if await model.isServerAnswering(taskID: taskID) { return apps.openInBrowser(url) }
+                guard await model.isServerRunning(taskID: taskID) else { return }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     /// What builds or runs the app. One target gets a plain button; several get a split button that offers the one
@@ -404,7 +402,7 @@ struct TaskDetailView: View {
         // Says so when the app ends without being stopped: it may have crashed on launch.
         if runs && server == .stopped {
             Text("Stopped").foregroundStyle(.secondary)
-            Button("Log") { output = .appLog }.buttonStyle(.glass).controlSize(.small)
+            Button("Log") { menu.output = .appLog }.buttonStyle(.glass).controlSize(.small)
         }
         ForEach(targets) { target in
             buildStatus(target, isMain: target.id == main?.id, isOnly: targets.count == 1)
@@ -423,15 +421,12 @@ struct TaskDetailView: View {
         if case .failed(let reason) = state {
             Text(isOnly ? reason : "\(target.name): \(reason)").foregroundStyle(.secondary).lineLimit(1)
             if target.kind != .run {
-                Button("Log") { output = logOutput(target) }.buttonStyle(.glass).controlSize(.small)
+                Button("Log") { menu.output = .buildLog(target, in: project) }.buttonStyle(.glass).controlSize(.small)
             }
         }
     }
 
-    private func logOutput(_ target: BuildTarget) -> Output {
-        let several = (model.task(taskID)?.projectID).flatMap { model.project($0)?.targets.count }.map { $0 > 1 } ?? false
-        return .buildLog(target.id, title: several ? "Build Log: \(target.name)" : "Build Log")
-    }
+    private var project: Project? { model.task(taskID).flatMap { model.project($0.projectID) } }
 
     private func isRunning(_ target: BuildTarget) -> Bool {
         server == .up && model.runningTargets[taskID] == target.id
@@ -443,7 +438,7 @@ struct TaskDetailView: View {
         if let app = await model.build(taskID: taskID, target: target.id) {
             await apps.relaunch(app, environment: ["SHIFT_HOME": ShiftPaths.build(taskID: taskID).path])
         }
-        if target.kind == .script && showingLog { output = logOutput(target) }
+        if target.kind == .script && showingLog { menu.output = .buildLog(target, in: project) }
     }
 
     /// Opens the task's copy of the app, or stops it.
@@ -794,44 +789,7 @@ struct TaskDetailView: View {
 
     private func moreMenu(_ task: TaskItem, _ project: Project) -> some View {
         Menu {
-            if task.status != .merged {
-                // Core recreates a missing folder before the next run; until then there is nothing to open.
-                let folderExists = FileManager.default.fileExists(atPath: task.worktreePath)
-                Group {
-                    Menu("Open in") {
-                        ForEach(apps.installedEditors()) { app in
-                            Button(app.displayName) { apps.open(task.worktreeURL, in: app) }
-                        }
-                        Divider()
-                        ForEach(apps.installedTerminals(), id: \.self) { terminal in
-                            Button(apps.name(of: terminal)) { apps.open(task.worktreeURL, withApp: terminal) }
-                        }
-                    }
-                }
-                .disabled(!folderExists)
-                .help(folderExists ? "" : "The task's folder is recreated the next time the agent runs.")
-                if project.runsApp {
-                    Button("App Log") { output = .appLog }
-                }
-                if project.isApp {
-                    let built = project.targets.filter { $0.kind != .run }
-                    if built.count > 1 {
-                        Menu("Build Log") {
-                            ForEach(built) { target in
-                                Button(target.name) { output = logOutput(target) }
-                            }
-                        }
-                    } else if let target = built.first {
-                        Button("Build Log") { output = logOutput(target) }
-                    }
-                }
-                if task.status == .working || task.approvalRequest != nil {
-                    Button("Stop Task") { model.stop(taskID: taskID) }
-                }
-                Divider()
-            }
-            Button("Rename Task…") { renaming = true }
-            Button("Delete Task…", role: .destructive) { confirmingDelete = true }
+            TaskActionItems(task: task, project: project, actions: $menu)
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
@@ -888,59 +846,10 @@ private enum ServerState {
 
     var color: Color {
         switch self {
-        case .starting: .orange
+        case .starting: .yellow
         case .up: .green
-        case .notResponding, .stopped: .red
+        case .notResponding: .red
+        case .stopped: .gray
         }
-    }
-}
-
-/// Debugging text, from the ••• menu.
-private enum Output: Hashable, Identifiable {
-    case appLog
-    case buildLog(BuildTarget.ID, title: String)
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .appLog: "App Log"
-        case .buildLog(_, let title): title
-        }
-    }
-}
-
-private struct OutputSheet: View {
-    let title: String
-    let load: () async -> String
-    @State private var text: String?
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
-            ScrollView {
-                Text(text.map { $0.isEmpty ? "No output." : $0 } ?? "Loading…")
-                    .font(.callout.monospaced())
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-            }
-            // The latest output, where errors are, is at the end.
-            .defaultScrollAnchor(.bottom)
-            .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
-            HStack {
-                Spacer()
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text ?? "", forType: .string)
-                }
-                .disabled(text?.isEmpty ?? true)
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(minWidth: 640, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
-        .task { text = await load() }
     }
 }

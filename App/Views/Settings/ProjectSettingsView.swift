@@ -12,6 +12,7 @@ struct ProjectSettingsView: View {
     @State private var creatingBranch = false
     /// Other projects: chosen in the picker; nil follows the project (an app has a build command).
     @State private var isApp: Bool?
+    private let apps = ExternalApps()
 
     init(projectID: Project.ID) {
         self.projectID = projectID
@@ -140,6 +141,16 @@ struct ProjectSettingsView: View {
         }
     }
 
+    private func appPicker(_ title: String, selection: Binding<String?>, options: [URL]) -> some View {
+        Picker(title, selection: selection) {
+            Text("None").tag(String?.none)
+            ForEach(options, id: \.self) { app in
+                Label { Text(apps.name(of: app)) } icon: { Image(nsImage: apps.icon(of: app)) }
+                    .tag(Optional(app.path))
+            }
+        }
+    }
+
     private func form(_ project: Binding<Project>) -> some View {
         let current = project.wrappedValue
         let found = model.instructionFiles(for: projectID)
@@ -167,6 +178,18 @@ struct ProjectSettingsView: View {
                         Task { branches = await model.branches(for: projectID) }
                     }
                 }
+            }
+
+            Section {
+                appPicker("Code editor", selection: project.editorPath,
+                          options: apps.installedEditors().filter { $0 != .finder }.compactMap(apps.appURL))
+                appPicker("Terminal", selection: project.terminalPath, options: apps.installedTerminals())
+            } header: {
+                Text("Open in")
+            } footer: {
+                Text("Shown first in Open in. New projects start with the last project's.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Section {
@@ -262,6 +285,20 @@ struct ProjectSettingsView: View {
                     Button("Add Target") { addTarget(to: project) }
                 } footer: {
                     Text("Mac app and iOS Simulator targets print the path of their .app last, and Shift opens it. Run keeps running until you stop it. Script shows its log. The build button offers the target whose paths, such as App/, cover most of what a task changed. Commands get the target's name in SHIFT_TARGET.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            if !current.isApp {
+                Section {
+                    Picker("Stop idle servers after", selection: project.serverTTL) {
+                        ForEach([1, 5, 15, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
+                        Divider()
+                        Text("Never").tag(0)
+                    }
+                } footer: {
+                    Text("A server is idle while no agent runs on its task and no browser tab is connected to it. A new prompt, or clicking the server's button, starts it again.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

@@ -131,8 +131,8 @@ public final class AppModel {
     @ObservationIgnored private var serverUsed: [Int: Date] = [:]
     /// Each base server's process group, which its own connections to itself come from.
     @ObservationIgnored private var baseGroups: [Project.ID: Int32] = [:]
-    /// How long a server goes unwanted before it is stopped, for its memory (tests shorten it).
-    @ObservationIgnored var serverIdleLimit: TimeInterval = 30 * 60
+    /// Added to every project's server TTL when checking it (tests use it to make servers idle at once).
+    @ObservationIgnored var serverIdleSlack: TimeInterval = 0
     /// The command each task's dev server was last started with.
     @ObservationIgnored private var serverCommands: [TaskItem.ID: String] = [:]
     @ObservationIgnored private var buildRuns: [BuildKey: Task<CommandResult, Error>] = [:]
@@ -389,7 +389,9 @@ public final class AppModel {
         if let existing = projects.first(where: { $0.repoPath == path }) { return existing }
         let project = Project(name: url.lastPathComponent, repoPath: path, baseBranch: base, type: suggested.type,
                               defaultAgent: AgentKind.allCases.first { installedAgents[$0] != nil } ?? .claudeCode,
-                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets)
+                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets,
+                              // The same editor and terminal as the last project added, until changed in its settings.
+                              editorPath: projects.last?.editorPath, terminalPath: projects.last?.terminalPath)
         projects.append(project)
         changed()
         return project
@@ -1075,12 +1077,6 @@ public final class AppModel {
             return
         }
         if let failure = await startServer(taskID) { lastError = failure }
-    }
-
-    /// The task is open: starts its dev server if Shift left it off, and keeps it from being stopped as unused.
-    /// Call it again every few seconds for as long as it stays open.
-    public func usingServer(taskID: TaskItem.ID) async {
-        await wakeServer(taskID)
     }
 
     /// True while the task's dev server process is alive. Poll it: a server can die at any time.
@@ -2219,25 +2215,26 @@ public final class AppModel {
         if let port = task.port { await services.tailscale?.unserve(port: port) }
     }
 
-    /// Stops the dev servers nobody has wanted for `serverIdleLimit`, for their memory: not open in Shift or on a
-    /// phone, no agent running, no browser tab connected. Opening the task, or the base, starts its server again.
+    /// Stops the dev servers idle for longer than their project's `serverTTL`, for their memory: no agent running,
+    /// no browser tab connected. A new prompt, or the server button, starts it again.
     func stopUnusedServers() async {
         guard let services else { return }
-        let cutoff = Date.now.addingTimeInterval(-serverIdleLimit)
-        let watched = remote?.watchedTasks ?? []
-        for task in tasks where task.status != .merged && !watched.contains(task.id) {
+        func idle(_ id: Int, _ projectID: Project.ID) -> Bool {
+            guard let ttl = project(projectID)?.serverTTL, ttl > 0 else { return false }
+            return serverUsed[id] ?? .distantPast < Date.now.addingTimeInterval(-TimeInterval(ttl) * 60 + serverIdleSlack)
+        }
+        for task in tasks where task.status != .merged {
             guard let pid = task.serverPID, runs[task.id] == nil, !settingUp.contains(task.id), !busy.contains(task.id),
-                  project(task.projectID)?.isApp == false, serverUsed[task.id] ?? .distantPast < cutoff else { continue }
+                  project(task.projectID)?.isApp == false, idle(task.id, task.projectID) else { continue }
             if let port = task.port, await services.ports.hasClients(port, besides: pid) {
                 serverUsed[task.id] = .now
                 continue
             }
-            guard self.task(task.id)?.serverPID == pid, runs[task.id] == nil,
-                  serverUsed[task.id] ?? .distantPast < cutoff else { continue }
+            guard self.task(task.id)?.serverPID == pid, runs[task.id] == nil, idle(task.id, task.projectID) else { continue }
             await stopServer(task.id)
         }
         for (projectID, id) in baseServerIDs {
-            guard let port = basePorts[projectID], serverUsed[id] ?? .distantPast < cutoff,
+            guard let port = basePorts[projectID], idle(id, projectID),
                   await services.servers.isRunning(taskID: id) else { continue }
             if await services.ports.hasClients(port, besides: baseGroups[projectID] ?? 0) {
                 serverUsed[id] = .now

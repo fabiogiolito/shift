@@ -124,7 +124,7 @@ struct TaskListView: View {
 struct TaskRow: View {
     let task: TaskItem
     @Environment(AppModel.self) private var model
-    @State private var renaming = false
+    @State private var actions = TaskActions()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -142,9 +142,11 @@ struct TaskRow: View {
         }
         .padding(.vertical, 2)
         .contextMenu {
-            Button("Rename Task…") { renaming = true }
+            if let project = model.project(task.projectID) {
+                TaskActionItems(task: task, project: project, actions: $actions)
+            }
         }
-        .renameTaskAlert(task, isPresented: $renaming)
+        .taskActions(task, $actions)
     }
 }
 

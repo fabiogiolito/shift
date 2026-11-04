@@ -1343,8 +1343,8 @@ final class AppModelTests: XCTestCase {
         store.state = AppState(projects: [project], tasks: [other, old], nextTaskID: 2003)
         model = makeModel()
         await model.start()
-        await model.usingServer(taskID: 2002)
-        await model.usingServer(taskID: 2001)
+        await model.restartServer(taskID: 2002)
+        await model.restartServer(taskID: 2001)
         await model.flush()
 
         let command = ProjectSetup.serverCommand(for: project)
@@ -1360,20 +1360,26 @@ final class AppModelTests: XCTestCase {
 
     // MARK: Servers only while wanted
 
-    func testServerStartsWhenOpenedAndStopsOnceUnused() async {
+    func testServerStartsWhenAskedAndStopsOnceIdleForItsTTL() async {
         git.existingBranches = ["shift/2001"]
         await relaunch(with: savedTask(2001, status: .completed))
-        XCTAssertTrue(servers.starts.isEmpty)
+        XCTAssertTrue(servers.starts.isEmpty, "Not started at launch")
 
-        await model.usingServer(taskID: 2001)
+        await model.restartServer(taskID: 2001)
         XCTAssertEqual(servers.starts.count, 1)
-        await model.usingServer(taskID: 2001)
-        XCTAssertEqual(servers.starts.count, 1, "Already running")
 
         await model.stopUnusedServers()
         XCTAssertNotNil(servers.running[2001], "Just used")
 
-        model.serverIdleLimit = 0
+        var never = model.project(project.id)!
+        never.serverTTL = 0
+        model.updateProject(never)
+        model.serverIdleSlack = 24 * 3600
+        await model.stopUnusedServers()
+        XCTAssertNotNil(servers.running[2001], "TTL off: never stopped")
+        never.serverTTL = 5
+        model.updateProject(never)
+
         ports.visited = [2001]
         await model.stopUnusedServers()
         XCTAssertNotNil(servers.running[2001], "A browser tab has it open")
@@ -1383,14 +1389,14 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(servers.running[2001])
         XCTAssertNil(model.task(2001)?.serverPID)
 
-        await model.usingServer(taskID: 2001)
-        XCTAssertEqual(servers.starts.count, 2, "Opened again")
+        await model.restartServer(taskID: 2001)
+        XCTAssertEqual(servers.starts.count, 2, "Started again")
     }
 
     func testServersOffStopsAndKeepsThemOff() async {
         git.existingBranches = ["shift/2001"]
         await relaunch(with: savedTask(2001, status: .completed))
-        await model.usingServer(taskID: 2001)
+        await model.restartServer(taskID: 2001)
         XCTAssertNotNil(servers.running[2001])
 
         var off = model.project(project.id)!
@@ -1399,7 +1405,6 @@ final class AppModelTests: XCTestCase {
         await waitFor("its server to stop") { self.servers.running[2001] == nil }
         XCTAssertNil(model.task(2001)?.serverPID)
 
-        await model.usingServer(taskID: 2001)
         await model.restartServer(taskID: 2001)
         XCTAssertNil(servers.running[2001])
         let base = await model.baseServerURL(projectID: project.id)
@@ -1408,7 +1413,7 @@ final class AppModelTests: XCTestCase {
 
         off.serversOff = false
         model.updateProject(off)
-        await model.usingServer(taskID: 2001)
+        await model.restartServer(taskID: 2001)
         XCTAssertNotNil(servers.running[2001])
     }
 
@@ -1806,6 +1811,21 @@ final class AppModelTests: XCTestCase {
         git.current = "develop"
         let other = await model.addProject(at: temp.appendingPathComponent("other"))
         XCTAssertEqual(other?.baseBranch, "develop")
+    }
+
+    func testAddProjectTakesLastProjectsEditorAndTerminal() async throws {
+        var last = try XCTUnwrap(model.projects.last)
+        last.editorPath = "/Applications/Zed.app"
+        last.terminalPath = "/Applications/Ghostty.app"
+        model.updateProject(last)
+        let added = await model.addProject(at: temp.appendingPathComponent("site"))
+        XCTAssertEqual(added?.editorPath, "/Applications/Zed.app")
+        XCTAssertEqual(added?.terminalPath, "/Applications/Ghostty.app")
+
+        // Saved before these existed: none preferred.
+        let old = try JSONDecoder().decode(Project.self, from: Data(#"{"id":"\#(UUID())","name":"a","repoPath":"/a","baseBranch":"main","defaultAgent":"claudeCode","serverCommand":""}"#.utf8))
+        XCTAssertNil(old.editorPath)
+        XCTAssertNil(old.terminalPath)
     }
 
     func testMoveProjectsPersistsOrder() async {

@@ -10,7 +10,6 @@ struct ProjectsSidebar: View {
     @State private var settingsProject: Project?
     @State private var removingProject: Project?
     @State private var scrolledUnderBar = false
-    private let apps = ExternalApps()
 
     private var projects: [Project] {
         search.isEmpty ? model.projects : model.projects.filter { $0.name.localizedCaseInsensitiveContains(search) }
@@ -32,15 +31,7 @@ struct ProjectsSidebar: View {
                 // Tasks waiting on the user; a zero badge is hidden.
                 .badge(model.tasks(in: project.id).filter { [.needsInput, .blocked, .conflict, .completed].contains($0.status) }.count)
                 .contextMenu {
-                    Menu("Open in") {
-                        ForEach(apps.installedEditors()) { app in
-                            Button(app.displayName) { apps.open(project.repoURL, in: app) }
-                        }
-                        Divider()
-                        ForEach(apps.installedTerminals(), id: \.self) { terminal in
-                            Button(apps.name(of: terminal)) { apps.open(project.repoURL, withApp: terminal) }
-                        }
-                    }
+                    OpenInMenu(directory: project.repoURL, project: project)
                     if !project.isApp {
                         // Stops the dev servers of its base and its tasks, for their memory.
                         Button(project.serversOff ? "Turn Servers On" : "Turn Servers Off") {
