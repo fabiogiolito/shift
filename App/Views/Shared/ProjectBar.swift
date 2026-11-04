@@ -87,7 +87,8 @@ struct ProjectBar: View {
         .fixedSize(horizontal: false, vertical: true)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        // Matches the sidebar's New Project bar, so their top edges line up.
+        .padding(.vertical, 12)
         .background(.bar)
         .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
         .sheet(isPresented: $creatingBranch) {

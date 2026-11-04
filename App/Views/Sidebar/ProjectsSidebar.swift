@@ -8,6 +8,7 @@ struct ProjectsSidebar: View {
     @State private var search = ""
     @State private var settingsProject: Project?
     @State private var removingProject: Project?
+    @State private var scrolledUnderBar = false
     private let apps = ExternalApps()
 
     private var projects: [Project] {
@@ -57,11 +58,18 @@ struct ProjectsSidebar: View {
         .listStyle(.sidebar)
         .searchable(text: $search, placement: .sidebar)
         .contentMargins(.top, 8, for: .scrollContent)
-        .safeAreaInset(edge: .bottom, alignment: .leading) {
+        // A background and divider only once projects scroll under New Project, like the task prompt bar.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             Button(action: addProject) { Label("New Project", systemImage: "plus") }
                 .buttonStyle(.borderless)
                 .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(scrolledUnderBar ? AnyShapeStyle(.bar) : AnyShapeStyle(.clear))
+                .overlay(alignment: .top) { if scrolledUnderBar { Divider() } }
         }
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.y + geo.containerSize.height - geo.contentInsets.bottom < geo.contentSize.height - 1
+        } action: { scrolledUnderBar = $1 }
         .sheet(item: $settingsProject) { ProjectSettingsView(projectID: $0.id) }
         .confirmationDialog("Remove “\(removingProject?.name ?? "")”?",
                             isPresented: Binding(get: { removingProject != nil }, set: { if !$0 { removingProject = nil } }),
