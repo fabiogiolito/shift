@@ -4,6 +4,7 @@ import ShiftCore
 /// The bottom bar of a task waiting on the user: what the agent asks, wants to do or couldn't do, and the ways to answer.
 struct ResponsePanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.textScale) private var textScale
     let task: TaskItem
     /// The tallest the panel gets before its content scrolls.
     let maxHeight: CGFloat
@@ -76,11 +77,12 @@ struct ResponsePanel: View {
             Text(label).font(.subheadline).foregroundStyle(.secondary)
             Text((try? AttributedString(markdown: first, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
                  ?? AttributedString(first))
+                .font(.scaled(.body, textScale))
                 .textSelection(.enabled)
             if lines.count > 1 {
                 ScrollView {
                     Text(lines[1].trimmingCharacters(in: .whitespacesAndNewlines))
-                        .font(.callout.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                        .font(.scaled(.callout, textScale, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 64) // about 4 lines

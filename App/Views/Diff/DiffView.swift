@@ -15,6 +15,7 @@ struct DiffView: View {
     @State private var loadError: String?
     /// Bumped by Try Again to load again.
     @State private var attempt = 0
+    @Environment(\.textScale) private var textScale
 
     /// `selecting` is the path of the file to open at.
     init(taskID: TaskItem.ID, isSettled: Bool, selecting path: String? = nil) {
@@ -186,7 +187,7 @@ struct DiffView: View {
                         .background(.quaternary.opacity(0.5))
                 }
             }
-            .font(.callout.monospaced())
+            .font(.scaled(.callout, textScale, design: .monospaced))
         }
     }
 

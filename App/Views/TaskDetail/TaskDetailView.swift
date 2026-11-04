@@ -3,6 +3,7 @@ import SwiftUI
 import ShiftCore
 
 struct TaskDetailView: View {
+    @Environment(\.textScale) private var textScale
     @Environment(AppModel.self) private var model
     let taskID: TaskItem.ID
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -768,7 +769,11 @@ struct TaskDetailView: View {
     }
 
     /// A pending prompt (not yet handed to the agent) pulses between secondary and tertiary.
-    @ViewBuilder private func promptText(_ prompt: Prompt) -> some View {
+    private func promptText(_ prompt: Prompt) -> some View {
+        pendingPromptText(prompt).font(.scaled(.body, textScale))
+    }
+
+    @ViewBuilder private func pendingPromptText(_ prompt: Prompt) -> some View {
         if !prompt.isPending {
             Text(prompt.text).foregroundStyle(.primary.opacity(0.7))
         } else if reduceMotion {
