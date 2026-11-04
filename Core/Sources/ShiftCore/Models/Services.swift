@@ -271,11 +271,13 @@ public struct Services: Sendable {
     public var remote: RemoteListener?
     /// Nil: iOS builds can't be run.
     public var simulators: SimulatorRunning?
+    /// Nil: always online (tests). A task whose agent fails while offline waits for the connection and tries again.
+    public var connectivity: ConnectivityChecking?
 
     public init(git: GitServicing, agents: [AgentKind: AgentAdapter], servers: ServerManaging,
                 ports: PortAllocating, notifier: Notifying, store: StateStoring, tailscale: Tailscale? = nil,
                 screenshots: Screenshotting? = nil, control: ControlServer? = nil, simulators: SimulatorRunning? = nil,
-                remote: RemoteListener? = nil) {
+                remote: RemoteListener? = nil, connectivity: ConnectivityChecking? = nil) {
         self.git = git
         self.agents = agents
         self.servers = servers
@@ -287,6 +289,7 @@ public struct Services: Sendable {
         self.screenshots = screenshots
         self.remote = remote
         self.simulators = simulators
+        self.connectivity = connectivity
     }
 }
 

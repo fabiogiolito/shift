@@ -166,7 +166,7 @@ private struct ChatView: View {
                             .buttonStyle(.bordered)
                     }
                 } else if replying {
-                    Label { Text("Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
+                    Label { Text(model.state.isOffline == true ? TaskItem.offlineActivity : "Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
                 }
             }
             .padding()
@@ -237,6 +237,7 @@ private struct NewTaskView: View {
 
 private struct TaskRow: View {
     let task: TaskItem
+    @Environment(RemoteModel.self) private var model
 
     var body: some View {
         NavigationLink(value: task.id) {
@@ -247,8 +248,8 @@ private struct TaskRow: View {
                     // A title can wrap: center on its first line, a little above the baseline.
                     Text(task.title).lineLimit(2).lineHeight(.tight)
                         .alignmentGuide(.firstLineCenter) { $0[.firstTextBaseline] - 6 }
-                    Text(task.status == .working ? task.activity ?? task.status.label : task.status.label)
-                        .font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                    Text(task.status == .working ? (model.state.isOffline == true ? TaskItem.offlineActivity : nil) ?? task.activity ?? task.status.label : task.status.label)
+                        .font(.footnote).foregroundStyle(.secondary).lineLimit(model.state.isOffline == true ? 2 : 1)
                 }
             }
         }
@@ -343,7 +344,7 @@ private struct TaskStatusView: View {
                         .buttonStyle(.bordered)
                 }
             } else if task.status == .working {
-                Label { Text(task.activity ?? "Working…") } icon: { ProgressView() }
+                Label { Text((model.state.isOffline == true ? TaskItem.offlineActivity : nil) ?? task.activity ?? "Working…") } icon: { ProgressView() }
                     .foregroundStyle(.secondary)
             } else if task.status == .conflict {
                 Label("It doesn't merge cleanly into its base.", systemImage: "checkmark.circle.fill").foregroundStyle(.orange)
@@ -977,6 +978,7 @@ private struct PromptResponseView: View {
     let prompt: Prompt
     let turns: [TranscriptTurn]
     let task: TaskItem
+    @Environment(RemoteModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -987,7 +989,7 @@ private struct PromptResponseView: View {
                     ForEach(turns) { TurnView(turn: $0) }
                     if turns.isEmpty {
                         if task.status == .working {
-                            Label { Text(task.activity ?? "Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
+                            Label { Text((model.state.isOffline == true ? TaskItem.offlineActivity : nil) ?? task.activity ?? "Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
                         } else {
                             Text("No response to show.").foregroundStyle(.secondary)
                         }

@@ -126,6 +126,7 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case usage(AgentKind, AgentUsage?)
     case chatApproval(projectID: UUID, String?)
     case replyingChats(Set<UUID>)
+    case offline(Bool)
     /// One reply per `.command`: a result, or why there is none.
     case reply(id: Int, result: RemoteResult?, error: String?)
     /// Bytes of a subscribed log, from `offset`.
@@ -143,6 +144,8 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
     /// What each project's chat agent is waiting to be allowed to do.
     public var chatApprovals: [UUID: String] = [:]
     public var replyingChats: Set<UUID> = []
+    /// The Mac can't reach the internet while an agent runs. Nil: an older Mac, which doesn't say.
+    public var isOffline: Bool?
 
     public init() {}
 
@@ -169,6 +172,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
             messages.append(.chatApproval(projectID: id, chatApprovals[id]))
         }
         if replyingChats != old.replyingChats { messages.append(.replyingChats(replyingChats)) }
+        if isOffline != old.isOffline { messages.append(.offline(isOffline ?? false)) }
         return messages
     }
 
@@ -188,6 +192,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         case .usage(let kind, let usage): self.usage[kind] = usage
         case .chatApproval(let id, let request): chatApprovals[id] = request
         case .replyingChats(let ids): replyingChats = ids
+        case .offline(let offline): isOffline = offline
         case .hello, .reply, .log: break
         }
     }

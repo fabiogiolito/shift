@@ -9,6 +9,13 @@ package enum OutcomeProtocol {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.count <= limit ? trimmed : String(trimmed.prefix(limit - 1)) + "…"
     }
+
+    /// The agent's error is a lost or failed connection to its API, which passes once the internet is back.
+    // ponytail: matched on the CLIs' wording; an agent-written reason with these words also counts.
+    package static func isNetworkFailure(_ error: String) -> Bool {
+        error.range(of: #"connection error|connection refused|connection reset|network|timed out|timeout|ECONN|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|EHOSTUNREACH|socket hang up|fetch failed|stream disconnected|error sending request|could not resolve|offline"#,
+                    options: [.regularExpression, .caseInsensitive]) != nil
+    }
 }
 
 // MARK: - Stream parsing state

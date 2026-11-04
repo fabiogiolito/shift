@@ -2061,6 +2061,57 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(url("https://github.com/owner/repo", body: "1+1=2\n\né"), "\(page)&body=1%2B1%3D2%0A%0A%C3%A9")
         XCTAssertEqual(url("https://github.com/owner/repo", body: String(repeating: "x", count: 7000)), page)
     }
+
+    // MARK: Offline
+
+    func testAgentFailingOfflineWaitsForTheConnectionAndTriesAgain() async {
+        let connectivity = MockConnectivity()
+        model = AppModel(services: Services(git: git, agents: [.claudeCode: agent], servers: servers, ports: ports,
+                                            notifier: notifier, store: store, connectivity: connectivity),
+                         worktrees: temp.appendingPathComponent("worktrees"))
+        model.connectionPoll = .milliseconds(20)
+        await model.start()
+        let gate = Gate()
+        agent.scripts = [[.emit(.sessionStarted(id: "s1")), .pause(gate),
+                          .emit(.finished(.blocked(reason: "API Error: Connection error.")))]]
+        let id = model.createTask(projectID: project.id, prompt: "Do the thing")!
+        await waitFor("the agent to pause") { gate.waiting == 1 }
+        connectivity.online = false
+        gate.open()
+        await waitFor("Shift to notice") { self.model.isOffline }
+        XCTAssertEqual(status(id), .working)
+        XCTAssertEqual(agent.requests.count, 1)
+
+        connectivity.online = true
+        await waitForStatus(id, .completed)
+        XCTAssertFalse(model.isOffline)
+        XCTAssertEqual(agent.requests.last?.prompt, AppModel.continuePrompt)
+        XCTAssertEqual(agent.requests.last?.sessionID, "s1")
+    }
+
+    func testANetworkErrorWhileOnlineIsTriedAgainAFewTimesThenBlocks() async {
+        model = AppModel(services: Services(git: git, agents: [.claudeCode: agent], servers: servers, ports: ports,
+                                            notifier: notifier, store: store, connectivity: MockConnectivity()),
+                         worktrees: temp.appendingPathComponent("worktrees"))
+        model.connectionPoll = .milliseconds(10)
+        await model.start()
+        agent.scripts = Array(repeating: [.emit(.finished(.blocked(reason: "API Error: Request timed out.")))], count: 4)
+        let id = model.createTask(projectID: project.id, prompt: "Do the thing")!
+        await waitForStatus(id, .blocked)
+        XCTAssertEqual(agent.requests.count, 4)
+        XCTAssertEqual(model.task(id)?.blockedReason, "API Error: Request timed out.")
+    }
+
+    func testAnAgentsOwnBlockIsNotTriedAgain() async {
+        model = AppModel(services: Services(git: git, agents: [.claudeCode: agent], servers: servers, ports: ports,
+                                            notifier: notifier, store: store, connectivity: MockConnectivity()),
+                         worktrees: temp.appendingPathComponent("worktrees"))
+        await model.start()
+        agent.scripts = [[.emit(.finished(.blocked(reason: "Needs an API key.")))]]
+        let id = model.createTask(projectID: project.id, prompt: "Do the thing")!
+        await waitForStatus(id, .blocked)
+        XCTAssertEqual(agent.requests.count, 1)
+    }
 }
 
 // MARK: - Project chat

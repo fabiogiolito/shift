@@ -16,7 +16,8 @@ extension AppModel {
             screenshots: WebScreenshotter(),
             control: ControlServer(),
             simulators: Simulators(),
-            remote: RemoteListener()
+            remote: RemoteListener(),
+            connectivity: Connectivity()
         ))
     }
 }

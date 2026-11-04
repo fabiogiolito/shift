@@ -13,6 +13,9 @@ public final class AppModel {
     public private(set) var usage: [AgentKind: AgentUsage] = [:]
     /// The models each installed agent offers, besides its default.
     public private(set) var models: [AgentKind: [AgentModel]] = [:]
+    /// The Mac can't reach the internet while an agent runs. Working tasks and chats show
+    /// `TaskItem.offlineActivity`, and pick up again by themselves once it's back.
+    public private(set) var isOffline = false
     /// Set when an operation fails outside of any task (e.g. adding a project). UI shows it as an alert.
     public var lastError: String?
     /// Whether each project's base branch has commits to push. No entry: the repo has no remote (or
@@ -139,6 +142,8 @@ public final class AppModel {
     @ObservationIgnored private var baseServerIDs: [Project.ID: Int] = [:]
     /// How often a base server that is coming up is checked (tests shorten it).
     @ObservationIgnored var baseServerPoll: Duration = .milliseconds(200)
+    /// How often the connection is checked while offline, and the wait before trying a failed turn again (tests shorten it).
+    @ObservationIgnored var connectionPoll: Duration = .seconds(3)
     /// `start()` runs once per launch; the window calls it again whenever it is reopened.
     @ObservationIgnored private var started = false
     /// When each task was last continued after its limit reset, so a stale usage reading can't retry it in a loop.
@@ -264,6 +269,13 @@ public final class AppModel {
         Task { [weak self] in
             while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
         }
+        if let connectivity = services.connectivity {
+            Task { [weak self] in
+                while let poll = self?.connectionPoll, (try? await Task.sleep(for: poll)) != nil, let self {
+                    await self.checkConnection(connectivity)
+                }
+            }
+        }
         Task { [weak self] in
             await self?.refreshAllPullRequests()
             while (try? await Task.sleep(for: .seconds(60))) != nil, let self { await self.refreshAllPullRequests() }
@@ -291,6 +303,40 @@ public final class AppModel {
         }
         changed()
         await flush()
+    }
+
+    /// Only while an agent runs, or until the connection is back: nobody else needs to know.
+    private func checkConnection(_ connectivity: ConnectivityChecking) async {
+        guard !runs.isEmpty || !replyingChats.isEmpty || isOffline else { return }
+        if !connectivity.hasNetwork {
+            isOffline = true
+        } else if isOffline {
+            isOffline = !(await connectivity.reachesInternet())
+        }
+    }
+
+    /// After an agent turn failed with `reason`: if it was for want of internet, waits until it's back and
+    /// returns true, to run the turn again. Throws `CancellationError` once `isCurrent` says the run is over.
+    private func waitsForInternet(after reason: String, blips: inout Int, isCurrent: () -> Bool) async throws -> Bool {
+        guard let connectivity = services?.connectivity,
+              isOffline || OutcomeProtocol.isNetworkFailure(reason) else { return false }
+        func check() throws { if !isCurrent() { throw CancellationError() } }
+        if await connectivity.reachesInternet() {
+            try check()
+            // Online after all: a passing failure. Tried again a few times, then it's an error like any other.
+            blips += 1
+            guard blips <= 3, OutcomeProtocol.isNetworkFailure(reason) else { return false }
+            try await Task.sleep(for: connectionPoll * blips)
+        } else {
+            isOffline = true
+            repeat {
+                try await Task.sleep(for: connectionPoll)
+                try check()
+            } while !(await connectivity.reachesInternet())
+            isOffline = false
+        }
+        try check()
+        return true
     }
 
     // MARK: Projects
@@ -1369,7 +1415,7 @@ public final class AppModel {
             }
         }
         guard let services else { return }
-        var prompt = prompt, promptIDs = promptIDs
+        var prompt = prompt, promptIDs = promptIDs, blips = 0
         while isChatCurrent(projectID, token) {
             guard let project = project(projectID), let log = chat(projectID: projectID)?.id else { return }
             let kind = project.defaultAgent
@@ -1421,6 +1467,14 @@ public final class AppModel {
             guard isChatCurrent(projectID, token) else { return }
             chatRuns[projectID]?.channel = nil
             chatApprovals[projectID] = nil
+            if let reason = failure,
+               (try? await waitsForInternet(after: reason, blips: &blips, isCurrent: { isChatCurrent(projectID, token) })) == true {
+                // The same message again: a chat has no task to carry on with, and it may not have reached the agent.
+                prompt = text
+                promptIDs = []
+                continue
+            }
+            guard isChatCurrent(projectID, token) else { return }
             chatErrors[projectID] = failure
 
             // From here to the end of the iteration there is no await: a message sent now either
@@ -1639,7 +1693,7 @@ public final class AppModel {
     /// Runs agent turns until one ends with nothing pending, then settles the task.
     private func converse(_ id: TaskItem.ID, token: UUID, prompt: String, promptIDs: [Prompt.ID]) async throws {
         guard let services else { return }
-        var prompt = prompt, promptIDs = promptIDs
+        var prompt = prompt, promptIDs = promptIDs, blips = 0
         while true {
             var shots = await screenshotTurn(id)
             let screenshots = shots.map { $0.isApp ? ScreenshotRequest.app(wantsBefore: $0.wantsBefore) : .page }
@@ -1708,6 +1762,14 @@ public final class AppModel {
                 deliverPending(id)
             }
             try check(id, token)
+            if case .blocked(let reason, _) = outcome {
+                update(id) { $0.activity = nil }
+                if try await waitsForInternet(after: reason, blips: &blips, isCurrent: { isCurrent(id, token) }) {
+                    prompt = Self.continuePrompt
+                    promptIDs = []
+                    continue
+                }
+            }
             let settled = await settle(id, outcome)
             try check(id, token)
             // The agent may have created the project (a package.json with a dev script): serve that now.
