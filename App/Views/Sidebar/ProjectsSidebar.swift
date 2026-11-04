@@ -49,11 +49,14 @@ struct ProjectsSidebar: View {
         .listStyle(.sidebar)
         .searchable(text: $search, placement: .sidebar)
         .contentMargins(.top, 8, for: .scrollContent)
-        .safeAreaInset(edge: .bottom, alignment: .leading) {
+        // Like the task prompt bar: a background and divider only appear once projects scroll under it.
+        .safeAreaBar(edge: .bottom) {
             Button(action: addProject) { Label("New Project", systemImage: "plus") }
                 .buttonStyle(.borderless)
                 .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollEdgeEffectStyle(.hard, for: .bottom)
         .sheet(item: $settingsProject) { ProjectSettingsView(projectID: $0.id) }
         .confirmationDialog("Remove “\(removingProject?.name ?? "")”?",
                             isPresented: Binding(get: { removingProject != nil }, set: { if !$0 { removingProject = nil } }),
