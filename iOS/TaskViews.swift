@@ -242,7 +242,8 @@ private struct TaskRow: View {
     var body: some View {
         NavigationLink(value: task.id) {
             HStack(alignment: .firstLineCenter, spacing: 12) {
-                StatusIcon(status: task.status, size: 18, pullRequestOpen: model.state.pullRequests[task.id]?.state == .open)
+                StatusIcon(status: task.status, size: 18, pullRequestOpen: model.state.pullRequests[task.id]?.state == .open,
+                           mergedByPullRequest: task.mergedPullRequest != nil)
                     .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                 VStack(alignment: .leading, spacing: 2) {
                     // A title can wrap: center on its first line, a little above the baseline.
@@ -299,7 +300,8 @@ struct TaskDetailView: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                StatusIcon(status: task.status, pullRequestOpen: model.state.pullRequests[task.id]?.state == .open).accessibilityLabel(task.status.label)
+                StatusIcon(status: task.status, pullRequestOpen: model.state.pullRequests[task.id]?.state == .open,
+                           mergedByPullRequest: task.mergedPullRequest != nil).accessibilityLabel(task.status.label)
                 if model.previewURL(task) != nil {
                     Button("Preview", systemImage: "safari") { showsPreview = true }
                 }

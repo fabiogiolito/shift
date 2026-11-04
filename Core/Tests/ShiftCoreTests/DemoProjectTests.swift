@@ -18,6 +18,8 @@ final class DemoProjectTests: XCTestCase {
         XCTAssertEqual(state.projects.last?.takesScreenshots, true, "the demo is there to try them")
         XCTAssertEqual(state.tasks.map(\.id), [3100, 3101, 3102, 3103])
         XCTAssertEqual(state.nextTaskID, 3104)
+        XCTAssertEqual(state.tasks.map(\.status), [.completed, .completed, .completed, .merged])
+        XCTAssertEqual(state.tasks.last?.mergedPullRequest, 3103)
         let repo = try XCTUnwrap(state.projects.last).repoURL
         let blue = try await git.diff(worktree: state.tasks[0].worktreeURL, base: "main")
         let red = try await git.diff(worktree: state.tasks[1].worktreeURL, base: "main")

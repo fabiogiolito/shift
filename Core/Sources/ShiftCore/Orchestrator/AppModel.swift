@@ -741,6 +741,7 @@ public final class AppModel {
                 busy.insert(id)
                 await cleanUp(id)
                 markMerged(id)
+                update(id) { $0.mergedPullRequest = pullRequest.number }
                 busy.remove(id)
             }
         }

@@ -8,6 +8,8 @@ struct StatusIcon: View {
     var size: CGFloat?
     /// The task's pull request is open: a finished task shows the pull request instead of a checkmark.
     var pullRequestOpen = false
+    /// Merged through its pull request: the pull request icon, in the merged grey.
+    var mergedByPullRequest = false
 
     var body: some View {
         if let size {
@@ -25,12 +27,17 @@ struct StatusIcon: View {
             ProgressView().controlSize(.small).scaleEffect((size ?? 16) / 16)
         case .needsInput: Image(systemName: "questionmark.circle.fill").foregroundStyle(status.color)
         case .blocked: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(status.color)
-        case .completed where pullRequestOpen:
-            // There is no filled-circle pull symbol: draw one, matching the other icons.
-            Image(systemName: "circle.fill").foregroundStyle(status.color)
-                .overlay { Image(systemName: "arrow.triangle.pull").font(.system(size: (size ?? 16) * 0.5, weight: .bold)).foregroundStyle(.white) }
+        case .completed where pullRequestOpen: pullRequestIcon
+        case .merged where mergedByPullRequest: pullRequestIcon
         case .completed, .conflict, .merged: Image(systemName: "checkmark.circle.fill").foregroundStyle(status.color)
         }
+    }
+
+    /// Wider than tall: as wide as the circle symbols' circle, centered in the same square, so text beside it stays put.
+    private var pullRequestIcon: some View {
+        Image("PullRequest").resizable().aspectRatio(contentMode: .fit)
+            .frame(width: (size ?? 16) * 0.96)
+            .foregroundStyle(status.color)
     }
 }
 

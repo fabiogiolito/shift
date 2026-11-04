@@ -125,7 +125,8 @@ struct TaskRow: View {
         VStack(alignment: .leading, spacing: 2) {
             // The icon's leading edge lines up with the description below it.
             HStack(spacing: 6) {
-                StatusIcon(status: task.status, size: 14, pullRequestOpen: model.pullRequests[task.id]?.state == .open)
+                StatusIcon(status: task.status, size: 14, pullRequestOpen: model.pullRequests[task.id]?.state == .open,
+                           mergedByPullRequest: task.mergedPullRequest != nil)
                 Text(task.title).lineLimit(1)
                 Spacer()
                 TaskNumber(task: task)
