@@ -4,8 +4,6 @@ import SwiftUI
 
 /// Pairs phones and revokes them. Anyone with a code can start agents on this Mac, so it's only shown on request.
 struct PairedDevicesView: View {
-    static let windowID = "paired-devices"
-
     @Environment(AppModel.self) private var model
     @State private var code: (device: RemoteDevice, pairing: Pairing)?
     @State private var error: String?

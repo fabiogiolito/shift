@@ -5,14 +5,12 @@ import ShiftCore
 struct ProjectSettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openWindow) private var openWindow
     private let projectID: Project.ID
     @State private var draft: Project?
     @State private var branches: [String] = []
     @State private var creatingBranch = false
     /// Other projects: chosen in the picker; nil follows the project (an app has a build command).
     @State private var isApp: Bool?
-    private let apps = ExternalApps()
 
     init(projectID: Project.ID) {
         self.projectID = projectID
@@ -141,19 +139,8 @@ struct ProjectSettingsView: View {
         }
     }
 
-    private func appPicker(_ title: String, selection: Binding<String?>, options: [URL]) -> some View {
-        Picker(title, selection: selection) {
-            Text("None").tag(String?.none)
-            ForEach(options, id: \.self) { app in
-                Label { Text(apps.name(of: app)) } icon: { Image(nsImage: apps.icon(of: app)) }
-                    .tag(Optional(app.path))
-            }
-        }
-    }
-
     private func form(_ project: Binding<Project>) -> some View {
         let current = project.wrappedValue
-        let found = model.instructionFiles(for: projectID)
         // The current value is always offered, so the picker is valid before branches load.
         let branchOptions = branches.contains(current.baseBranch) ? branches : [current.baseBranch] + branches
 
@@ -181,18 +168,6 @@ struct ProjectSettingsView: View {
             }
 
             Section {
-                appPicker("Code editor", selection: project.editorPath,
-                          options: apps.installedEditors().filter { $0 != .finder }.compactMap(apps.appURL))
-                appPicker("Terminal", selection: project.terminalPath, options: apps.installedTerminals())
-            } header: {
-                Text("Open in")
-            } footer: {
-                Text("Shown first in Open in. New projects start with the last project's.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Section {
                 Picker("Permissions", selection: project.permissions) {
                     ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
                 }
@@ -214,18 +189,6 @@ struct ProjectSettingsView: View {
                     }
                 }
                 ModelPicker(agent: current.defaultAgent, selection: project.defaultModel)
-                ForEach(["AGENTS.md", "CLAUDE.md"], id: \.self) { name in
-                    LabeledContent(name) {
-                        if found.contains(name) {
-                            Text("Found")
-                            Button("Open") {
-                                NSWorkspace.shared.open(current.repoURL.appendingPathComponent(name))
-                            }
-                        } else {
-                            Text("Not found")
-                        }
-                    }
-                }
             }
 
             Section {
@@ -290,20 +253,6 @@ struct ProjectSettingsView: View {
                 }
             }
 
-            if !current.isApp {
-                Section {
-                    Picker("Stop idle servers after", selection: project.serverTTL) {
-                        ForEach([1, 5, 15, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
-                        Divider()
-                        Text("Never").tag(0)
-                    }
-                } footer: {
-                    Text("A server is idle while no agent runs on its task and no browser tab is connected to it. A new prompt, or clicking the server's button, starts it again.")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-
             Section {
                 Toggle("Take progress screenshots", isOn: project.takesScreenshots)
                     .onChange(of: current.takesScreenshots) { _, isOn in
@@ -329,20 +278,6 @@ struct ProjectSettingsView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-
-            Section("Advanced") {
-                LabeledContent("Worktree location", value: "Managed automatically")
-            }
-
-            Section {
-                LabeledContent("Follow and steer tasks from your iPhone") {
-                    Button("Paired Devices…") { openWindow(id: PairedDevicesView.windowID) }
-                }
-            } footer: {
-                Text("For all of Shift, not just this project.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)

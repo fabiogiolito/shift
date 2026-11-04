@@ -389,9 +389,7 @@ public final class AppModel {
         if let existing = projects.first(where: { $0.repoPath == path }) { return existing }
         let project = Project(name: url.lastPathComponent, repoPath: path, baseBranch: base, type: suggested.type,
                               defaultAgent: AgentKind.allCases.first { installedAgents[$0] != nil } ?? .claudeCode,
-                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets,
-                              // The same editor and terminal as the last project added, until changed in its settings.
-                              editorPath: projects.last?.editorPath, terminalPath: projects.last?.terminalPath)
+                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets)
         projects.append(project)
         changed()
         return project
@@ -492,14 +490,6 @@ public final class AppModel {
         } catch {
             lastError = "Could not create \(name): \(Self.firstLine(Self.describe(error)))"
             return false
-        }
-    }
-
-    /// Names of agent instruction files found in the repo root, e.g. ["AGENTS.md", "CLAUDE.md"].
-    public func instructionFiles(for projectID: Project.ID) -> [String] {
-        guard let project = project(projectID) else { return [] }
-        return ["AGENTS.md", "CLAUDE.md"].filter {
-            FileManager.default.fileExists(atPath: project.repoURL.appendingPathComponent($0).path)
         }
     }
 
@@ -2215,26 +2205,33 @@ public final class AppModel {
         if let port = task.port { await services.tailscale?.unserve(port: port) }
     }
 
-    /// Stops the dev servers idle for longer than their project's `serverTTL`, for their memory: no agent running,
+    /// Minutes a task's or a base's dev server may sit idle (no agent running, no browser tab connected) before
+    /// it is stopped, for every project. A new prompt or the server button starts it again. 0: never stopped.
+    public var serverTTL = UserDefaults.standard.object(forKey: "serverTTL") as? Int ?? 5 {
+        didSet { UserDefaults.standard.set(serverTTL, forKey: "serverTTL") }
+    }
+
+    /// Stops the dev servers idle for longer than `serverTTL`, for their memory: no agent running,
     /// no browser tab connected. A new prompt, or the server button, starts it again.
     func stopUnusedServers() async {
         guard let services else { return }
-        func idle(_ id: Int, _ projectID: Project.ID) -> Bool {
-            guard let ttl = project(projectID)?.serverTTL, ttl > 0 else { return false }
-            return serverUsed[id] ?? .distantPast < Date.now.addingTimeInterval(-TimeInterval(ttl) * 60 + serverIdleSlack)
+        let ttl = serverTTL
+        guard ttl > 0 else { return }
+        func idle(_ id: Int) -> Bool {
+            serverUsed[id] ?? .distantPast < Date.now.addingTimeInterval(-TimeInterval(ttl) * 60 + serverIdleSlack)
         }
         for task in tasks where task.status != .merged {
             guard let pid = task.serverPID, runs[task.id] == nil, !settingUp.contains(task.id), !busy.contains(task.id),
-                  project(task.projectID)?.isApp == false, idle(task.id, task.projectID) else { continue }
+                  project(task.projectID)?.isApp == false, idle(task.id) else { continue }
             if let port = task.port, await services.ports.hasClients(port, besides: pid) {
                 serverUsed[task.id] = .now
                 continue
             }
-            guard self.task(task.id)?.serverPID == pid, runs[task.id] == nil, idle(task.id, task.projectID) else { continue }
+            guard self.task(task.id)?.serverPID == pid, runs[task.id] == nil, idle(task.id) else { continue }
             await stopServer(task.id)
         }
         for (projectID, id) in baseServerIDs {
-            guard let port = basePorts[projectID], idle(id, projectID),
+            guard let port = basePorts[projectID], idle(id),
                   await services.servers.isRunning(taskID: id) else { continue }
             if await services.ports.hasClients(port, besides: baseGroups[projectID] ?? 0) {
                 serverUsed[id] = .now

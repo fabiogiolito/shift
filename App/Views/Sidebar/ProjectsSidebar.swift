@@ -31,7 +31,7 @@ struct ProjectsSidebar: View {
                 // Tasks waiting on the user; a zero badge is hidden.
                 .badge(model.tasks(in: project.id).filter { [.needsInput, .blocked, .conflict, .completed].contains($0.status) }.count)
                 .contextMenu {
-                    OpenInMenu(directory: project.repoURL, project: project)
+                    OpenInMenu(directory: project.repoURL)
                     if !project.isApp {
                         // Stops the dev servers of its base and its tasks, for their memory.
                         Button(project.serversOff ? "Turn Servers On" : "Turn Servers Off") {
