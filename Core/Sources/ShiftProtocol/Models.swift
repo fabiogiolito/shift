@@ -473,6 +473,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     /// Saved by earlier builds; still resumable.
     package static let legacyInterruptedReason = "Interrupted when Shift quit. Send a prompt to continue."
     public static let stoppedReason = "Stopped"
+    /// In place of "Working…" while the Mac is offline: the agent can't get anywhere until it's back.
+    public static let offlineActivity = "Shift can’t connect to the internet. It will retry and resume automatically when connected."
 
     /// Blocked because it was stopped or interrupted, so `AppModel.resume(taskID:)` can carry on.
     public var canResume: Bool {

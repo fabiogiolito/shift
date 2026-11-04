@@ -470,3 +470,9 @@ private final class Wake {
         watchdog?.cancel()
     }
 }
+
+final class MockConnectivity: ConnectivityChecking, @unchecked Sendable {
+    var online = true
+    var hasNetwork: Bool { online }
+    func reachesInternet() async -> Bool { online }
+}

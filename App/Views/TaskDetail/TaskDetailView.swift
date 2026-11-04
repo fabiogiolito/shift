@@ -69,7 +69,8 @@ struct TaskDetailView: View {
                             if task.status == .working {
                                 HStack(spacing: 8) {
                                     ProgressView().controlSize(.small)
-                                    Text(task.activity ?? (task.isResolvingConflict ? "Resolving conflict…" : "Working…"))
+                                    Text(model.isOffline ? TaskItem.offlineActivity
+                                         : task.activity ?? (task.isResolvingConflict ? "Resolving conflict…" : "Working…"))
                                 }
                                 .foregroundStyle(.secondary)
                             }

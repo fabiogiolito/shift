@@ -134,6 +134,7 @@ public final class RemoteServer {
             if let request = model.chatApprovalRequest(projectID: project.id) { snapshot.chatApprovals[project.id] = request }
         }
         snapshot.replyingChats = model.replyingChats
+        snapshot.isOffline = model.isOffline
         return snapshot
     }
 

@@ -78,7 +78,7 @@ struct ChatView: View {
                 if replying {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text("Working…").foregroundStyle(.secondary)
+                        Text(model.isOffline ? TaskItem.offlineActivity : "Working…").foregroundStyle(.secondary)
                         Spacer()
                         Button("Stop", systemImage: "stop.fill") { model.stopChat(projectID: project.id) }.buttonStyle(.glass)
                     }
