@@ -241,12 +241,15 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var opensPullRequests: Bool
     /// No dev servers run for it, its base's or its tasks', until turned back on.
     public var serversOff: Bool
+    /// Minutes a task's or the base's dev server may sit idle (no agent running, no browser tab connected) before
+    /// it is stopped. A new prompt or the server button starts it again. 0: never stopped.
+    public var serverTTL: Int
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildTargets: [BuildTarget] = [], permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
                 pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false,
-                serversOff: Bool = false) {
+                serversOff: Bool = false, serverTTL: Int = 5) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -262,6 +265,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.takesScreenshots = takesScreenshots
         self.opensPullRequests = opensPullRequests
         self.serversOff = serversOff
+        self.serverTTL = serverTTL
     }
 
     public init(from decoder: Decoder) throws {
@@ -283,6 +287,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
+        serverTTL = try values.decodeIfPresent(Int.self, forKey: .serverTTL) ?? 5
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)

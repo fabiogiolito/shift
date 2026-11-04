@@ -267,6 +267,20 @@ struct ProjectSettingsView: View {
                 }
             }
 
+            if !current.isApp {
+                Section {
+                    Picker("Stop idle servers after", selection: project.serverTTL) {
+                        ForEach([1, 5, 15, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
+                        Divider()
+                        Text("Never").tag(0)
+                    }
+                } footer: {
+                    Text("A server is idle while no agent runs on its task and no browser tab is connected to it. A new prompt, or clicking the server's button, starts it again.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             Section {
                 Toggle("Take progress screenshots", isOn: project.takesScreenshots)
                     .onChange(of: current.takesScreenshots) { _, isOn in
