@@ -9,7 +9,7 @@ RANGE=${SINCE:+$SINCE..}HEAD
 
 # Release bookkeeping isn't a change anyone uses.
 COMMITS=$(git log --no-merges --format='%s%n%b%n---' "$RANGE" \
-  | grep -v -e '^Co-Authored-By:' -e '^Appcast: ' -e '^Release [0-9]' | sed '/^$/d')
+  | grep -v -e '^Co-Authored-By:' -e '^Appcast: ' -e '^Release [0-9]' -e '^Release iOS' | sed '/^$/d')
 [ -n "$COMMITS" ] || { echo "release-notes: no commits since ${SINCE:-the beginning}" >&2; exit 1; }
 
 PROMPT="Write the release notes for a new version of Shift, a native macOS app that runs coding tasks \
@@ -21,6 +21,7 @@ Rules:
 - A markdown bullet list only: no heading, no intro, no closing line.
 - One bullet per change a user would notice, 2 to 8 bullets, most noticeable first. Merge commits about the same change.
 - Plain, short, present tense, from the user's point of view (\"Drag projects to reorder them\"), not implementation details.
+- They show in the Mac app's update window: leave out changes only to the iPhone app.
 - Leave out tests, refactors, build and release tooling, docs, and internal fixes users can't see.
 
 Commits:
@@ -30,5 +31,5 @@ if command -v claude >/dev/null 2>&1 && NOTES=$(printf '%s' "$PROMPT" | claude -
   printf '%s\n' "$NOTES"
 else
   echo "release-notes: claude unavailable, listing commit subjects" >&2
-  git log --no-merges --format='- %s' "$RANGE" | grep -v -e '^- Appcast: ' -e '^- Release [0-9]'
+  git log --no-merges --format='- %s' "$RANGE" | grep -v -e '^- Appcast: ' -e '^- Release [0-9]' -e '^- Release iOS'
 fi

@@ -14,10 +14,14 @@ scripts/build.sh                               # generates Shift.xcodeproj (xcod
 scripts/build.sh --ios                         # the same, whatever changed
 open build/Build/Products/Debug/Shift.app
 scripts/build.sh --release build-release       # Release build (the only one that checks for updates)
-scripts/release.sh --publish                   # on main, clean tree: next patch version, AI-written notes, build, sign, notarize, publish,
-                                               # and upload the iPhone app to TestFlight with the same version and build
+scripts/release.sh --publish                   # both apps. On main, clean tree: next patch version, AI-written notes, build, sign, notarize,
+                                               # publish the Mac app, and upload the iPhone app to TestFlight with the same version and build
+scripts/release.sh --mac --publish             # the Mac app only (GitHub release + appcast), nothing to TestFlight
+scripts/release.sh --ios --publish             # the iPhone app only, to TestFlight: keeps the current version, next build number
 scripts/release.sh 0.2.0 notes.md              # explicit version and notes; without --publish, stops before going online
 ```
+
+Which one to run: "release the Mac app" / "new Mac version" → `--mac`; "TestFlight", "iOS" or "iPhone/mobile app" alone → `--ios`; "release", "both" or "Mac and iOS" → no flag. Every release takes the next build number, shared by both apps.
 
 Releasing, signing and the Sparkle key: `docs/RELEASING.md`.
 
