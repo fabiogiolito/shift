@@ -251,5 +251,19 @@
 - A smaller folder icon in the project list]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.3/Shift-0.2.3.zip" sparkle:edSignature="SE9QXeXk76cFq/3P3XyAUMfMMeqz4dQAQHX98nfbS67Mlg657FB5OWbJ3C2MuxHfGrtKwqYShMiIIs5A6D2aAQ==" length="4512979" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.4</title>
+      <pubDate>Wed, 04 Nov 2026 13:46:21 +0000</pubDate>
+      <sparkle:version>20</sparkle:version>
+      <sparkle:shortVersionString>0.2.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Task servers start only when you open a task, on your Mac or your phone, or when its agent runs. Servers no one has used for 30 minutes stop on their own.
+- Turn off a web project's servers from its menu in the sidebar
+- Running agents keep going when the internet drops: Shift shows that it can't connect and continues the turn once you're back online
+- See thumbnails of added and changed images in file diffs. Click one to open it in Quick Look.
+- A bar now sits behind New Project when the projects list scrolls under it, and the project footer lines up with it
+- The pointer turns into a hand over links in messages]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.4/Shift-0.2.4.zip" sparkle:edSignature="H+MF07Lc7n2WOw2jdw1WPq10kHukhEofUeCYij++LZliOfkKUeG+sQ5yXHIO2pfeosFt/VVgHtxaYc73eVpkCw==" length="4603804" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
