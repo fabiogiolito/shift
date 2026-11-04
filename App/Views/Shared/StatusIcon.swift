@@ -33,10 +33,12 @@ struct StatusIcon: View {
         }
     }
 
-    /// Wider than tall: as wide as the circle symbols' circle, centered in the same square, so text beside it stays put.
+    /// As tall as the circle symbols' circle, so wider than the square: the square keeps its size and the badge
+    /// overflows it evenly on both sides, centered with the circles, without pushing the text beside it.
     private var pullRequestIcon: some View {
-        Image("PullRequest").resizable().aspectRatio(contentMode: .fit)
-            .frame(width: (size ?? 16) * 0.96)
+        let height = (size ?? 16) * 0.96
+        return Image("PullRequest").resizable()
+            .frame(width: height * 162 / 126, height: height)
             .foregroundStyle(status.color)
     }
 }
