@@ -68,10 +68,8 @@ struct ContentView: View {
         .toolbar(removing: .title)
         .overlay(alignment: .bottomTrailing) {
             if let project {
-                VStack(spacing: 0) {
-                    Divider()
-                    ProjectBar(project: project)
-                }
+                ProjectBar(project: project)
+                    .overlay(alignment: .top) { Divider() }
                 .frame(width: listWidth + detailWidth)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
             }
