@@ -62,8 +62,8 @@ struct ProjectsSidebar: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Button(action: addProject) { Label("New Project", systemImage: "plus") }
                 .buttonStyle(.borderless)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: ProjectBar.height, maxHeight: ProjectBar.height, alignment: .leading)
                 .background(scrolledUnderBar ? AnyShapeStyle(.bar) : AnyShapeStyle(.clear))
                 .overlay(alignment: .top) { if scrolledUnderBar { Divider() } }
         }

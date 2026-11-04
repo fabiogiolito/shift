@@ -4,6 +4,8 @@ import ShiftCore
 
 /// The project's options, along the bottom of the task list and task detail.
 struct ProjectBar: View {
+    /// Shared with the sidebar's New Project bar, so their top edges line up.
+    static let height: CGFloat = 40
     @Environment(AppModel.self) private var model
     let project: Project
     @State private var branches: [String] = []
@@ -87,8 +89,7 @@ struct ProjectBar: View {
         .fixedSize(horizontal: false, vertical: true)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
-        // Matches the sidebar's New Project bar, so their top edges line up.
-        .padding(.vertical, 12)
+        .frame(height: Self.height)
         .background(.bar)
         .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
         .sheet(isPresented: $creatingBranch) {
