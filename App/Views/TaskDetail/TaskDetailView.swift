@@ -96,6 +96,7 @@ struct TaskDetailView: View {
                 }
             }
             .toolbar { toolbar(task, project) }
+            .background { shortcuts(task, project) }
             // The latest prompt the agent has opens in place of the one before it; any others opened by hand stay.
             // A queued prompt waits for delivery, so the work in progress stays visible until then.
             .onChange(of: task.prompts.last { !$0.isPending }?.id, initial: true) { old, new in
@@ -290,6 +291,68 @@ struct TaskDetailView: View {
             Button("Server Log") { openWindow(id: "server-log", value: taskID) }
         }
         .help(help)
+    }
+
+    /// What the server button opens: localhost, or the tailnet when that's the chosen one.
+    private func previewURL(_ task: TaskItem, _ project: Project) -> URL? {
+        guard !project.isApp, !project.serversOff, let local = task.serverURL, let port = task.port else { return nil }
+        return opensTailnet ? model.tailnetHost.flatMap { URL(string: "https://\($0):\(port)") } ?? local : local
+    }
+
+    /// ⌘R: what the toolbar's main server or build button does, except that a running app restarts instead of stopping.
+    private func previewAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
+        if project.isApp && task.status != .merged {
+            guard let target = project.targets.first(where: { $0.id == suggestedTargetID }) ?? project.targets.first else { return nil }
+            guard target.kind == .run else { return TitledAction(title: actionTitle(target)) { perform(target) } }
+            return TitledAction(title: "Run \(target.name)") {
+                Task {
+                    if isRunning(target) { await model.stopApp(taskID: taskID); server = nil }
+                    await toggleRun(target)
+                }
+            }
+        }
+        return previewURL(task, project).map { url in TitledAction(title: "Open in Browser") { open(url) } }
+    }
+
+    /// ⌘.: stops the app ⌘R ran.
+    private func stopAction() -> (() -> Void)? {
+        guard server == .up, model.runningTargets[taskID] != nil else { return nil }
+        return { Task { await model.stopApp(taskID: taskID); server = nil } }
+    }
+
+    /// The task's menu items: ⌘R, ⌘., ⇧⌘C, ⇧⌘T, ⇧⌘E and ⇧⌘O. Apart, as the body is too long a chain to type-check with them.
+    private func shortcuts(_ task: TaskItem, _ project: Project) -> some View {
+        Color.clear
+            .focusedSceneValue(\.openPreview, previewAction(task, project))
+            .focusedSceneValue(\.copyPreviewLink, copyLinkAction(task, project))
+            .focusedSceneValue(\.openInTerminal, terminalAction(task, project))
+            .focusedSceneValue(\.openInEditor, editorAction(task, project))
+            .focusedSceneValue(\.openInFinder, finderAction(task, project))
+            .focusedSceneValue(\.stopApp, stopAction())
+    }
+
+    private func copyLinkAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
+        guard let url = previewURL(task, project) else { return nil }
+        return { copyToPasteboard(url.absoluteString) }
+    }
+
+    /// ⇧⌘E and ⇧⌘O, into the same folder as ⇧⌘T.
+    private func editorAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
+        guard let editor = OpenInMenu.editor(for: project) else { return nil }
+        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        return TitledAction(title: "Open in \(apps.name(of: editor))") { apps.open(folder, withApp: editor) }
+    }
+
+    private func finderAction(_ task: TaskItem, _ project: Project) -> () -> Void {
+        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        return { apps.open(folder, in: .finder) }
+    }
+
+    /// ⇧⌘T. A merged task's folder is gone: its work is in the project's.
+    private func terminalAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
+        guard let terminal = OpenInMenu.terminal(for: project) else { return nil }
+        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        return { apps.open(folder, withApp: terminal) }
     }
 
     /// Opens the server in the browser, starting it first if it was stopped (idle for its project's TTL, or crashed).

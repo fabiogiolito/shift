@@ -91,6 +91,18 @@ struct ContentView: View {
             // Every project has a chat: it stays selected.
             if selectedTask != ChatRow.id, selectedTask.flatMap(model.task)?.projectID != selectedProject { selectedTask = nil }
         }
+        // ⇧⌘[ ⇧⌘] and ⌘[ ⌘]: wrap around, in the order the sidebar and the task list show.
+        .focusedSceneValue(\.selectProject) { offset in
+            let ids = model.projects.map(\.id)
+            guard !ids.isEmpty else { return }
+            let index = selectedProject.flatMap(ids.firstIndex) ?? (offset > 0 ? -1 : 0)
+            selectedProject = ids[(index + offset + ids.count) % ids.count]
+        }
+        .focusedSceneValue(\.selectTask, project.map { project in { offset in
+            let ids = [ChatRow.id] + TaskListView.sections(model.tasks(in: project.id)).flatMap { $0.1.map(\.id) }
+            let index = selectedTask.flatMap(ids.firstIndex) ?? (offset > 0 ? -1 : 0)
+            selectedTask = ids[(index + offset + ids.count) % ids.count]
+        } })
         .alert("Something Went Wrong", isPresented: Binding(get: { model.lastError != nil },
                                                            set: { if !$0 { model.lastError = nil } })) {
             Button("OK") {}

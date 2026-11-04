@@ -10,12 +10,7 @@ struct TaskListView: View {
 
     var body: some View {
         let tasks = model.tasks(in: project.id)
-        let sections: [(String, [TaskItem])] = [
-            ("Review", tasks.filter { $0.status == .completed || $0.status == .conflict }),
-            ("Tasks", tasks.filter { [.working, .needsInput, .blocked].contains($0.status) }),
-            ("Recently Merged", Array(tasks.filter { $0.status == .merged }
-                .sorted { ($0.mergedAt ?? .distantPast) > ($1.mergedAt ?? .distantPast) }.prefix(10))),
-        ]
+        let sections = Self.sections(tasks)
         // The list doesn't re-measure rows and headers that are inserted or moved in place (a task moving to a new
         // section came out clipped), so a change in which task sits in which section rebuilds it at the right sizes.
         // In a ZStack so the rebuild stops there: bars attached to the list itself are rebuilt with it, and the
@@ -73,6 +68,16 @@ struct TaskListView: View {
             // Likely back from the browser, where a pull request was opened or merged.
             await model.refreshPullRequests(projectID: project.id)
         }
+    }
+
+    /// The list's sections in order. Also gives ⌘[ and ⌘] the order to step through.
+    static func sections(_ tasks: [TaskItem]) -> [(String, [TaskItem])] {
+        [
+            ("Review", tasks.filter { $0.status == .completed || $0.status == .conflict }),
+            ("Tasks", tasks.filter { [.working, .needsInput, .blocked].contains($0.status) }),
+            ("Recently Merged", Array(tasks.filter { $0.status == .merged }
+                .sorted { ($0.mergedAt ?? .distantPast) > ($1.mergedAt ?? .distantPast) }.prefix(10))),
+        ]
     }
 
     private func pushButton(_ state: AppModel.PushState) -> some View {

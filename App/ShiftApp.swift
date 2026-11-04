@@ -36,6 +36,7 @@ struct ShiftApp: App {
         .commands {
             NewTaskCommand()
             ProjectSettingsCommand()
+            ShortcutCommands()
             #if UPDATER
             if let updater = delegate.updater {
                 CommandGroup(after: .appInfo) {
@@ -109,9 +110,97 @@ private struct PairedDevicesCommand: View {
     }
 }
 
+/// Menu items for moving around and for the task on screen, each published as a focused value by the view that can do it.
+/// Its own `Commands` for the reason above.
+private struct ShortcutCommands: Commands {
+    @FocusedValue(\.focusPrompt) private var focusPrompt
+    @FocusedValue(\.focusSearch) private var focusSearch
+    @FocusedValue(\.selectProject) private var selectProject
+    @FocusedValue(\.selectTask) private var selectTask
+    @FocusedValue(\.openPreview) private var openPreview
+    @FocusedValue(\.copyPreviewLink) private var copyPreviewLink
+    @FocusedValue(\.openInTerminal) private var openInTerminal
+    @FocusedValue(\.openInEditor) private var openInEditor
+    @FocusedValue(\.openInFinder) private var openInFinder
+    @FocusedValue(\.stopApp) private var stopApp
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("Message Agent") { focusPrompt?() }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(focusPrompt == nil)
+        }
+        CommandGroup(before: .textEditing) {
+            Button("Search Projects") { focusSearch?() }
+                .keyboardShortcut("f")
+                .disabled(focusSearch == nil)
+        }
+        CommandMenu("Go") {
+            Button("Previous Project") { selectProject?(-1) }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .disabled(selectProject == nil)
+            Button("Next Project") { selectProject?(1) }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .disabled(selectProject == nil)
+            Divider()
+            Button("Previous Task") { selectTask?(-1) }
+                .keyboardShortcut("[")
+                .disabled(selectTask == nil)
+            Button("Next Task") { selectTask?(1) }
+                .keyboardShortcut("]")
+                .disabled(selectTask == nil)
+        }
+        CommandMenu("Task") {
+            Button(openPreview?.title ?? "Open in Browser") { openPreview?.perform() }
+                .keyboardShortcut("r")
+                .disabled(openPreview == nil)
+            Button("Stop") { stopApp?() }
+                .keyboardShortcut(".")
+                .disabled(stopApp == nil)
+            Button("Copy Link") { copyPreviewLink?() }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(copyPreviewLink == nil)
+            Button("Open in Terminal") { openInTerminal?() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .disabled(openInTerminal == nil)
+            Button(openInEditor?.title ?? "Open in Editor") { openInEditor?.perform() }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(openInEditor == nil)
+            Button("Show in Finder") { openInFinder?() }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+                .disabled(openInFinder == nil)
+        }
+    }
+}
+
+/// A menu item whose title depends on what's on screen.
+struct TitledAction {
+    var title: String
+    var perform: () -> Void
+}
+
 extension FocusedValues {
     /// Moves focus to the New task field. Published by the task list.
     @Entry var focusNewTask: (() -> Void)?
+    /// Moves focus to the open task's or the chat's prompt field. Published by the field.
+    @Entry var focusPrompt: (() -> Void)?
+    /// Moves focus to the projects search field. Published by the sidebar.
+    @Entry var focusSearch: (() -> Void)?
+    /// Selects the project or the task this many places away. Published by the window.
+    @Entry var selectProject: ((Int) -> Void)?
+    @Entry var selectTask: ((Int) -> Void)?
+    /// Opens the server in the browser, or builds the app. Published by the task detail and the chat.
+    @Entry var openPreview: TitledAction?
+    /// Copies the server's link. Published by the task detail and the chat.
+    @Entry var copyPreviewLink: (() -> Void)?
+    /// Opens the task's folder, or the project's from the chat, in the first terminal.
+    @Entry var openInTerminal: (() -> Void)?
+    /// Opens the same folder in the first installed editor.
+    @Entry var openInEditor: TitledAction?
+    /// Opens the same folder in Finder.
+    @Entry var openInFinder: (() -> Void)?
+    /// Stops the app the task's Run started. Published by the task detail.
+    @Entry var stopApp: (() -> Void)?
     /// Opens the current project's settings. Published by the project bar.
     @Entry var openProjectSettings: (() -> Void)?
 }

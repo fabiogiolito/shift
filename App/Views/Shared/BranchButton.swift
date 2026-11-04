@@ -9,8 +9,7 @@ struct BranchButton: View {
 
     var body: some View {
         Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(branch, forType: .string)
+            copyToPasteboard(branch)
             copied = true
         } label: {
             // Not a Label: its icon column can't be tightened.
@@ -33,4 +32,9 @@ struct BranchButton: View {
         }
         .padding(.trailing, 8)
     }
+}
+
+func copyToPasteboard(_ string: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(string, forType: .string)
 }
