@@ -1,8 +1,8 @@
 import SwiftUI
 import ShiftCore
 
-/// "Open in" for a folder: the preferred editor and terminal from Settings first, then the other editors, then the
-/// other terminals. Each with its app's icon.
+/// "Open in" for a folder, as menu items: the preferred editor and terminal from Settings first, straight in the menu,
+/// then an "Open in" submenu with the other editors and the other terminals. Each with its app's icon.
 struct OpenInMenu: View {
     let directory: URL
     @AppStorage(AppSettingsView.preferredEditorKey) private var preferredEditor = ""
@@ -15,20 +15,17 @@ struct OpenInMenu: View {
         let preferred = [preferredEditor, preferredTerminal].compactMap { path in
             (editors + terminals).first { $0.path == path }
         }
-        Menu("Open in") {
-            if !preferred.isEmpty {
-                ForEach(preferred, id: \.self, content: button)
-                Divider()
-            }
-            ForEach(editors.filter { !preferred.contains($0) }, id: \.self, content: button)
+        ForEach(preferred, id: \.self) { app in button(app, title: "Open in \(apps.name(of: app))") }
+        Menu(preferred.isEmpty ? "Open in" : "Open in Other") {
+            ForEach(editors.filter { !preferred.contains($0) }, id: \.self) { button($0) }
             Divider()
-            ForEach(terminals.filter { !preferred.contains($0) }, id: \.self, content: button)
+            ForEach(terminals.filter { !preferred.contains($0) }, id: \.self) { button($0) }
         }
     }
 
-    private func button(_ app: URL) -> some View {
+    private func button(_ app: URL, title: String? = nil) -> some View {
         Button { apps.open(directory, withApp: app) } label: {
-            Label { Text(apps.name(of: app)) } icon: { Image(nsImage: apps.icon(of: app)) }
+            Label { Text(title ?? apps.name(of: app)) } icon: { Image(nsImage: apps.icon(of: app)) }
         }
     }
 }
