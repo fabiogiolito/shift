@@ -337,13 +337,14 @@ struct TaskDetailView: View {
         return { Task { await model.stopApp(taskID: taskID); server = nil } }
     }
 
-    /// The task's menu items: ⌘R, ⌘., ⇧⌘C, ⇧⌘T and ⇧⌘E. Apart, as the body is too long a chain to type-check with them.
+    /// The task's menu items: ⌘R, ⌘., ⇧⌘C, ⇧⌘T, ⇧⌘E and ⇧⌘O. Apart, as the body is too long a chain to type-check with them.
     private func shortcuts(_ task: TaskItem, _ project: Project) -> some View {
         Color.clear
             .focusedSceneValue(\.openPreview, previewAction(task, project))
             .focusedSceneValue(\.copyPreviewLink, copyLinkAction(task, project))
             .focusedSceneValue(\.openInTerminal, terminalAction(task, project))
             .focusedSceneValue(\.openInEditor, editorAction(task, project))
+            .focusedSceneValue(\.openInFinder, finderAction(task, project))
             .focusedSceneValue(\.stopApp, stopAction())
     }
 
@@ -352,11 +353,16 @@ struct TaskDetailView: View {
         return { copyToPasteboard(url.absoluteString) }
     }
 
-    /// ⇧⌘E, into the same folder as ⇧⌘T.
+    /// ⇧⌘E and ⇧⌘O, into the same folder as ⇧⌘T.
     private func editorAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
-        guard let editor = apps.installedEditors().first else { return nil }
+        guard let editor = apps.installedEditors().first(where: { $0 != .finder }) else { return nil }
         let folder = task.status == .merged ? project.repoURL : task.worktreeURL
         return TitledAction(title: "Open in \(editor.displayName)") { apps.open(folder, in: editor) }
+    }
+
+    private func finderAction(_ task: TaskItem, _ project: Project) -> () -> Void {
+        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        return { apps.open(folder, in: .finder) }
     }
 
     /// ⇧⌘T. A merged task's folder is gone: its work is in the project's.

@@ -110,11 +110,12 @@ struct ChatView: View {
                     .help("Start a new conversation")
             }
         }
-        // The project's folder and its base branch's server, for ⇧⌘T, ⇧⌘E, ⌘R and ⇧⌘C.
+        // The project's folder and its base branch's server, for ⇧⌘T, ⇧⌘E, ⇧⌘O, ⌘R and ⇧⌘C.
         .focusedSceneValue(\.openInTerminal, ExternalApps().installedTerminals().first.map { terminal in {
             ExternalApps().open(project.repoURL, withApp: terminal)
         } })
-        .focusedSceneValue(\.openInEditor, ExternalApps().installedEditors().first.map { editor in
+        .focusedSceneValue(\.openInFinder) { ExternalApps().open(project.repoURL, in: .finder) }
+        .focusedSceneValue(\.openInEditor, ExternalApps().installedEditors().first(where: { $0 != .finder }).map { editor in
             TitledAction(title: "Open in \(editor.displayName)") { ExternalApps().open(project.repoURL, in: editor) }
         })
         .focusedSceneValue(\.openPreview, project.isApp ? nil : TitledAction(title: "Open \(project.baseBranch) in Browser") {
