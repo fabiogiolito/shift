@@ -39,7 +39,7 @@ public final class AppModel {
     }
 
     /// Each task's latest pull request, as of the last check. No entry: none, or not known (no `gh`).
-    public private(set) var pullRequests: [TaskItem.ID: PullRequest] = [:]
+    public internal(set) var pullRequests: [TaskItem.ID: PullRequest] = [:]
     private var refreshingPullRequests: Set<Project.ID> = []
 
     /// Web projects: the port of the dev server running on the project's own checkout, its base branch.

@@ -3,6 +3,7 @@ import Foundation
 
 /// What a development build of Shift always has to test with: a Next.js project with two finished tasks, so the
 /// servers on main and on each task, and their previews, can be tried on Mac and iOS without spending an agent run.
+/// Two more finished tasks have sample pull requests, one open and one merged (see `addDemoPullRequests`).
 /// Added next to whatever else the build's data holds. Start over: remove the project and relaunch; merging all its
 /// tasks does the same.
 /// ponytail: every checkout installs its own node_modules (about 400 MB), in each build's own SHIFT_HOME.
@@ -22,9 +23,11 @@ public enum DemoProject {
     static func seed(root: URL, git: GitServicing) async throws {
         let store = JSONStateStore(root: root)
         var state = await store.load()
-        let repo = root.appendingPathComponent("demo/shift-demo")
+        let repo = repo(root: root)
         let existing = state.projects.first { $0.repoPath == repo.path }
-        if let existing, state.tasks.contains(where: { $0.projectID == existing.id && $0.status != .merged }) { return }
+        // A demo from before the pull request tasks starts over too.
+        if let existing, state.tasks.contains(where: { $0.projectID == existing.id && $0.status != .merged }),
+           state.tasks.contains(where: { $0.projectID == existing.id && $0.title == changes.last?.title }) { return }
 
         let worktrees = root.appendingPathComponent("worktrees")
         var project = Project(name: name, repoPath: repo.path, baseBranch: base, type: .dynamicWebsite,
@@ -69,12 +72,22 @@ public enum DemoProject {
         await store.save(state)
     }
 
+    static func repo(root: URL) -> URL { root.appendingPathComponent("demo/shift-demo") }
+
     private static let changes = [
         (title: "Change the background to blue", from: #"background: "white""#, to: #"background: "blue""#,
          summary: "The page background is now blue."),
         (title: "Change the text color to red", from: #"color: "black""#, to: #"color: "red""#,
          summary: "The text is now red."),
+        (title: "Make the text bigger", from: "fontSize: 48", to: "fontSize: 72",
+         summary: "The text is now 72pt."),
+        (title: "Say hello to Shift", from: "Hello World", to: "Hello, Shift",
+         summary: "The page now says \"Hello, Shift\"."),
     ]
+
+    /// The sample pull requests, by task title. Both have work they don't: the open one offers Push Changes,
+    /// the merged one a new pull request.
+    static let pullRequests: [String: PullRequest.State] = ["Make the text bigger": .open, "Say hello to Shift": .merged]
 
     // JavaScript, because Next rewrites a TypeScript project's files when it starts, and that would show up as changes.
     // The styles are inline so they show even if the dev server refuses a phone its assets, with lines in between so
@@ -128,5 +141,18 @@ public enum DemoProject {
 
             """,
     ]
+}
+
+extension AppModel {
+    /// Gives the demo's tasks their sample pull requests. Its repo has no remote, so the GitHub check leaves them be.
+    public func addDemoPullRequests() {
+        let repo = DemoProject.repo(root: ShiftPaths.root).path
+        guard let project = projects.first(where: { $0.repoPath == repo }) else { return }
+        for task in tasks(in: project.id) where task.status != .merged {
+            guard let state = DemoProject.pullRequests[task.title] else { continue }
+            pullRequests[task.id] = PullRequest(number: task.id, url: URL(string: "https://github.com/shift-demo/shift-demo/pull/\(task.id)")!,
+                                                state: state, headRefName: task.branch, headRefOid: "", hasNewWork: true)
+        }
+    }
 }
 #endif
