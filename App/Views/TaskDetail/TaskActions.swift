@@ -20,7 +20,7 @@ struct TaskActionItems: View {
             // Core recreates a missing folder before the next run; until then there is nothing to open.
             let folderExists = FileManager.default.fileExists(atPath: task.worktreePath)
             Group {
-                OpenInMenu(directory: task.worktreeURL)
+                OpenInMenu(directory: task.worktreeURL, project: project)
             }
             .disabled(!folderExists)
             .help(folderExists ? "" : "The task's folder is recreated the next time the agent runs.")

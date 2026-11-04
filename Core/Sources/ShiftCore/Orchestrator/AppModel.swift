@@ -389,7 +389,9 @@ public final class AppModel {
         if let existing = projects.first(where: { $0.repoPath == path }) { return existing }
         let project = Project(name: url.lastPathComponent, repoPath: path, baseBranch: base, type: suggested.type,
                               defaultAgent: AgentKind.allCases.first { installedAgents[$0] != nil } ?? .claudeCode,
-                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets)
+                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets,
+                              // The same editor and terminal as the last project added, until changed in its settings.
+                              editorPath: projects.last?.editorPath, terminalPath: projects.last?.terminalPath)
         projects.append(project)
         changed()
         return project

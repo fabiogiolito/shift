@@ -244,12 +244,15 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// Minutes a task's or the base's dev server may sit idle (no agent running, no browser tab connected) before
     /// it is stopped. A new prompt or the server button starts it again. 0: never stopped.
     public var serverTTL: Int
+    /// The code editor and terminal shown first in Open in, by app path. nil: none preferred.
+    public var editorPath: String?
+    public var terminalPath: String?
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildTargets: [BuildTarget] = [], permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
                 pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false,
-                serversOff: Bool = false, serverTTL: Int = 5) {
+                serversOff: Bool = false, serverTTL: Int = 5, editorPath: String? = nil, terminalPath: String? = nil) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -266,6 +269,8 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.opensPullRequests = opensPullRequests
         self.serversOff = serversOff
         self.serverTTL = serverTTL
+        self.editorPath = editorPath
+        self.terminalPath = terminalPath
     }
 
     public init(from decoder: Decoder) throws {
@@ -288,6 +293,8 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
         serverTTL = try values.decodeIfPresent(Int.self, forKey: .serverTTL) ?? 5
+        editorPath = try values.decodeIfPresent(String.self, forKey: .editorPath)
+        terminalPath = try values.decodeIfPresent(String.self, forKey: .terminalPath)
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
