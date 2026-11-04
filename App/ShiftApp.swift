@@ -120,6 +120,8 @@ private struct ShortcutCommands: Commands {
     @FocusedValue(\.openPreview) private var openPreview
     @FocusedValue(\.copyPreviewLink) private var copyPreviewLink
     @FocusedValue(\.openInTerminal) private var openInTerminal
+    @FocusedValue(\.openInEditor) private var openInEditor
+    @FocusedValue(\.stopApp) private var stopApp
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -149,14 +151,20 @@ private struct ShortcutCommands: Commands {
         }
         CommandMenu("Task") {
             Button(openPreview?.title ?? "Open in Browser") { openPreview?.perform() }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
+                .keyboardShortcut("r")
                 .disabled(openPreview == nil)
+            Button("Stop") { stopApp?() }
+                .keyboardShortcut(".")
+                .disabled(stopApp == nil)
             Button("Copy Link") { copyPreviewLink?() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(copyPreviewLink == nil)
             Button("Open in Terminal") { openInTerminal?() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
                 .disabled(openInTerminal == nil)
+            Button(openInEditor?.title ?? "Open in Editor") { openInEditor?.perform() }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(openInEditor == nil)
         }
     }
 }
@@ -183,6 +191,10 @@ extension FocusedValues {
     @Entry var copyPreviewLink: (() -> Void)?
     /// Opens the task's folder, or the project's from the chat, in the first terminal.
     @Entry var openInTerminal: (() -> Void)?
+    /// Opens the same folder in the first installed editor, or Finder.
+    @Entry var openInEditor: TitledAction?
+    /// Stops the app the task's Run started. Published by the task detail.
+    @Entry var stopApp: (() -> Void)?
     /// Opens the current project's settings. Published by the project bar.
     @Entry var openProjectSettings: (() -> Void)?
 }

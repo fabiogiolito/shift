@@ -316,26 +316,47 @@ struct TaskDetailView: View {
         return opensTailnet ? model.tailnetHost.flatMap { URL(string: "https://\($0):\(port)") } ?? local : local
     }
 
-    /// ⇧⌘O: what the toolbar's main server or build button does.
+    /// ⌘R: what the toolbar's main server or build button does, except that a running app restarts instead of stopping.
     private func previewAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
         if project.isApp && task.status != .merged {
             guard let target = project.targets.first(where: { $0.id == suggestedTargetID }) ?? project.targets.first else { return nil }
-            return TitledAction(title: actionTitle(target)) { perform(target) }
+            guard target.kind == .run else { return TitledAction(title: actionTitle(target)) { perform(target) } }
+            return TitledAction(title: "Run \(target.name)") {
+                Task {
+                    if isRunning(target) { await model.stopApp(taskID: taskID); server = nil }
+                    await toggleRun(target)
+                }
+            }
         }
         return previewURL(task, project).map { url in TitledAction(title: "Open in Browser") { apps.openInBrowser(url) } }
     }
 
-    /// The task's menu items: ⇧⌘O, ⇧⌘C and ⇧⌘T. Apart, as the body is too long a chain to type-check with them.
+    /// ⌘.: stops the app ⌘R ran.
+    private func stopAction() -> (() -> Void)? {
+        guard server == .up, model.runningTargets[taskID] != nil else { return nil }
+        return { Task { await model.stopApp(taskID: taskID); server = nil } }
+    }
+
+    /// The task's menu items: ⌘R, ⌘., ⇧⌘C, ⇧⌘T and ⇧⌘E. Apart, as the body is too long a chain to type-check with them.
     private func shortcuts(_ task: TaskItem, _ project: Project) -> some View {
         Color.clear
             .focusedSceneValue(\.openPreview, previewAction(task, project))
             .focusedSceneValue(\.copyPreviewLink, copyLinkAction(task, project))
             .focusedSceneValue(\.openInTerminal, terminalAction(task, project))
+            .focusedSceneValue(\.openInEditor, editorAction(task, project))
+            .focusedSceneValue(\.stopApp, stopAction())
     }
 
     private func copyLinkAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
         guard let url = previewURL(task, project) else { return nil }
         return { copyToPasteboard(url.absoluteString) }
+    }
+
+    /// ⇧⌘E, into the same folder as ⇧⌘T.
+    private func editorAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
+        guard let editor = apps.installedEditors().first else { return nil }
+        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        return TitledAction(title: "Open in \(editor.displayName)") { apps.open(folder, in: editor) }
     }
 
     /// ⇧⌘T. A merged task's folder is gone: its work is in the project's.
