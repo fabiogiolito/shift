@@ -9,6 +9,7 @@ struct TurnView: View, Equatable {
     /// The prompts the turn answers. Empty for logs from before Shift recorded which.
     let prompts: [Prompt]
     let reader: TranscriptReader?
+    @Environment(\.textScale) private var textScale
 
     /// A conversation updates many times a second while a reply arrives, in only its last turn.
     static func == (a: Self, b: Self) -> Bool { a.turn == b.turn && a.prompts == b.prompts && a.reader === b.reader }
@@ -16,12 +17,12 @@ struct TurnView: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let note = turn.note {
-                Label(note, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
+                Label(note, systemImage: "info.circle").font(.scaled(.callout, textScale)).foregroundStyle(.secondary)
             }
             ForEach(prompts) { PromptBubble(prompt: $0) }
             if let text = turn.text {
                 // Shift's own instructions, not the user's words.
-                Text(text).font(.callout).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
+                Text(text).font(.scaled(.callout, textScale)).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
             }
             ForEach(turn.sections) { section in
                 switch section {
@@ -39,18 +40,20 @@ struct TurnView: View, Equatable {
                 }
             }
         }
+        .font(.scaled(.body, textScale))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 struct PromptBubble: View {
     let prompt: Prompt
+    @Environment(\.textScale) private var textScale
 
     var body: some View {
         // A group box, for the same background as the prompts of a task.
         GroupBox {
             VStack(alignment: .leading, spacing: 6) {
-                if !prompt.text.isEmpty { Text(prompt.text).textSelection(.enabled) }
+                if !prompt.text.isEmpty { Text(prompt.text).font(.scaled(.body, textScale)).textSelection(.enabled) }
                 if !prompt.attachments.isEmpty {
                     ScrollView(.horizontal) {
                         HStack(spacing: 6) {
@@ -89,15 +92,16 @@ private struct StepRow: View {
     let reader: TranscriptReader?
     @State private var full: String?
     @State private var isLoading = false
+    @Environment(\.textScale) private var textScale
 
     var body: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 6) {
                 if let detail = step.detail, !detail.isEmpty, detail != step.title {
-                    Text(detail).font(.callout.monospaced()).textSelection(.enabled)
+                    Text(detail).font(.scaled(.callout, textScale, design: .monospaced)).textSelection(.enabled)
                 }
                 if let output = full ?? (step.preview.isEmpty ? nil : step.preview) {
-                    Text(String(output.prefix(Self.limit))).font(.callout.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text(String(output.prefix(Self.limit))).font(.scaled(.callout, textScale, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
                     if full == nil && step.isTruncated {
                         Button(isLoading ? "Loading…" : "Show all") {
                             isLoading = true
@@ -105,7 +109,7 @@ private struct StepRow: View {
                         }
                         .disabled(isLoading)
                     } else if output.count > Self.limit {
-                        Text("Too long to show in full.").font(.callout).foregroundStyle(.secondary)
+                        Text("Too long to show in full.").font(.scaled(.callout, textScale)).foregroundStyle(.secondary)
                     }
                 }
             }

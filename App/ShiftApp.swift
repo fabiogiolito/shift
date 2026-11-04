@@ -8,6 +8,7 @@ import Sparkle
 struct ShiftApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     @State private var ready = false
+    @AppStorage(TextScale.key) private var textScale = 1.0
 
     var body: some Scene {
         Window("Shift", id: "main") {
@@ -20,6 +21,12 @@ struct ShiftApp: App {
             }
             .frame(minWidth: 960, minHeight: 600)
             .environment(delegate.model)
+            .environment(\.textScale, textScale)
+            .background {
+                // ⌘= too, the key under + without Shift, as in Safari and Xcode.
+                Button("") { textScale = TextScale.step(textScale, by: 1) }.keyboardShortcut("=")
+                    .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+            }
             .background { OpenWindowHandoff(delegate: delegate) }
             .task {
                 #if DEBUG
@@ -37,6 +44,7 @@ struct ShiftApp: App {
             NewTaskCommand()
             ProjectSettingsCommand()
             ShortcutCommands()
+            TextSizeCommands()
             #if UPDATER
             if let updater = delegate.updater {
                 CommandGroup(after: .appInfo) {
@@ -169,6 +177,26 @@ private struct ShortcutCommands: Commands {
             Button("Show in Finder") { openInFinder?() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(openInFinder == nil)
+        }
+    }
+}
+
+/// View › Make Text Bigger and Smaller, for the conversation, the diff and the agent's questions.
+private struct TextSizeCommands: Commands {
+    @AppStorage(TextScale.key) private var textScale = 1.0
+
+    var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            Divider()
+            Button("Actual Size") { textScale = 1 }
+                .keyboardShortcut("0")
+                .disabled(textScale == 1)
+            Button("Make Text Bigger") { textScale = TextScale.step(textScale, by: 1) }
+                .keyboardShortcut("+")
+                .disabled(textScale >= TextScale.steps.last!)
+            Button("Make Text Smaller") { textScale = TextScale.step(textScale, by: -1) }
+                .keyboardShortcut("-")
+                .disabled(textScale <= TextScale.steps.first!)
         }
     }
 }
