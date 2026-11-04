@@ -116,6 +116,7 @@ final class MockGit: GitServicing {
         if let diffError { throw diffError }
         return pendingChanges.files.map { FileDiff(change: $0, hunks: []) }
     }
+    func baseContents(worktree: URL, base: String, path: String) async throws -> Data { Data() }
 
     func canMergeCleanly(repo: URL, branch: String, base: String) async throws -> Bool {
         await canMergeGate?.wait()
