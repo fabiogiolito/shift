@@ -2,93 +2,35 @@ import SwiftUI
 import AppKit
 import ShiftCore
 
-/// The project's options, along the bottom of the task list and task detail.
+/// Along the bottom of the task list and task detail, split where they are. Under the list, what new tasks start
+/// from: the folder and the base branch. Under the detail, the agent, model and permissions of the task on screen,
+/// for its next prompt; with no task (the chat, or none selected), the project's, which new tasks start with.
 struct ProjectBar: View {
     /// Shared with the sidebar's New Project bar, so their top edges line up.
     static let height: CGFloat = 40
     @Environment(AppModel.self) private var model
     let project: Project
+    /// The task on screen. nil, or merged: the project's own choices.
+    let task: TaskItem?
+    /// The task list's width: the left side's.
+    let listWidth: CGFloat
     @State private var branches: [String] = []
     @State private var showingSettings = false
     @State private var creatingBranch = false
 
     var body: some View {
-        // The current value is always offered, so the menu is valid before branches load.
-        let branchOptions = branches.contains(project.baseBranch) ? branches : [project.baseBranch] + branches
-
-        HStack(spacing: 16) {
-            Menu {
-                Button("Show in Finder") {
-                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.repoPath)
-                }
-                Button("Project Settings…") { showingSettings = true }
-            } label: {
-                Label((project.repoPath as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
-            }
-            .help("Repository")
-
-            Menu {
-                Picker("Base branch", selection: binding(\.baseBranch)) {
-                    ForEach(branchOptions, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.inline)
-                Divider()
-                Button("New Branch…") { creatingBranch = true }
-            } label: {
-                Label(project.baseBranch, systemImage: "arrow.triangle.branch")
-            }
-            .help("Base branch for new tasks")
-
-            Menu {
-                Picker("Agent", selection: binding(\.defaultAgent)) {
-                    ForEach(AgentKind.allCases) { kind in
-                        let installed = model.installedAgents[kind] != nil
-                        Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
-                            .tag(kind)
-                            .disabled(!installed)
-                    }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Label(project.defaultAgent.displayName, image: project.defaultAgent.icon)
-            }
-            .help("Agent for new tasks")
-
-            Menu {
-                ModelPicker(agent: project.defaultAgent, selection: binding(\.defaultModel))
-                    .pickerStyle(.inline)
-            } label: {
-                Label(model.modelName(project.defaultModel, for: project.defaultAgent), systemImage: "cpu")
-            }
-            .help("Model")
-
-            Menu {
-                Picker("Permissions", selection: binding(\.permissions)) {
-                    ForEach(AgentPermissions.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Label(project.permissions.displayName, systemImage: project.permissions.symbol)
-            }
-            .help("Agent permissions")
-
-            Spacer()
-
-            if let usage = model.usage[project.defaultAgent], let window = usage.tightest {
-                Text(Self.describe(window))
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .help(usage.windows.map { "\($0.name) limit: \(Self.describe($0, named: false))" }
-                        .joined(separator: "\n"))
-            }
+        HStack(spacing: 0) {
+            newTaskSide
+                .padding(.horizontal, 12)
+                .frame(width: listWidth, alignment: .leading)
+            Divider()
+            agentSide
+                .padding(.horizontal, 12)
         }
         .menuStyle(.borderlessButton)
         .labelStyle(.titleAndIcon)
         .fixedSize(horizontal: false, vertical: true)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
         .frame(height: Self.height)
         .background(.bar)
         .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
@@ -100,15 +42,107 @@ struct ProjectBar: View {
                 Task { branches = await model.branches(for: project.id) }
             }
         }
-        .task(id: project.defaultAgent) {
+        .sheet(isPresented: $showingSettings) { ProjectSettingsView(projectID: project.id) }
+        .focusedSceneValue(\.openProjectSettings) { showingSettings = true }
+    }
+
+    private var newTaskSide: some View {
+        // The current value is always offered, so the menu is valid before branches load.
+        let branchOptions = branches.contains(project.baseBranch) ? branches : [project.baseBranch] + branches
+        return HStack(spacing: 16) {
+            Menu {
+                Button("Show in Finder") {
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.repoPath)
+                }
+                Button("Project Settings…") { showingSettings = true }
+            } label: {
+                Label((project.repoPath as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
+            }
+            .help("Repository")
+
+            Menu {
+                Picker("Base branch", selection: projectBinding(\.baseBranch)) {
+                    ForEach(branchOptions, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.inline)
+                Divider()
+                Button("New Branch…") { creatingBranch = true }
+            } label: {
+                Label(project.baseBranch, systemImage: "arrow.triangle.branch")
+            }
+            .help("Base branch for new tasks")
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var agentSide: some View {
+        let task = self.task.flatMap { $0.status == .merged ? nil : $0 }
+        let agent = task?.agent ?? project.defaultAgent
+        let modelID = task.map { $0.model ?? "" } ?? project.defaultModel
+        let permissions = task?.permissions ?? project.permissions
+        let whose = task == nil ? "for new tasks" : "for this task's next prompt"
+
+        return HStack(spacing: 16) {
+            Menu {
+                Picker("Agent", selection: Binding(get: { agent }, set: { kind in
+                    if let task { model.setAgent(taskID: task.id, to: kind) } else { updateProject { $0.defaultAgent = kind } }
+                })) {
+                    ForEach(AgentKind.allCases) { kind in
+                        let installed = model.installedAgents[kind] != nil
+                        Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
+                            .tag(kind)
+                            .disabled(!installed)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(agent.displayName, image: agent.icon)
+            }
+            // Its session is the agent's own: switching starts a new one, so not in the middle of a turn.
+            .disabled(task?.status == .working)
+            .help(task?.status == .working ? "The agent can be changed once it stops working" : "Agent \(whose)")
+
+            Menu {
+                ModelPicker(agent: agent, selection: Binding(get: { modelID }, set: { id in
+                    if let task { model.setModel(taskID: task.id, to: id.isEmpty ? nil : id) } else { updateProject { $0.defaultModel = id } }
+                }))
+                .pickerStyle(.inline)
+            } label: {
+                Label(model.modelName(modelID, for: agent), systemImage: "cpu")
+            }
+            .help("Model \(whose)")
+
+            Menu {
+                Picker("Permissions", selection: Binding(get: { permissions }, set: { new in
+                    if let task { model.setPermissions(taskID: task.id, to: new) } else { updateProject { $0.permissions = new } }
+                })) {
+                    ForEach(AgentPermissions.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(permissions.displayName, systemImage: permissions.symbol)
+            }
+            .help("Permissions \(whose)")
+
+            Spacer()
+
+            if let usage = model.usage[agent], let window = usage.tightest {
+                Text(Self.describe(window))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .help(usage.windows.map { "\($0.name) limit: \(Self.describe($0, named: false))" }
+                        .joined(separator: "\n"))
+            }
+        }
+        .task(id: agent) {
             // ponytail: polled; the Claude endpoint rate-limits, so not much more often than this.
             while !Task.isCancelled {
-                await model.refreshUsage(project.defaultAgent)
+                await model.refreshUsage(agent)
                 try? await Task.sleep(for: .seconds(300))
             }
         }
-        .sheet(isPresented: $showingSettings) { ProjectSettingsView(projectID: project.id) }
-        .focusedSceneValue(\.openProjectSettings) { showingSettings = true }
     }
 
     /// "5-hour limit 58% left · resets 3:40 PM"
@@ -123,12 +157,14 @@ struct ProjectBar: View {
         return text
     }
 
-    private func binding<Value>(_ keyPath: WritableKeyPath<Project, Value>) -> Binding<Value> {
-        Binding(get: { project[keyPath: keyPath] }, set: {
-            var updated = project
-            updated[keyPath: keyPath] = $0
-            model.updateProject(updated)
-        })
+    private func projectBinding<Value>(_ keyPath: WritableKeyPath<Project, Value>) -> Binding<Value> {
+        Binding(get: { project[keyPath: keyPath] }, set: { value in updateProject { $0[keyPath: keyPath] = value } })
+    }
+
+    private func updateProject(_ change: (inout Project) -> Void) {
+        var updated = project
+        change(&updated)
+        model.updateProject(updated)
     }
 }
 

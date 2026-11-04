@@ -375,14 +375,36 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(added?.serverCommand, "pnpm run dev --port $PORT")
     }
 
-    func testEveryRunUsesTheProjectsCurrentPermissions() async {
-        XCTAssertEqual(project.permissions, .bypass)
+    func testTaskKeepsItsOwnModelAndPermissions() async {
+        project.models[project.defaultAgent] = "opus"
+        model.updateProject(project)
         let id = await createCompletedTask()
-        project.permissions = .auto
+        XCTAssertEqual(model.task(id)?.model, "opus")
+        XCTAssertEqual(model.task(id)?.permissions, .bypass)
+
+        // The footer only sets what new tasks start with.
+        project.permissions = .manual
+        project.models[project.defaultAgent] = "haiku"
         model.updateProject(project)
         model.sendPrompt(taskID: id, text: "More")
         await waitFor("the second run") { self.agent.requests.count == 2 && self.status(id) == .completed }
-        XCTAssertEqual(agent.requests.map(\.permissions), [.bypass, .auto])
+        XCTAssertEqual(agent.requests.last?.permissions, .bypass)
+        XCTAssertEqual(agent.requests.last?.model, "opus")
+
+        // The task's own menus change its next prompt.
+        model.setPermissions(taskID: id, to: .auto)
+        model.setModel(taskID: id, to: "sonnet")
+        model.sendPrompt(taskID: id, text: "Again")
+        await waitFor("the third run") { self.agent.requests.count == 3 && self.status(id) == .completed }
+        XCTAssertEqual(agent.requests.last?.permissions, .auto)
+        XCTAssertEqual(agent.requests.last?.model, "sonnet")
+        XCTAssertEqual(model.project(project.id)?.permissions, .manual, "The project's own are left as they are")
+    }
+
+    func testSavedTaskWithoutItsOwnPermissionsTakesTheProjects() async {
+        project.permissions = .auto
+        await relaunch(with: savedTask(2001, status: .completed))
+        XCTAssertEqual(model.task(2001)?.permissions, .auto)
     }
 
     func testUninstalledAgentSwitchesToTheProjectDefault() async {

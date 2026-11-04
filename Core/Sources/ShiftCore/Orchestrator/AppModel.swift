@@ -256,6 +256,14 @@ public final class AppModel {
         for task in tasks where task.baseBranch == nil {
             if let base = project(task.projectID)?.baseBranch { update(task.id) { $0.baseBranch = base } }
         }
+        // Saved before tasks had their own model and permissions: they keep the project's.
+        for task in tasks where task.permissions == nil {
+            guard let project = project(task.projectID) else { continue }
+            update(task.id) {
+                $0.permissions = project.permissions
+                $0.model = project.models[task.agent]
+            }
+        }
 
         for kind in AgentKind.allCases {
             installedAgents[kind] = await services.agents[kind]?.detect()
@@ -506,11 +514,15 @@ public final class AppModel {
         let id = nextTaskID
         nextTaskID += 1
         let title = TaskItem.localTitle(id: id, prompt: prompt, attachments: attachments)
-        tasks.append(TaskItem(
+        var task = TaskItem(
             id: id, projectID: projectID, title: title, status: .working,
             agent: agent ?? project.defaultAgent, branch: "shift/\(id)", baseBranch: project.baseBranch,
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
-            prompts: [first], workingSince: Date()))
+            prompts: [first], workingSince: Date())
+        // The footer's choices are the new task's own from here on: changing them later leaves it as it is.
+        task.model = project.models[task.agent]
+        task.permissions = project.permissions
+        tasks.append(task)
         changed()
         startRun(id, prompt: first.agentText, promptIDs: [first.id])
         return id
@@ -918,6 +930,28 @@ public final class AppModel {
             into this branch, resolve the conflicts keeping the intent of both sides, verify that the \
             project still builds and its tests pass, and commit the result.
             """)
+    }
+
+    /// The agent for the task's next prompt. Sessions don't carry over between agents, so it starts a new one
+    /// with the task's prompts replayed; the model becomes the project's for that agent. Not while it's working.
+    public func setAgent(taskID: TaskItem.ID, to agent: AgentKind) {
+        guard let task = task(taskID), task.agent != agent, task.status != .merged, installedAgents[agent] != nil,
+              !busy.contains(taskID), !settingUp.contains(taskID), runs[taskID]?.active != true else { return }
+        update(taskID) {
+            $0.agent = agent
+            $0.sessionID = nil
+            $0.model = project(task.projectID)?.models[agent]
+        }
+    }
+
+    /// The model for the task's next prompt; nil is the agent's own default. The project's stays as it is.
+    public func setModel(taskID: TaskItem.ID, to model: String?) {
+        update(taskID) { $0.model = model }
+    }
+
+    /// The permissions for the task's next prompt. The project's stay as they are.
+    public func setPermissions(taskID: TaskItem.ID, to permissions: AgentPermissions) {
+        update(taskID) { $0.permissions = permissions }
     }
 
     /// Points the task at another base: its own commits move onto `base` (a rebase), so merging brings
@@ -1730,6 +1764,7 @@ public final class AppModel {
             update(id) {
                 $0.agent = fallback
                 $0.sessionID = nil
+                $0.model = project(task.projectID)?.models[fallback]
             }
             return adapter
         }
@@ -1756,8 +1791,9 @@ public final class AppModel {
             let channel = ApprovalChannel()
             let request = AgentRequest(prompt: text, sessionID: task.sessionID, worktree: task.worktreeURL,
                                        environment: task.port.map { ["PORT": String($0)] } ?? [:],
-                                       permissions: project(task.projectID)?.permissions ?? .bypass,
-                                       model: project(task.projectID)?.models[adapter.kind],
+                                       permissions: task.permissions ?? project(task.projectID)?.permissions ?? .bypass,
+                                       // A fallback agent (see `adapter(for:)`) doesn't run the other one's model.
+                                       model: adapter.kind == task.agent ? task.model : project(task.projectID)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        description: task.description,
                                        approvals: channel, screenshots: screenshots)

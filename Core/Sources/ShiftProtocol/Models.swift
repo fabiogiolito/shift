@@ -408,6 +408,11 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var worktreePath: String
     /// Agent's own session identifier, used to resume the same conversation.
     public var sessionID: String?
+    /// The model `agent` runs; nil is the agent's own default. Taken from the project when the task is created.
+    public var model: String?
+    /// Taken from the project when the task is created; each task's own after that.
+    /// nil only in state saved before tasks had their own: `AppModel` fills it in from the project at launch.
+    public var permissions: AgentPermissions?
     /// Usually equal to `id`, but may differ if that port was taken.
     public var port: Int?
     public var serverPID: Int32?
