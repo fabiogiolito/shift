@@ -53,6 +53,14 @@ public struct ExternalApps: Sendable {
         FileManager.default.displayName(atPath: appURL.path).replacingOccurrences(of: ".app", with: "")
     }
 
+    /// The app's icon at menu size.
+    @MainActor
+    public func icon(of appURL: URL) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+        icon.size = NSSize(width: 16, height: 16)
+        return icon
+    }
+
     public func openInBrowser(_ url: URL) {
         NSWorkspace.shared.open(url)
     }
@@ -75,7 +83,7 @@ public struct ExternalApps: Sendable {
         _ = try? await NSWorkspace.shared.openApplication(at: app, configuration: configuration)
     }
 
-    func appURL(_ app: ExternalApp) -> URL? {
+    public func appURL(_ app: ExternalApp) -> URL? {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier)
     }
 
