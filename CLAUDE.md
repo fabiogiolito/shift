@@ -29,7 +29,7 @@ Releasing, signing and the Sparkle key: `docs/RELEASING.md`.
 
 A simulator build talks to its own Mac build, with no pairing: `scripts/build.sh` launches it with `SIMCTL_CHILD_SHIFT_SERVER=http://127.0.0.1:<port>?token=<token>`, read in Debug builds as `SHIFT_SERVER`. An iOS Simulator build target gets the same variable from `AppModel`. The port and token are the files `remote-port` and `remote-dev-token` in that Mac build's `SHIFT_HOME`. The token only works straight over loopback.
 
-Debug builds add a demo project on launch (`DemoProject`, in that build's `SHIFT_HOME`): a Next.js "Hello World" with two finished tasks, one making the background blue and one making the text red, for testing the servers on main and on tasks, and their previews, on Mac and iOS. It starts over when it's removed or all its tasks are merged. `SHIFT_PREVIEW` builds skip it.
+Debug builds add a demo project on launch (`DemoProject`, in that build's `SHIFT_HOME`): a Next.js "Hello World" with four tasks: one making the background blue, one making the text red, one with a sample open pull request, and one merged through a pull request, for testing the servers on main and on tasks, and their previews, and pull request states, on Mac and iOS. It starts over when it's removed or all its tasks are merged. `SHIFT_PREVIEW` builds skip it.
 
 ## Layout
 

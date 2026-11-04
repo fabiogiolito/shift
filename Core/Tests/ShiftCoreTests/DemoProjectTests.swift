@@ -16,8 +16,10 @@ final class DemoProjectTests: XCTestCase {
         var state = await store.load()
         XCTAssertEqual(state.projects.map(\.name), ["Other", "Shift Demo"])
         XCTAssertEqual(state.projects.last?.takesScreenshots, true, "the demo is there to try them")
-        XCTAssertEqual(state.tasks.map(\.id), [3100, 3101])
-        XCTAssertEqual(state.nextTaskID, 3102)
+        XCTAssertEqual(state.tasks.map(\.id), [3100, 3101, 3102, 3103])
+        XCTAssertEqual(state.nextTaskID, 3104)
+        XCTAssertEqual(state.tasks.map(\.status), [.completed, .completed, .completed, .merged])
+        XCTAssertEqual(state.tasks.last?.mergedPullRequest, 3103)
         let repo = try XCTUnwrap(state.projects.last).repoURL
         let blue = try await git.diff(worktree: state.tasks[0].worktreeURL, base: "main")
         let red = try await git.diff(worktree: state.tasks[1].worktreeURL, base: "main")
@@ -26,7 +28,7 @@ final class DemoProjectTests: XCTestCase {
         let cleanBlue = try await git.canMergeCleanly(repo: repo, branch: state.tasks[0].branch, base: "main")
         XCTAssertTrue(cleanBlue)
 
-        // Both tasks merge.
+        // Every task merges: the changes don't touch neighbouring lines.
         for task in state.tasks {
             let result = try await git.merge(repo: repo, branch: task.branch, into: "main", message: task.title)
             XCTAssertEqual(result, .merged)
@@ -43,7 +45,7 @@ final class DemoProjectTests: XCTestCase {
         try await DemoProject.seed(root: root, git: git)
         state = await store.load()
         XCTAssertEqual(state.projects.count, 2)
-        XCTAssertEqual(state.tasks.map(\.id), [3102, 3103])
+        XCTAssertEqual(state.tasks.map(\.id), [3104, 3105, 3106, 3107])
         let page = try String(contentsOf: repo.appendingPathComponent(DemoProject.page), encoding: .utf8)
         XCTAssertTrue(page.contains(#"background: "white""#) && page.contains(#"color: "black""#))
     }

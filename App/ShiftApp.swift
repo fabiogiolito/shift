@@ -26,6 +26,9 @@ struct ShiftApp: App {
                 if ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == nil { await DemoProject.seed() }
                 #endif
                 await delegate.model.start()
+                #if DEBUG
+                delegate.model.addDemoPullRequests()
+                #endif
                 ready = true
                 delegate.applyScreenshotSize()
             }
