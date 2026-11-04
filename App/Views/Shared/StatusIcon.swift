@@ -6,6 +6,8 @@ struct StatusIcon: View {
     /// Every status, spinner included, fills the same square so rows line up whatever their state.
     /// nil keeps the surrounding font's size (e.g. in the toolbar).
     var size: CGFloat?
+    /// The task's pull request is open: a finished task shows the pull request instead of a checkmark.
+    var pullRequestOpen = false
 
     var body: some View {
         if let size {
@@ -23,6 +25,10 @@ struct StatusIcon: View {
             ProgressView().controlSize(.small).scaleEffect((size ?? 16) / 16)
         case .needsInput: Image(systemName: "questionmark.circle.fill").foregroundStyle(status.color)
         case .blocked: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(status.color)
+        case .completed where pullRequestOpen:
+            // There is no filled-circle pull symbol: draw one, matching the other icons.
+            Image(systemName: "circle.fill").foregroundStyle(status.color)
+                .overlay { Image(systemName: "arrow.triangle.pull").font(.system(size: (size ?? 16) * 0.5, weight: .bold)).foregroundStyle(.white) }
         case .completed, .conflict, .merged: Image(systemName: "checkmark.circle.fill").foregroundStyle(status.color)
         }
     }

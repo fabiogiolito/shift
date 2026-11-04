@@ -242,7 +242,7 @@ private struct TaskRow: View {
     var body: some View {
         NavigationLink(value: task.id) {
             HStack(alignment: .firstLineCenter, spacing: 12) {
-                StatusIcon(status: task.status, size: 18)
+                StatusIcon(status: task.status, size: 18, pullRequestOpen: model.state.pullRequests[task.id]?.state == .open)
                     .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                 VStack(alignment: .leading, spacing: 2) {
                     // A title can wrap: center on its first line, a little above the baseline.
@@ -299,7 +299,7 @@ struct TaskDetailView: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                StatusIcon(status: task.status).accessibilityLabel(task.status.label)
+                StatusIcon(status: task.status, pullRequestOpen: model.state.pullRequests[task.id]?.state == .open).accessibilityLabel(task.status.label)
                 if model.previewURL(task) != nil {
                     Button("Preview", systemImage: "safari") { showsPreview = true }
                 }
@@ -692,7 +692,7 @@ private struct TaskActions: View {
         case .completed:
             let merge = Action(title: "Merge into \(task.base(in: project))") { await model.merge(taskID: id) }
             if pullRequest?.state == .open {
-                let push = Action(title: "Push to Pull Request") { await model.push(taskID: id) }
+                let push = Action(title: "Push Changes") { await model.push(taskID: id) }
                 return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
             }
             // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.

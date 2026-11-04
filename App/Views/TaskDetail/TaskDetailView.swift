@@ -475,7 +475,7 @@ struct TaskDetailView: View {
             if let pullRequest, pullRequest.state == .open {
                 let view = { apps.openInBrowser(pullRequest.url) }
                 SplitButton(prominent: true, action: pullRequest.hasNewWork ? pushToPullRequest : view) {
-                    Text(pullRequest.hasNewWork ? "Push to Pull Request" : "View Pull Request")
+                    Text(pullRequest.hasNewWork ? "Push Changes" : "View Pull Request")
                 } menu: {
                     if pullRequest.hasNewWork { Button("View Pull Request", action: view) }
                     Button(mergeTitle, action: merge)
