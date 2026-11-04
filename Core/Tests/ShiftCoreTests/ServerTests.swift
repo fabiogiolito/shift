@@ -52,6 +52,12 @@ final class ServerTests: XCTestCase {
 
     // MARK: - Ports
 
+    func testClientsOfAPortAreTheOtherEndsOfItsConnections() {
+        let lsof = "p100\nn[::1]:53460->[::1]:3200\nn[::1]:3200->[::1]:53460\nn[::1]:3200->[::1]:50418\np200\nn[::1]:50418->[::1]:3200\np300\nn127.0.0.1:3200->127.0.0.1:1\n"
+        XCTAssertEqual(PortAllocator.clients(in: lsof, port: 3200), [100, 200])
+        XCTAssertEqual(PortAllocator.clients(in: "", port: 3200), [])
+    }
+
     func testAllocatorSkipsUsedAndReservedPorts() async throws {
         let allocator = PortAllocator()
         let port = await allocator.allocate(preferred: 41000, reserved: [])

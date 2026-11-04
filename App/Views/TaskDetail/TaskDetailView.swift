@@ -229,11 +229,21 @@ struct TaskDetailView: View {
                 primaryAction(task, project)
                 if canBuild {
                     buildControls(task, project)
+                } else if project.serversOff, task.serverURL != nil {
+                    Text("Servers are off").foregroundStyle(.secondary)
+                    Button("Turn On") {
+                        var updated = project
+                        updated.serversOff = false
+                        model.updateProject(updated)
+                    }
+                    .buttonStyle(.glass).controlSize(.small)
                 } else if let server = task.serverURL, let port = task.port {
                     let tailnet = model.tailnetHost.flatMap { URL(string: "https://\($0):\(port)") }
                     Group { serverButton(local: server, tailnet: tailnet, port: port) }
                     .task(id: task.port) {
                         while !Task.isCancelled {
+                            // Starts it if Shift left it off, and keeps it from being stopped while the task is open.
+                            await model.usingServer(taskID: taskID)
                             let alive = await model.isServerRunning(taskID: taskID)
                             let answers = alive ? await model.isServerAnswering(taskID: taskID) : false
                             // Once up, a server that stops answering has crashed inside a process that stayed alive.

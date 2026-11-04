@@ -983,13 +983,15 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(task.blockedReason, "Interrupted when Shift quit.")
         XCTAssertEqual(task.sessionID, "s9")
         XCTAssertEqual(servers.stoppedOrphans, [77])
-        XCTAssertEqual(servers.starts, [.init(taskID: 2001, command: "pnpm dev", port: 2001)])
-        XCTAssertEqual(task.serverPID, servers.running[2001])
+        XCTAssertTrue(servers.starts.isEmpty, "Started once the task is opened")
+        XCTAssertNil(task.serverPID)
         XCTAssertEqual(store.state.tasks, model.tasks)
         XCTAssertEqual(notifier.badges.last, 1)
 
         model.sendPrompt(taskID: 2001, text: "Continue")
         await waitForStatus(2001, .completed)
+        XCTAssertEqual(servers.starts, [.init(taskID: 2001, command: "pnpm dev", port: 2001)], "The agent's run starts it")
+        XCTAssertEqual(model.task(2001)?.serverPID, servers.running[2001])
         XCTAssertEqual(agent.requests.first?.sessionID, "s9")
         XCTAssertEqual(agent.requests.first?.prompt, "Continue")
         XCTAssertFalse(git.calls.contains { $0.hasPrefix("create") })
@@ -1341,6 +1343,8 @@ final class AppModelTests: XCTestCase {
         store.state = AppState(projects: [project], tasks: [other, old], nextTaskID: 2003)
         model = makeModel()
         await model.start()
+        await model.usingServer(taskID: 2002)
+        await model.usingServer(taskID: 2001)
         await model.flush()
 
         let command = ProjectSetup.serverCommand(for: project)
@@ -1352,6 +1356,60 @@ final class AppModelTests: XCTestCase {
         await model.restartServer(taskID: 2001)
         XCTAssertEqual(servers.starts.last, .init(taskID: 2001, command: command, port: 2003))
         XCTAssertEqual(servers.starts.count, 3)
+    }
+
+    // MARK: Servers only while wanted
+
+    func testServerStartsWhenOpenedAndStopsOnceUnused() async {
+        git.existingBranches = ["shift/2001"]
+        await relaunch(with: savedTask(2001, status: .completed))
+        XCTAssertTrue(servers.starts.isEmpty)
+
+        await model.usingServer(taskID: 2001)
+        XCTAssertEqual(servers.starts.count, 1)
+        await model.usingServer(taskID: 2001)
+        XCTAssertEqual(servers.starts.count, 1, "Already running")
+
+        await model.stopUnusedServers()
+        XCTAssertNotNil(servers.running[2001], "Just used")
+
+        model.serverIdleLimit = 0
+        ports.visited = [2001]
+        await model.stopUnusedServers()
+        XCTAssertNotNil(servers.running[2001], "A browser tab has it open")
+
+        ports.visited = []
+        await model.stopUnusedServers()
+        XCTAssertNil(servers.running[2001])
+        XCTAssertNil(model.task(2001)?.serverPID)
+
+        await model.usingServer(taskID: 2001)
+        XCTAssertEqual(servers.starts.count, 2, "Opened again")
+    }
+
+    func testServersOffStopsAndKeepsThemOff() async {
+        git.existingBranches = ["shift/2001"]
+        await relaunch(with: savedTask(2001, status: .completed))
+        await model.usingServer(taskID: 2001)
+        XCTAssertNotNil(servers.running[2001])
+
+        var off = model.project(project.id)!
+        off.serversOff = true
+        model.updateProject(off)
+        await waitFor("its server to stop") { self.servers.running[2001] == nil }
+        XCTAssertNil(model.task(2001)?.serverPID)
+
+        await model.usingServer(taskID: 2001)
+        await model.restartServer(taskID: 2001)
+        XCTAssertNil(servers.running[2001])
+        let base = await model.baseServerURL(projectID: project.id)
+        XCTAssertNil(base)
+        XCTAssertEqual(servers.starts.count, 1)
+
+        off.serversOff = false
+        model.updateProject(off)
+        await model.usingServer(taskID: 2001)
+        XCTAssertNotNil(servers.running[2001])
     }
 
     // MARK: Title and description

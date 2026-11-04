@@ -372,6 +372,10 @@ final class MockPorts: PortAllocating {
     /// Ports whose server runs but does not answer.
     var silent: Set<Int> = []
     func isListening(_ port: Int) async -> Bool { !silent.contains(port) }
+
+    /// Ports a browser tab has open.
+    var visited: Set<Int> = []
+    func hasClients(_ port: Int, besides group: Int32) async -> Bool { visited.contains(port) }
 }
 
 @MainActor @Observable

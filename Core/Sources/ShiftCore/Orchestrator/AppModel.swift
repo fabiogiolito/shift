@@ -121,6 +121,15 @@ public final class AppModel {
     @ObservationIgnored private var settingUp: Set<TaskItem.ID> = []
     /// Why the task's dev server last failed to start, until it starts. Shown with its log.
     @ObservationIgnored private var serverFailures: [TaskItem.ID: String] = [:]
+    /// Tasks whose dev server Shift left off: at launch, unused, or with the project's servers off.
+    /// Opening the task, or an agent running in it, starts it.
+    @ObservationIgnored private var dormant: Set<TaskItem.ID> = []
+    /// When each server, by its ID in `services.servers`, was last wanted: shown, opened, or an agent running.
+    @ObservationIgnored private var serverUsed: [Int: Date] = [:]
+    /// Each base server's process group, which its own connections to itself come from.
+    @ObservationIgnored private var baseGroups: [Project.ID: Int32] = [:]
+    /// How long a server goes unwanted before it is stopped, for its memory (tests shorten it).
+    @ObservationIgnored var serverIdleLimit: TimeInterval = 30 * 60
     /// The command each task's dev server was last started with.
     @ObservationIgnored private var serverCommands: [TaskItem.ID: String] = [:]
     @ObservationIgnored private var buildRuns: [BuildKey: Task<CommandResult, Error>] = [:]
@@ -265,6 +274,9 @@ public final class AppModel {
             while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
         }
         Task { [weak self] in
+            while (try? await Task.sleep(for: .seconds(60))) != nil, let self { await self.stopUnusedServers() }
+        }
+        Task { [weak self] in
             await self?.refreshAllPullRequests()
             while (try? await Task.sleep(for: .seconds(60))) != nil, let self { await self.refreshAllPullRequests() }
         }
@@ -344,6 +356,14 @@ public final class AppModel {
         if basePorts[project.id] != nil,
            (old.serverCommand, old.buildTargets, old.isApp) != (project.serverCommand, project.buildTargets, project.isApp) {
             Task { await startBaseServer(project.id, restart: true) }
+        }
+        if project.serversOff && !old.serversOff && !project.isApp {
+            Task { await startBaseServer(project.id) }
+            for task in tasks(in: project.id) where task.serverPID != nil { Task { await stopServer(task.id) } }
+        }
+        // Back on: each task's server starts once the task is opened.
+        if !project.serversOff && old.serversOff {
+            for task in tasks(in: project.id) where task.status != .merged && task.serverPID == nil { dormant.insert(task.id) }
         }
         // Now an app: its tasks are tested by building, so their dev servers and ports go. A running app goes
         // when the project stops being one, but not on any other change to its settings.
@@ -712,7 +732,12 @@ public final class AppModel {
     /// answers. Nil (and `lastError`) if it never does.
     public func baseServerURL(projectID: Project.ID) async -> URL? {
         guard let services, !openingBase.contains(projectID) else { return nil }
+        if let project = project(projectID), project.serversOff {
+            lastError = "Servers are off for \(project.name). Turn them on from its menu in the sidebar."
+            return nil
+        }
         func url(_ port: Int) -> URL? { URL(string: "http://localhost:\(port)") }
+        if let id = baseServerIDs[projectID] { serverUsed[id] = .now }
         if let id = baseServerIDs[projectID], let port = basePorts[projectID],
            await services.servers.isRunning(taskID: id), await isListening(port) { return url(port) }
 
@@ -770,7 +795,7 @@ public final class AppModel {
         guard let services else { return }
         let id = baseServerIDs[projectID] ?? -(baseServerIDs.count + 1)
         baseServerIDs[projectID] = id
-        guard let project = project(projectID), !project.isApp else {
+        guard let project = project(projectID), !project.isApp, !project.serversOff else {
             basePorts[projectID] = nil
             await services.servers.stop(taskID: id)
             return
@@ -786,15 +811,17 @@ public final class AppModel {
             .union(basePorts.filter { $0.key != projectID }.values)
         let port = await services.ports.allocate(preferred: basePorts[projectID] ?? 3000, reserved: reserved)
         do {
-            _ = try await services.servers.start(taskID: id, command: ProjectSetup.serverCommand(for: project, in: project.repoURL),
-                                                 directory: project.repoURL, port: port)
+            baseGroups[projectID] = try await services.servers.start(
+                taskID: id, command: ProjectSetup.serverCommand(for: project, in: project.repoURL),
+                directory: project.repoURL, port: port)
             basePorts[projectID] = port
+            serverUsed[id] = .now
         } catch {
             basePorts[projectID] = nil
             lastError = "Could not start the server for \(project.name): \(Self.firstLine(Self.describe(error)))"
         }
-        // Removed or made an app while starting: the server must not outlive it.
-        if self.project(projectID)?.isApp != false { await startBaseServer(projectID) }
+        // Removed, made an app or turned off while starting: the server must not outlive it.
+        if self.project(projectID).map({ $0.isApp || $0.serversOff }) != false { await startBaseServer(projectID) }
     }
 
     /// Checks every completed or conflicting task against its base again, which may have moved since,
@@ -1001,6 +1028,12 @@ public final class AppModel {
             return
         }
         if let failure = await startServer(taskID) { lastError = failure }
+    }
+
+    /// The task is open: starts its dev server if Shift left it off, and keeps it from being stopped as unused.
+    /// Call it again every few seconds for as long as it stays open.
+    public func usingServer(taskID: TaskItem.ID) async {
+        await wakeServer(taskID)
     }
 
     /// True while the task's dev server process is alive. Poll it: a server can die at any time.
@@ -1552,7 +1585,10 @@ public final class AppModel {
     }
 
     private func run(_ id: TaskItem.ID, token: UUID, prompt: String?, promptIDs: [Prompt.ID]) async {
-        defer { if runs[id]?.token == token { runs[id] = nil } }
+        defer {
+            if runs[id]?.token == token { runs[id] = nil }
+            serverUsed[id] = .now
+        }
         do {
             try check(id, token)
             // New, or its folder is gone (deleted, or never finished before a crash).
@@ -1567,6 +1603,9 @@ public final class AppModel {
                 beginWorking(id)
                 prompt = pending
             }
+            // The agent may test its work on the server.
+            await wakeServer(id)
+            try check(id, token)
             try await converse(id, token: token, prompt: prompt ?? "", promptIDs: promptIDs)
         } catch {
             // Not current any more: whoever cancelled this run has already decided the status.
@@ -1984,6 +2023,7 @@ public final class AppModel {
         guard let services, let task = task(id) else { return }
         await cancelRun(id)
         serverFailures[id] = nil
+        dormant.remove(id)
         for key in buildRuns.keys where key.taskID == id { buildRuns.removeValue(forKey: key)?.cancel() }
         builds = builds.filter { $0.key.taskID != id }
         buildLogs = buildLogs.filter { $0.key.taskID != id }
@@ -2022,6 +2062,10 @@ public final class AppModel {
     @discardableResult
     private func startServer(_ id: TaskItem.ID, retries: Int = 0) async -> String? {
         guard let services, let task = task(id), let project = project(task.projectID), !project.isApp else { return nil }
+        guard !project.serversOff else {
+            dormant.insert(id)
+            return "Servers are off for \(project.name). Turn them on from its menu in the sidebar."
+        }
         // Our own server must be off to tell whether something else (another project's dev server,
         // which may have hopped to the next port while ours was down) now holds the task's port.
         await services.servers.stop(taskID: id)
@@ -2048,6 +2092,8 @@ public final class AppModel {
             }
             update(id) { $0.serverPID = pid }
             serverFailures[id] = nil
+            dormant.remove(id)
+            serverUsed[id] = .now
             watchServer(id, pid: pid, port: port, retries: retries)
             return nil
         } catch {
@@ -2092,6 +2138,52 @@ public final class AppModel {
         }
     }
 
+    /// Starts the task's server if Shift left it off, and marks it wanted.
+    private func wakeServer(_ id: TaskItem.ID) async {
+        serverUsed[id] = .now
+        guard dormant.contains(id), !settingUp.contains(id), !busy.contains(id), let task = task(id),
+              project(task.projectID)?.serversOff == false, FileManager.default.fileExists(atPath: task.worktreePath) else { return }
+        dormant.remove(id)
+        await startServer(id)
+    }
+
+    /// Stops the task's dev server, for opening the task to start again.
+    private func stopServer(_ id: TaskItem.ID) async {
+        guard let services, let task = task(id) else { return }
+        dormant.insert(id)
+        update(id) { $0.serverPID = nil }
+        await services.servers.stop(taskID: id)
+        if let port = task.port { await services.tailscale?.unserve(port: port) }
+    }
+
+    /// Stops the dev servers nobody has wanted for `serverIdleLimit`, for their memory: not open in Shift or on a
+    /// phone, no agent running, no browser tab connected. Opening the task, or the base, starts its server again.
+    func stopUnusedServers() async {
+        guard let services else { return }
+        let cutoff = Date.now.addingTimeInterval(-serverIdleLimit)
+        let watched = remote?.watchedTasks ?? []
+        for task in tasks where task.status != .merged && !watched.contains(task.id) {
+            guard let pid = task.serverPID, runs[task.id] == nil, !settingUp.contains(task.id), !busy.contains(task.id),
+                  project(task.projectID)?.isApp == false, serverUsed[task.id] ?? .distantPast < cutoff else { continue }
+            if let port = task.port, await services.ports.hasClients(port, besides: pid) {
+                serverUsed[task.id] = .now
+                continue
+            }
+            guard self.task(task.id)?.serverPID == pid, runs[task.id] == nil,
+                  serverUsed[task.id] ?? .distantPast < cutoff else { continue }
+            await stopServer(task.id)
+        }
+        for (projectID, id) in baseServerIDs {
+            guard let port = basePorts[projectID], serverUsed[id] ?? .distantPast < cutoff,
+                  await services.servers.isRunning(taskID: id) else { continue }
+            if await services.ports.hasClients(port, besides: baseGroups[projectID] ?? 0) {
+                serverUsed[id] = .now
+                continue
+            }
+            await services.servers.stop(taskID: id)
+        }
+    }
+
     // MARK: - Recovery
 
     private func reconcile(_ id: TaskItem.ID) async {
@@ -2117,7 +2209,8 @@ public final class AppModel {
                 Self.apply(Settled(status: .blocked, blockedReason: Self.branchMissingReason(task, project)), to: &$0)
             }
         } else if hasWorktree {
-            await startServer(id)
+            // Started once the task is opened: servers for every open task would take a lot of memory.
+            dormant.insert(id)
         }
         // A worktree folder that is gone is recreated from the branch when it is next needed:
         // before the agent runs again, or on Restart Server.
