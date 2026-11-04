@@ -268,7 +268,7 @@ struct ProjectSettingsView: View {
             }
 
             Section {
-                Toggle("Take screenshots", isOn: project.takesScreenshots)
+                Toggle("Take progress screenshots", isOn: project.takesScreenshots)
                     .onChange(of: current.takesScreenshots) { _, isOn in
                         // Capturing a Mac app's window needs it, and the agent runs as part of Shift.
                         if isOn && usesBuild(current) { CGRequestScreenCaptureAccess() }
