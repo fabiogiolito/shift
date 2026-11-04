@@ -77,6 +77,8 @@ struct PromptField: View {
             return true
         }
         .focusedSceneValue(\.focusNewTask, isNewTaskField ? { focused = true } : nil)
+        // ⇧⌘N: the task's or the chat's field, whichever is on screen.
+        .focusedSceneValue(\.focusPrompt, isNewTaskField ? nil : { focused = true })
         .focusedValue(\.editingNewTask, isNewTaskField && focused ? true : nil)
         .onAppear { if focusOnAppear { focused = true } }
     }

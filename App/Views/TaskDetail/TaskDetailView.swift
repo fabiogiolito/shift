@@ -98,6 +98,7 @@ struct TaskDetailView: View {
                 }
             }
             .toolbar { toolbar(task, project) }
+            .background { shortcuts(task, project) }
             // The latest prompt the agent has opens in place of the one before it; any others opened by hand stay.
             // A queued prompt waits for delivery, so the work in progress stays visible until then.
             .onChange(of: task.prompts.last { !$0.isPending }?.id, initial: true) { old, new in
@@ -307,6 +308,41 @@ struct TaskDetailView: View {
             Button("Server Log") { openWindow(id: "server-log", value: taskID) }
         }
         .help(help)
+    }
+
+    /// What the server button opens: localhost, or the tailnet when that's the chosen one.
+    private func previewURL(_ task: TaskItem, _ project: Project) -> URL? {
+        guard !project.isApp, !project.serversOff, let local = task.serverURL, let port = task.port else { return nil }
+        return opensTailnet ? model.tailnetHost.flatMap { URL(string: "https://\($0):\(port)") } ?? local : local
+    }
+
+    /// ⇧⌘O: what the toolbar's main server or build button does.
+    private func previewAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
+        if project.isApp && task.status != .merged {
+            guard let target = project.targets.first(where: { $0.id == suggestedTargetID }) ?? project.targets.first else { return nil }
+            return TitledAction(title: actionTitle(target)) { perform(target) }
+        }
+        return previewURL(task, project).map { url in TitledAction(title: "Open in Browser") { apps.openInBrowser(url) } }
+    }
+
+    /// The task's menu items: ⇧⌘O, ⇧⌘C and ⇧⌘T. Apart, as the body is too long a chain to type-check with them.
+    private func shortcuts(_ task: TaskItem, _ project: Project) -> some View {
+        Color.clear
+            .focusedSceneValue(\.openPreview, previewAction(task, project))
+            .focusedSceneValue(\.copyPreviewLink, copyLinkAction(task, project))
+            .focusedSceneValue(\.openInTerminal, terminalAction(task, project))
+    }
+
+    private func copyLinkAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
+        guard let url = previewURL(task, project) else { return nil }
+        return { copyToPasteboard(url.absoluteString) }
+    }
+
+    /// ⇧⌘T. A merged task's folder is gone: its work is in the project's.
+    private func terminalAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
+        guard let terminal = apps.installedTerminals().first else { return nil }
+        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        return { apps.open(folder, withApp: terminal) }
     }
 
     /// What builds or runs the app. One target gets a plain button; several get a split button that offers the one

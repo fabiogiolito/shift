@@ -110,6 +110,16 @@ struct ChatView: View {
                     .help("Start a new conversation")
             }
         }
+        // The project's folder and its base branch's server, for ⇧⌘T, ⇧⌘O and ⇧⌘C.
+        .focusedSceneValue(\.openInTerminal, ExternalApps().installedTerminals().first.map { terminal in {
+            ExternalApps().open(project.repoURL, withApp: terminal)
+        } })
+        .focusedSceneValue(\.openPreview, project.isApp ? nil : TitledAction(title: "Open \(project.baseBranch) in Browser") {
+            Task { if let url = await model.baseServerURL(projectID: project.id) { ExternalApps().openInBrowser(url) } }
+        })
+        .focusedSceneValue(\.copyPreviewLink, project.isApp ? nil : {
+            Task { if let url = await model.baseServerURL(projectID: project.id) { copyToPasteboard(url.absoluteString) } }
+        })
         .confirmationDialog("Start a new chat?", isPresented: $confirmingNew) {
             Button("New Chat", role: .destructive) {
                 Task {

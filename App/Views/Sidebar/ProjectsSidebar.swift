@@ -6,6 +6,7 @@ struct ProjectsSidebar: View {
     @Environment(AppModel.self) private var model
     @Binding var selection: Project.ID?
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
     @State private var settingsProject: Project?
     @State private var removingProject: Project?
     @State private var scrolledUnderBar = false
@@ -57,6 +58,8 @@ struct ProjectsSidebar: View {
         }
         .listStyle(.sidebar)
         .searchable(text: $search, placement: .sidebar)
+        .searchFocused($searchFocused)
+        .focusedSceneValue(\.focusSearch) { searchFocused = true }
         .contentMargins(.top, 8, for: .scrollContent)
         // A background and divider only once projects scroll under New Project, like the task prompt bar.
         .safeAreaInset(edge: .bottom, spacing: 0) {
