@@ -71,21 +71,17 @@ struct MarkdownText: View {
             }
             .padding(.leading, CGFloat(level) * 8)
         case .table(let header, let rows):
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
-                GridRow {
-                    ForEach(Array(header.enumerated()), id: \.offset) { inline($0.element).fontWeight(.semibold) }
-                }
-                ForEach(Array(rows.enumerated()), id: \.offset) { row in
-                    Divider()
-                    GridRow {
-                        ForEach(Array(row.element.enumerated()), id: \.offset) { inline($0.element) }
-                    }
-                }
-            }
-            .fixedSize(horizontal: false, vertical: true) // Otherwise long cells truncate instead of wrapping.
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quinary, in: .rect(cornerRadius: 8))
+            #if os(iOS)
+            // Too narrow a screen to squeeze every column in: the table scrolls sideways in its box, not the page.
+            ScrollView(.horizontal) { table(header, rows) }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quinary, in: .rect(cornerRadius: 8))
+            #else
+            table(header, rows)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quinary, in: .rect(cornerRadius: 8))
+            #endif
         case .code(let text):
             ScrollView(.horizontal) {
                 Text(text).font(.scaled(.callout, textScale, design: .monospaced)).padding(10)
@@ -103,6 +99,30 @@ struct MarkdownText: View {
         }
     }
 
+    private func table(_ header: [String], _ rows: [[String]]) -> some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
+            GridRow {
+                ForEach(Array(header.enumerated()), id: \.offset) { cell($0.element).fontWeight(.semibold) }
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { row in
+                Divider()
+                GridRow {
+                    ForEach(Array(row.element.enumerated()), id: \.offset) { cell($0.element) }
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true) // Otherwise long cells truncate instead of wrapping.
+        .padding(10)
+    }
+
+    private func cell(_ text: String) -> some View {
+        #if os(iOS)
+        CappedWidth(max: 220) { inline(text) } // Given no width in the scroll view, long cells wrap here.
+        #else
+        inline(text)
+        #endif
+    }
+
     private static func headingStyle(_ level: Int) -> Font.TextStyle { level == 1 ? .title2 : level == 2 ? .title3 : .headline }
 
     private func inline(_ text: String) -> LinkedText { LinkedText(string: Self.inline(text)) }
@@ -111,6 +131,23 @@ struct MarkdownText: View {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
     }
 }
+
+#if os(iOS)
+/// As wide as its content wants, up to `max`, wrapping beyond it.
+private struct CappedWidth: Layout {
+    let max: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let view = subviews.first else { return .zero }
+        let width = min(proposal.width ?? view.sizeThatFits(.unspecified).width, max)
+        return view.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+}
+#endif
 
 /// Text whose links show the pointing hand on hover, as they do in a browser.
 private struct LinkedText: View {
