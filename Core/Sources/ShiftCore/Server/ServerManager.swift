@@ -133,7 +133,7 @@ public actor ServerManager: ServerManaging {
         return count > 0 ? pids.prefix(Int(count)).filter { $0 > 0 } : []
     }
 
-    private static func cwd(of pid: pid_t) -> String? {
+    static func cwd(of pid: pid_t) -> String? {
         var info = proc_vnodepathinfo()
         let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
         guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
@@ -142,7 +142,7 @@ public actor ServerManager: ServerManaging {
         }
     }
 
-    private static func realPath(_ path: String) -> String? {
+    static func realPath(_ path: String) -> String? {
         guard let resolved = realpath(path, nil) else { return nil }
         defer { free(resolved) }
         return String(cString: resolved)

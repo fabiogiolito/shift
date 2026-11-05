@@ -64,6 +64,13 @@ struct ShiftApp: App {
         .defaultSize(width: 720, height: 480)
         .restorationBehavior(.disabled)
 
+        // Like Force Quit Applications, for every project's tasks. Listed in the Window menu by itself.
+        Window(MemoryWindow.title, id: MemoryWindow.id) {
+            MemoryWindow().environment(delegate.model)
+        }
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+
         Settings {
             SettingsView().environment(delegate.model)
         }

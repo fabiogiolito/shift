@@ -296,6 +296,7 @@ public final class AppModel {
         Task { [weak self] in
             while (try? await Task.sleep(for: .seconds(60))) != nil, let self { await self.stopUnusedServers() }
         }
+        watchMemory()
         Task { [weak self] in
             await self?.refreshAllPullRequests()
             while (try? await Task.sleep(for: .seconds(60))) != nil, let self { await self.refreshAllPullRequests() }
@@ -2304,6 +2305,94 @@ public final class AppModel {
             }
             await services.servers.stop(taskID: id)
         }
+    }
+
+    // MARK: - Memory
+
+    /// A project gets a memory warning when its tasks use this much…
+    public static let memoryWarning: UInt64 = 2 << 30
+    /// …or this much while macOS is short of memory.
+    public static let memoryWarningUnderPressure: UInt64 = 1 << 30
+    /// How often memory is measured while an agent or server runs.
+    static let memoryPoll: Duration = .seconds(4)
+
+    /// Memory used by each task's agent and server, with everything they started, as of the last sample.
+    /// macOS counts it as Shift's. Only tasks using some.
+    public private(set) var taskMemory: [TaskItem.ID: MemoryUse] = [:]
+    /// The same for each project chat's agent.
+    public private(set) var chatMemory: [Project.ID: UInt64] = [:]
+    /// macOS reports memory pressure as warning or critical.
+    public private(set) var memoryPressure = false
+    @ObservationIgnored private var memoryPressureSource: DispatchSourceMemoryPressure?
+
+    public func memoryUsed(projectID: Project.ID) -> UInt64 {
+        tasks(in: projectID).reduce(chatMemory[projectID] ?? 0) { $0 + (taskMemory[$1.id]?.total ?? 0) }
+    }
+
+    /// The project's tasks use enough memory to point it out.
+    public func memoryWarning(projectID: Project.ID) -> Bool {
+        let used = memoryUsed(projectID: projectID)
+        return used >= Self.memoryWarning || (memoryPressure && used >= Self.memoryWarningUnderPressure)
+    }
+
+    /// Stops the task's dev server or app, for its memory. Opening the task, or an agent running in it, starts it again.
+    public func stopServer(taskID: TaskItem.ID) async {
+        if runningTargets[taskID] != nil { await stopApp(taskID: taskID) } else { await stopServer(taskID) }
+    }
+
+    private func watchMemory() {
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical], queue: .main)
+        source.setEventHandler { [weak self, weak source] in
+            guard let event = source?.data else { return }
+            MainActor.assumeIsolated { self?.memoryPressure = !event.contains(.normal) }
+        }
+        source.resume()
+        memoryPressureSource = source
+        Task { [weak self] in
+            while (try? await Task.sleep(for: Self.memoryPoll)) != nil, let self { await self.sampleMemory() }
+        }
+    }
+
+    func sampleMemory() async {
+        let servers = tasks.compactMap { task in task.serverPID.map { ($0, task.id) } }
+        guard !runs.isEmpty || !chatRuns.isEmpty || !servers.isEmpty else {
+            if !taskMemory.isEmpty { taskMemory = [:] }
+            if !chatMemory.isEmpty { chatMemory = [:] }
+            return
+        }
+        let worktrees = tasks.filter { $0.status != .merged }.map { ($0.worktreePath, $0.id) }
+        let chats = projects.filter { chatRuns[$0.id] != nil }.map { ($0.repoPath, $0.id) }
+        let bases = Set(baseGroups.values)
+        let (taskUse, chatUse) = await Task.detached {
+            Self.attribute(ProcessMemory.ownChildren(), servers: servers, worktrees: worktrees, chats: chats, ignoring: bases)
+        }.value
+        if taskMemory != taskUse { taskMemory = taskUse }
+        if chatMemory != chatUse { chatMemory = chatUse }
+    }
+
+    /// Who each of Shift's children belongs to: a task's server by its pid, else a task's agent (or setup command)
+    /// or a chat's agent by the folder it runs in. `ignoring`: base servers, which run in the project's folder too.
+    // ponytail: agents are found by their working directory, not their pid; pass the pid out of the adapter if one
+    // ever changes directory.
+    nonisolated static func attribute(_ children: [ProcessMemory.Child], servers: [(pid_t, TaskItem.ID)],
+                                      worktrees: [(String, TaskItem.ID)], chats: [(String, Project.ID)],
+                                      ignoring: Set<pid_t>) -> ([TaskItem.ID: MemoryUse], [Project.ID: UInt64]) {
+        let servers = Dictionary(servers, uniquingKeysWith: { first, _ in first })
+        let worktrees = Dictionary(worktrees.compactMap { path, id in ServerManager.realPath(path).map { ($0, id) } },
+                                   uniquingKeysWith: { first, _ in first })
+        let chats = Dictionary(chats.compactMap { path, id in ServerManager.realPath(path).map { ($0, id) } },
+                               uniquingKeysWith: { first, _ in first })
+        var tasks: [TaskItem.ID: MemoryUse] = [:], projects: [Project.ID: UInt64] = [:]
+        for child in children where child.footprint > 0 && !ignoring.contains(child.pid) {
+            if let id = servers[child.pid] {
+                tasks[id, default: MemoryUse()].server += child.footprint
+            } else if let directory = child.directory, let id = worktrees[directory] {
+                tasks[id, default: MemoryUse()].agent += child.footprint
+            } else if let directory = child.directory, let id = chats[directory] {
+                projects[id, default: 0] += child.footprint
+            }
+        }
+        return (tasks, projects)
     }
 
     // MARK: - Recovery

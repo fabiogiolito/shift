@@ -43,3 +43,34 @@ final class SystemTests: XCTestCase {
         await notifier.setBadge(count: 0)
     }
 }
+
+final class ProcessMemoryTests: XCTestCase {
+    /// A shell with two children: the tree counts all three, and is attributed by folder or server pid.
+    func testTreeFootprintCountsChildren() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+        shell.arguments = ["-c", "sleep 30 & sleep 30 & wait"]
+        shell.currentDirectoryURL = folder
+        try shell.run()
+        defer { shell.terminate(); try? FileManager.default.removeItem(at: folder) }
+        let pid = shell.processIdentifier
+        let deadline = Date().addingTimeInterval(5)
+        while ProcessMemory.children(of: pid).count < 2 && Date() < deadline { usleep(20_000) }
+
+        XCTAssertEqual(ProcessMemory.children(of: pid).count, 2)
+        let own = ProcessMemory.footprint(of: pid)
+        let tree = ProcessMemory.treeFootprint(pid)
+        XCTAssertGreaterThan(own, 0)
+        XCTAssertGreaterThan(tree, own)
+
+        let child = try XCTUnwrap(ProcessMemory.ownChildren().first { $0.pid == pid })
+        let (asAgent, _) = AppModel.attribute([child], servers: [], worktrees: [(folder.path, 7)], chats: [], ignoring: [])
+        XCTAssertEqual(asAgent[7], MemoryUse(agent: child.footprint))
+        let (asServer, _) = AppModel.attribute([child], servers: [(pid, 7)], worktrees: [(folder.path, 7)], chats: [], ignoring: [])
+        XCTAssertEqual(asServer[7], MemoryUse(server: child.footprint))
+        let (none, chats) = AppModel.attribute([child], servers: [], worktrees: [], chats: [(folder.path, UUID())], ignoring: [pid])
+        XCTAssertTrue(none.isEmpty && chats.isEmpty)
+    }
+}
