@@ -720,6 +720,18 @@ public final class AppModel {
         return URL(string: body.isEmpty || filled.count > 6000 ? page : filled)
     }
 
+    /// The project's GitHub page, from its base branch's remote. Nil, with an error shown, if it has none.
+    public func repositoryURL(projectID: Project.ID) async -> URL? {
+        guard let services, let project = project(projectID) else { return nil }
+        guard let remote = await services.git.remote(repo: project.repoURL, branch: project.baseBranch),
+              let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
+              let repo = Self.githubRepo(remoteURL: remoteURL) else {
+            lastError = "\(project.name) has no GitHub remote."
+            return nil
+        }
+        return URL(string: "https://github.com/\(repo)")
+    }
+
     /// "owner/repo" from an https or ssh remote URL. Nil for other hosts.
     static func githubRepo(remoteURL: String) -> String? {
         remoteURL.firstMatch(of: #/github\.com[:/]([^/]+/[^/]+?)(\.git)?/?$/#).map { String($0.1) }
