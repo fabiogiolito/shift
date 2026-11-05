@@ -37,6 +37,16 @@ public final class RemoteListener: @unchecked Sendable {
     /// (and may choose it for a build it hasn't launched yet).
     var portFile: URL { home.appendingPathComponent("remote-port") }
 
+    /// `<SHIFT_HOME>/remote-tailnet-port`: the port phones were given in their code. Chosen once and never changed, so
+    /// pairing outlives the loopback port moving (taken by something else while Shift was quit or updating).
+    var tailnetPortFile: URL { home.appendingPathComponent("remote-tailnet-port") }
+
+    var tailnetPort: Int? { Self.readPort(tailnetPortFile) }
+
+    private static func readPort(_ file: URL) -> Int? {
+        (try? String(contentsOf: file, encoding: .utf8)).flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    }
+
     /// SHIFT_SERVER for a simulator build, pointing at the Mac build that keeps its data in `home`, which may not be
     /// running yet: chooses its port and local token for it if it has none, as scripts/build.sh does.
     /// nil if they can't be written.
@@ -56,13 +66,15 @@ public final class RemoteListener: @unchecked Sendable {
     }
 
     /// Starts listening on the saved port, or else any free one, and saves it. nil if it could not listen at all.
+    /// The first time, the tailnet port is the port phones were paired with until now, or else this one.
     func start(_ handlers: Handlers) async -> Int? {
-        let saved = (try? String(contentsOf: portFile, encoding: .utf8)).flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let saved = Self.readPort(portFile)
         var port = await listen(on: saved.flatMap { NWEndpoint.Port(rawValue: UInt16(clamping: $0)) } ?? .any, handlers)
         if port == nil, saved != nil { port = await listen(on: .any, handlers) } // Taken by now.
         guard let port else { return nil }
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         try? String(port).write(to: portFile, atomically: true, encoding: .utf8)
+        if tailnetPort == nil { try? String(saved ?? port).write(to: tailnetPortFile, atomically: true, encoding: .utf8) }
         return port
     }
 

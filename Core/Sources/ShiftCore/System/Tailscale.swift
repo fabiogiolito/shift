@@ -9,17 +9,17 @@ public struct Tailscale: Sendable {
     static let candidates = ["/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale",
                              "/Applications/Tailscale.app/Contents/MacOS/Tailscale"]
 
-    /// Serves `https://<this machine>.<tailnet>.ts.net:<port>` from the server on `localhost:<port>`.
+    /// Serves `https://<this machine>.<tailnet>.ts.net:<port>` from the server on `localhost:<local>`, by default the same port.
     /// `localhost`, not 127.0.0.1: some servers (Astro, Vite) listen only on ::1, and Tailscale dials both.
     /// Returns the machine's tailnet host name, nil if it could not be shared.
-    public func serve(port: Int) async -> String? {
+    public func serve(port: Int, local: Int? = nil) async -> String? {
         guard let status = await run(["status", "--json"]),
               let json = try? JSONSerialization.jsonObject(with: Data(status.utf8)) as? [String: Any],
               json["BackendState"] as? String == "Running",
               let me = json["Self"] as? [String: Any],
               let dns = (me["DNSName"] as? String)?.trimmingCharacters(in: CharacterSet(charactersIn: ".")),
               !dns.isEmpty,
-              await run(["serve", "--bg", "--https=\(port)", "http://localhost:\(port)"]) != nil
+              await run(["serve", "--bg", "--https=\(port)", "http://localhost:\(local ?? port)"]) != nil
         else { return nil }
         return dns
     }

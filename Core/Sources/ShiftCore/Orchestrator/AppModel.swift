@@ -1341,8 +1341,8 @@ public final class AppModel {
     }
 
     /// Serves the port on the tailnet, for a phone. nil: Tailscale isn't running, or is set up without HTTPS.
-    func shareOnTailnet(port: Int) async -> (host: String, owner: String)? {
-        guard let tailscale = services?.tailscale, let host = await tailscale.serve(port: port),
+    func shareOnTailnet(port: Int, local: Int? = nil) async -> (host: String, owner: String)? {
+        guard let tailscale = services?.tailscale, let host = await tailscale.serve(port: port, local: local),
               let owner = await tailscale.ownerLogin() else { return nil }
         return (host, owner)
     }
