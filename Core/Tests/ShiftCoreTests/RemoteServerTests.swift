@@ -562,6 +562,9 @@ final class RemoteServerTests: XCTestCase {
         XCTAssertNotNil(second.port)
         XCTAssertNotEqual(second.port, port)
         XCTAssertEqual(try String(contentsOf: other.appendingPathComponent("remote-port"), encoding: .utf8), String(second.port!))
+        // Phones keep the port they were paired with: Tailscale serves it from wherever this launch listens.
+        XCTAssertEqual(second.tailnetPort, port)
+        XCTAssertEqual(again.tailnetPort, port)
     }
 
     func testSimulatorBuildGetsItsMacBuildsAddress() throws {

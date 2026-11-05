@@ -8,8 +8,10 @@ import Observation
 public final class RemoteServer {
     /// Paired phones, and ones still being shown their code.
     public private(set) var devices: [RemoteDevice]
-    /// Where it listens on loopback, and on the tailnet once shared.
+    /// Where it listens on loopback.
     public private(set) var port: Int?
+    /// Where phones reach it once shared on the tailnet, whatever `port` is this time.
+    private(set) var tailnetPort: Int?
 
     /// How often a subscribed log is checked for more (tests shorten it).
     /// ponytail: polling, cheap while a phone is looking; a store callback if phones ever watch many logs.
@@ -41,6 +43,7 @@ public final class RemoteServer {
             opened: { [weak self] connection in input.yield { self?.opened(connection) } },
             received: { [weak self] connection, data in input.yield { self?.received(data, from: connection) } },
             closed: { [weak self] connection in input.yield { self?.closed(connection) } }))
+        tailnetPort = port == nil ? nil : listener.tailnetPort
         observe()
         guard !devices.isEmpty else { return }
         // Tailscale may not be up yet at login.
@@ -72,11 +75,11 @@ public final class RemoteServer {
 
     /// A new device and what its code carries, valid until it's revoked.
     func pair() async throws -> (device: RemoteDevice, pairing: Pairing) {
-        guard let port else { throw PairingError.notListening }
+        guard let tailnetPort else { throw PairingError.notListening }
         guard let host = await shareOnTailnet() else { throw PairingError.noTailnet }
         let (device, token) = listener.auth.add()
         devices = listener.auth.devices
-        return (device, Pairing(host: host, port: port, token: token))
+        return (device, Pairing(host: host, port: tailnetPort, token: token))
     }
 
     /// Forgets the device and drops its connection. With none left, the Mac stops being reachable on the tailnet.
@@ -84,15 +87,15 @@ public final class RemoteServer {
         listener.auth.remove(id)
         devices = listener.auth.devices
         for connection in connections where connection.caller == .device(id) { connection.close() }
-        if devices.isEmpty, tailnetShared, let port {
+        if devices.isEmpty, tailnetShared, let tailnetPort {
             tailnetShared = false
-            Task { await model?.stopSharingOnTailnet(port: port) }
+            Task { await model?.stopSharingOnTailnet(port: tailnetPort) }
         }
     }
 
     /// Serves the port on the tailnet and learns who may reach it. The host name, nil if that failed.
     private func shareOnTailnet() async -> String? {
-        guard let port, let shared = await model?.shareOnTailnet(port: port) else { return nil }
+        guard let port, let tailnetPort, let shared = await model?.shareOnTailnet(port: tailnetPort, local: port) else { return nil }
         listener.auth.setOwner(shared.owner)
         tailnetShared = true
         return shared.host
