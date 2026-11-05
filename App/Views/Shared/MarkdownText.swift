@@ -183,7 +183,6 @@ private struct CappedWidth: Layout {
 private struct LinkedText: View {
     let string: AttributedString
     @State private var links = LinkFrames.Box()
-    @State private var overLink = false
 
     var body: some View {
         #if os(macOS)
@@ -194,10 +193,10 @@ private struct LinkedText: View {
                 return Text("\(text)\(run.0 == nil ? piece : piece.customAttribute(LinkRun()))")
             }
             .textRenderer(LinkFrames(box: links))
+            // Set directly, not with `pointerStyle`: selectable text keeps its I-beam over that. Off a link, the text sets the I-beam back itself.
             .onContinuousHover { phase in
-                if case .active(let point) = phase { overLink = links.rects.contains { $0.contains(point) } } else { overLink = false }
+                if case .active(let point) = phase, links.rects.contains(where: { $0.contains(point) }) { NSCursor.pointingHand.set() }
             }
-            .pointerStyle(overLink ? .link : nil)
         } else {
             Text(string)
         }
