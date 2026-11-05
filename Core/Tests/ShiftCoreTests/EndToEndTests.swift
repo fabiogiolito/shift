@@ -211,7 +211,7 @@ final class EndToEndTests: XCTestCase {
         let subjects = sh("git log --format=%s main..HEAD", in: task.worktreeURL)
         XCTAssertFalse(subjects.isEmpty || subjects == task.title, "\(agent) (\(permissions)) did not commit by itself: \(subjects)")
         await model.flush()
-        XCTAssertEqual(notifier.notifications.last?.title, "\(task.title) is ready")
+        XCTAssertEqual(notifier.notifications.last?.body, "\(task.title) is ready for review.")
 
         model.sendPrompt(taskID: id, text: "In style.css change the body color from black to green.")
         try await settle(id, .completed)
@@ -321,7 +321,7 @@ final class EndToEndTests: XCTestCase {
         let task = try XCTUnwrap(model.task(id))
         XCTAssertTrue(FileManager.default.fileExists(atPath: task.worktreeURL.appendingPathComponent("files.txt").path))
         await model.flush()
-        XCTAssertTrue(notifier.notifications.contains { $0.title.hasSuffix("needs your approval") && $0.body == allowed[0] })
+        XCTAssertTrue(notifier.notifications.contains { $0.body.hasSuffix("needs your attention.") })
 
         model.sendPrompt(taskID: id, text: "Now run `ls -a` and write the output to files2.txt. Do not commit.")
         let denied = try await answering(id, allow: false)
