@@ -531,7 +531,12 @@ public final class AppModel {
     /// Follow-up instructions, an answer to a question, or instructions for a blocked task.
     /// While the agent works they go into its running session as soon as it can take them, and are
     /// `isPending` until then.
+    /// `/task <prompt>` starts a new task in the same project instead.
     public func sendPrompt(taskID: TaskItem.ID, text: String, attachments: [String] = []) {
+        if let prompt = Self.taskCommand(text), let task = task(taskID) {
+            createTask(projectID: task.projectID, prompt: prompt, attachments: attachments)
+            return
+        }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard services != nil, let task = task(taskID), task.status != .merged,
               !busy.contains(taskID), !text.isEmpty || !attachments.isEmpty else { return }
@@ -557,6 +562,13 @@ public final class AppModel {
             }
         }
         deliverPending(taskID)
+    }
+
+    /// The prompt of a `/task <prompt>` message, or nil when the message isn't one.
+    nonisolated static func taskCommand(_ text: String) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.hasPrefix("/task"), text.count == 5 || text.dropFirst(5).first!.isWhitespace else { return nil }
+        return String(text.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Carries on with a task that was stopped or interrupted (`TaskItem.canResume`), in the same
@@ -1371,7 +1383,12 @@ public final class AppModel {
 
     /// Sends a message to the project's chat. While the agent replies it goes into the running session as
     /// soon as it can take it, or else into a next turn.
+    /// `/task <prompt>` starts a new task instead.
     public func sendChat(projectID: Project.ID, text: String, attachments: [String] = []) {
+        if let prompt = Self.taskCommand(text) {
+            createTask(projectID: projectID, prompt: prompt, attachments: attachments)
+            return
+        }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard services != nil, project(projectID) != nil, !text.isEmpty || !attachments.isEmpty else { return }
         chatErrors[projectID] = nil

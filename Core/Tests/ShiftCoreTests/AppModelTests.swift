@@ -89,6 +89,22 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(Prompt(text: "Fix this", attachments: ["/a", "/b"]).agentText, "Fix this\n\nAttached files:\n- /a\n- /b")
     }
 
+    func testTaskCommandStartsANewTask() async {
+        XCTAssertEqual(AppModel.taskCommand(" /task  Fix the footer\n"), "Fix the footer")
+        XCTAssertEqual(AppModel.taskCommand("/task\nTwo\nlines"), "Two\nlines")
+        XCTAssertNil(AppModel.taskCommand("/tasks"))
+        XCTAssertNil(AppModel.taskCommand("Run /task later"))
+
+        let id = await createCompletedTask()
+        model.sendPrompt(taskID: id, text: "/task Fix the footer")
+        XCTAssertEqual(model.task(id)?.prompts.map(\.text), ["Do the thing"])
+        XCTAssertEqual(model.task(id + 1)?.prompts.map(\.text), ["Fix the footer"])
+        XCTAssertEqual(model.task(id + 1)?.projectID, project.id)
+
+        model.sendChat(projectID: project.id, text: "/task Fix the header")
+        XCTAssertEqual(model.task(id + 2)?.prompts.map(\.text), ["Fix the header"])
+    }
+
     func testCreateRunsToCompleted() async {
         agent.scripts = [[.emit(.sessionStarted(id: "s1")), .emit(.activity("Editing…")), .emit(.rawOutput("raw")),
                           .emit(.finished(.completed(summary: "Gap is 4px")))]]
