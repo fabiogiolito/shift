@@ -307,5 +307,19 @@
 - Headings after a table or code block get the same space above them as after a paragraph]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.7/Shift-0.2.7.zip" sparkle:edSignature="haAovFJ2llkh9UZi3lZ0ACYXKhCVnzAmx6giSBweTL5PaoGaoe4mdQwsiZT4fLomM19IO4xecYKehnxY7nQcBQ==" length="4705892" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.8</title>
+      <pubDate>Thu, 05 Nov 2026 12:27:18 +0000</pubDate>
+      <sparkle:version>25</sparkle:version>
+      <sparkle:shortVersionString>0.2.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- A warning in the sidebar shows which project's tasks are using a lot of memory: 2 GB or more, or 1 GB when the Mac is low on memory
+- A new memory window, like Force Quit, lists each project's running tasks and servers, so you can stop one or all of them
+- A notification banner now appears every time a task finishes, not just the first time
+- Notifications show the project name as the title and say whether a task is ready for review or needs your attention
+- Press ⇧⌘G to open the project's GitHub repository
+- Long repository paths in the project bar now cut off the start instead of the end, so the end of the path stays visible]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.8/Shift-0.2.8.zip" sparkle:edSignature="RSoRMqh0stPTNfg+k+RnfsPtypp/qSoMA3szhUeUeRRk0S41zmR6dHgVNKxO3vdTnfQGV5yFlnWc4Qi4/+gVAA==" length="4775150" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
