@@ -105,6 +105,10 @@ struct ContentView: View {
             let index = selectedTask.flatMap(ids.firstIndex) ?? (offset > 0 ? -1 : 0)
             selectedTask = ids[(index + offset + ids.count) % ids.count]
         } })
+        // ⇧⌘G
+        .focusedSceneValue(\.openRepository, project.map { project in {
+            Task { if let url = await model.repositoryURL(projectID: project.id) { ExternalApps().openInBrowser(url) } }
+        } })
         .alert("Something Went Wrong", isPresented: Binding(get: { model.lastError != nil },
                                                            set: { if !$0 { model.lastError = nil } })) {
             Button("OK") {}

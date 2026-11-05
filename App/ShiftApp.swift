@@ -121,6 +121,7 @@ private struct ShortcutCommands: Commands {
     @FocusedValue(\.openInEditor) private var openInEditor
     @FocusedValue(\.openInFinder) private var openInFinder
     @FocusedValue(\.stopApp) private var stopApp
+    @FocusedValue(\.openRepository) private var openRepository
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -167,6 +168,9 @@ private struct ShortcutCommands: Commands {
             Button("Show in Finder") { openInFinder?() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(openInFinder == nil)
+            Button("Open on GitHub") { openRepository?() }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(openRepository == nil)
         }
     }
 }
@@ -217,6 +221,8 @@ extension FocusedValues {
     @Entry var openInEditor: TitledAction?
     /// Opens the same folder in Finder.
     @Entry var openInFinder: (() -> Void)?
+    /// Opens the selected project's GitHub repository in the browser. Published by the window.
+    @Entry var openRepository: (() -> Void)?
     /// Stops the app the task's Run started. Published by the task detail.
     @Entry var stopApp: (() -> Void)?
     /// Opens the current project's settings. Published by the project bar.
