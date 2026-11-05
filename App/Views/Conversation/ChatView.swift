@@ -111,11 +111,11 @@ struct ChatView: View {
             }
         }
         // The project's folder and its base branch's server, for ⇧⌘T, ⇧⌘E, ⇧⌘O, ⌘R and ⇧⌘C.
-        .focusedSceneValue(\.openInTerminal, OpenInMenu.terminal(for: project).map { terminal in {
+        .focusedSceneValue(\.openInTerminal, OpenInMenu.terminal().map { terminal in {
             ExternalApps().open(project.repoURL, withApp: terminal)
         } })
         .focusedSceneValue(\.openInFinder) { ExternalApps().open(project.repoURL, in: .finder) }
-        .focusedSceneValue(\.openInEditor, OpenInMenu.editor(for: project).map { editor in
+        .focusedSceneValue(\.openInEditor, OpenInMenu.editor().map { editor in
             TitledAction(title: "Open in \(ExternalApps().name(of: editor))") { ExternalApps().open(project.repoURL, withApp: editor) }
         })
         .focusedSceneValue(\.openPreview, project.isApp ? nil : TitledAction(title: "Open \(project.baseBranch) in Browser") {

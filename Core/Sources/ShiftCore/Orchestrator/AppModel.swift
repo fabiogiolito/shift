@@ -256,6 +256,14 @@ public final class AppModel {
         for task in tasks where task.baseBranch == nil {
             if let base = project(task.projectID)?.baseBranch { update(task.id) { $0.baseBranch = base } }
         }
+        // Saved before tasks had their own model and permissions: they keep the project's.
+        for task in tasks where task.permissions == nil {
+            guard let project = project(task.projectID) else { continue }
+            update(task.id) {
+                $0.permissions = project.permissions
+                $0.model = project.models[task.agent]
+            }
+        }
 
         for kind in AgentKind.allCases {
             installedAgents[kind] = await services.agents[kind]?.detect()
@@ -389,9 +397,7 @@ public final class AppModel {
         if let existing = projects.first(where: { $0.repoPath == path }) { return existing }
         let project = Project(name: url.lastPathComponent, repoPath: path, baseBranch: base, type: suggested.type,
                               defaultAgent: AgentKind.allCases.first { installedAgents[$0] != nil } ?? .claudeCode,
-                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets,
-                              // The same editor and terminal as the last project added, until changed in its settings.
-                              editorPath: projects.last?.editorPath, terminalPath: projects.last?.terminalPath)
+                              serverCommand: suggested.server, setupCommand: suggested.setup, buildTargets: suggested.targets)
         projects.append(project)
         changed()
         return project
@@ -495,14 +501,6 @@ public final class AppModel {
         }
     }
 
-    /// Names of agent instruction files found in the repo root, e.g. ["AGENTS.md", "CLAUDE.md"].
-    public func instructionFiles(for projectID: Project.ID) -> [String] {
-        guard let project = project(projectID) else { return [] }
-        return ["AGENTS.md", "CLAUDE.md"].filter {
-            FileManager.default.fileExists(atPath: project.repoURL.appendingPathComponent($0).path)
-        }
-    }
-
     // MARK: Tasks
 
     /// Creates the task and returns immediately with status `.working`; setup continues in the background.
@@ -516,11 +514,15 @@ public final class AppModel {
         let id = nextTaskID
         nextTaskID += 1
         let title = TaskItem.localTitle(id: id, prompt: prompt, attachments: attachments)
-        tasks.append(TaskItem(
+        var task = TaskItem(
             id: id, projectID: projectID, title: title, status: .working,
             agent: agent ?? project.defaultAgent, branch: "shift/\(id)", baseBranch: project.baseBranch,
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
-            prompts: [first], workingSince: Date()))
+            prompts: [first], workingSince: Date())
+        // The footer's choices are the new task's own from here on: changing them later leaves it as it is.
+        task.model = project.models[task.agent]
+        task.permissions = project.permissions
+        tasks.append(task)
         changed()
         startRun(id, prompt: first.agentText, promptIDs: [first.id])
         return id
@@ -928,6 +930,28 @@ public final class AppModel {
             into this branch, resolve the conflicts keeping the intent of both sides, verify that the \
             project still builds and its tests pass, and commit the result.
             """)
+    }
+
+    /// The agent for the task's next prompt. Sessions don't carry over between agents, so it starts a new one
+    /// with the task's prompts replayed; the model becomes the project's for that agent. Not while it's working.
+    public func setAgent(taskID: TaskItem.ID, to agent: AgentKind) {
+        guard let task = task(taskID), task.agent != agent, task.status != .merged, installedAgents[agent] != nil,
+              !busy.contains(taskID), !settingUp.contains(taskID), runs[taskID]?.active != true else { return }
+        update(taskID) {
+            $0.agent = agent
+            $0.sessionID = nil
+            $0.model = project(task.projectID)?.models[agent]
+        }
+    }
+
+    /// The model for the task's next prompt; nil is the agent's own default. The project's stays as it is.
+    public func setModel(taskID: TaskItem.ID, to model: String?) {
+        update(taskID) { $0.model = model }
+    }
+
+    /// The permissions for the task's next prompt. The project's stay as they are.
+    public func setPermissions(taskID: TaskItem.ID, to permissions: AgentPermissions) {
+        update(taskID) { $0.permissions = permissions }
     }
 
     /// Points the task at another base: its own commits move onto `base` (a rebase), so merging brings
@@ -1740,6 +1764,7 @@ public final class AppModel {
             update(id) {
                 $0.agent = fallback
                 $0.sessionID = nil
+                $0.model = project(task.projectID)?.models[fallback]
             }
             return adapter
         }
@@ -1766,8 +1791,9 @@ public final class AppModel {
             let channel = ApprovalChannel()
             let request = AgentRequest(prompt: text, sessionID: task.sessionID, worktree: task.worktreeURL,
                                        environment: task.port.map { ["PORT": String($0)] } ?? [:],
-                                       permissions: project(task.projectID)?.permissions ?? .bypass,
-                                       model: project(task.projectID)?.models[adapter.kind],
+                                       permissions: task.permissions ?? project(task.projectID)?.permissions ?? .bypass,
+                                       // A fallback agent (see `adapter(for:)`) doesn't run the other one's model.
+                                       model: adapter.kind == task.agent ? task.model : project(task.projectID)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        description: task.description,
                                        approvals: channel, screenshots: screenshots)
@@ -2215,26 +2241,33 @@ public final class AppModel {
         if let port = task.port { await services.tailscale?.unserve(port: port) }
     }
 
-    /// Stops the dev servers idle for longer than their project's `serverTTL`, for their memory: no agent running,
+    /// Minutes a task's or a base's dev server may sit idle (no agent running, no browser tab connected) before
+    /// it is stopped, for every project. A new prompt or the server button starts it again. 0: never stopped.
+    public var serverTTL = UserDefaults.standard.object(forKey: "serverTTL") as? Int ?? 5 {
+        didSet { UserDefaults.standard.set(serverTTL, forKey: "serverTTL") }
+    }
+
+    /// Stops the dev servers idle for longer than `serverTTL`, for their memory: no agent running,
     /// no browser tab connected. A new prompt, or the server button, starts it again.
     func stopUnusedServers() async {
         guard let services else { return }
-        func idle(_ id: Int, _ projectID: Project.ID) -> Bool {
-            guard let ttl = project(projectID)?.serverTTL, ttl > 0 else { return false }
-            return serverUsed[id] ?? .distantPast < Date.now.addingTimeInterval(-TimeInterval(ttl) * 60 + serverIdleSlack)
+        let ttl = serverTTL
+        guard ttl > 0 else { return }
+        func idle(_ id: Int) -> Bool {
+            serverUsed[id] ?? .distantPast < Date.now.addingTimeInterval(-TimeInterval(ttl) * 60 + serverIdleSlack)
         }
         for task in tasks where task.status != .merged {
             guard let pid = task.serverPID, runs[task.id] == nil, !settingUp.contains(task.id), !busy.contains(task.id),
-                  project(task.projectID)?.isApp == false, idle(task.id, task.projectID) else { continue }
+                  project(task.projectID)?.isApp == false, idle(task.id) else { continue }
             if let port = task.port, await services.ports.hasClients(port, besides: pid) {
                 serverUsed[task.id] = .now
                 continue
             }
-            guard self.task(task.id)?.serverPID == pid, runs[task.id] == nil, idle(task.id, task.projectID) else { continue }
+            guard self.task(task.id)?.serverPID == pid, runs[task.id] == nil, idle(task.id) else { continue }
             await stopServer(task.id)
         }
         for (projectID, id) in baseServerIDs {
-            guard let port = basePorts[projectID], idle(id, projectID),
+            guard let port = basePorts[projectID], idle(id),
                   await services.servers.isRunning(taskID: id) else { continue }
             if await services.ports.hasClients(port, besides: baseGroups[projectID] ?? 0) {
                 serverUsed[id] = .now

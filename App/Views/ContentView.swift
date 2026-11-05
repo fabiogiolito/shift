@@ -68,7 +68,9 @@ struct ContentView: View {
         .toolbar(removing: .title)
         .overlay(alignment: .bottomTrailing) {
             if let project {
-                ProjectBar(project: project)
+                // The task on screen, if it's this project's: the bar's right side is its agent, model and permissions.
+                ProjectBar(project: project, task: selectedTask.flatMap(model.task).flatMap { $0.projectID == project.id ? $0 : nil },
+                           listWidth: listWidth)
                     .overlay(alignment: .top) { Divider() }
                 .frame(width: listWidth + detailWidth)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }

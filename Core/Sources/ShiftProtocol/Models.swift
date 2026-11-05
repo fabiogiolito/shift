@@ -241,18 +241,12 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var opensPullRequests: Bool
     /// No dev servers run for it, its base's or its tasks', until turned back on.
     public var serversOff: Bool
-    /// Minutes a task's or the base's dev server may sit idle (no agent running, no browser tab connected) before
-    /// it is stopped. A new prompt or the server button starts it again. 0: never stopped.
-    public var serverTTL: Int
-    /// The code editor and terminal shown first in Open in, by app path. nil: none preferred.
-    public var editorPath: String?
-    public var terminalPath: String?
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
                 buildTargets: [BuildTarget] = [], permissions: AgentPermissions = .bypass, models: [AgentKind: String] = [:],
                 pushTaskBranches: Bool = false, opensPullRequests: Bool = false, takesScreenshots: Bool = false,
-                serversOff: Bool = false, serverTTL: Int = 5, editorPath: String? = nil, terminalPath: String? = nil) {
+                serversOff: Bool = false) {
         self.id = id
         self.name = name
         self.repoPath = repoPath
@@ -268,9 +262,6 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         self.takesScreenshots = takesScreenshots
         self.opensPullRequests = opensPullRequests
         self.serversOff = serversOff
-        self.serverTTL = serverTTL
-        self.editorPath = editorPath
-        self.terminalPath = terminalPath
     }
 
     public init(from decoder: Decoder) throws {
@@ -292,9 +283,6 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
-        serverTTL = try values.decodeIfPresent(Int.self, forKey: .serverTTL) ?? 5
-        editorPath = try values.decodeIfPresent(String.self, forKey: .editorPath)
-        terminalPath = try values.decodeIfPresent(String.self, forKey: .terminalPath)
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
@@ -420,6 +408,11 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var worktreePath: String
     /// Agent's own session identifier, used to resume the same conversation.
     public var sessionID: String?
+    /// The model `agent` runs; nil is the agent's own default. Taken from the project when the task is created.
+    public var model: String?
+    /// Taken from the project when the task is created; each task's own after that.
+    /// nil only in state saved before tasks had their own: `AppModel` fills it in from the project at launch.
+    public var permissions: AgentPermissions?
     /// Usually equal to `id`, but may differ if that port was taken.
     public var port: Int?
     public var serverPID: Int32?

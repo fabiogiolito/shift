@@ -160,7 +160,10 @@ struct TaskDetailView: View {
         ToolbarItem { Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset) }
             .sharedBackgroundVisibility(.hidden)
         ToolbarSpacer(.flexible)
-        ToolbarItem { BranchButton(branch: task.branch, help: "This task's branch. Click to copy it.") }
+        ToolbarItem {
+            BranchButton(branch: task.branch, base: task.base(in: project),
+                         help: "This task's branch, which merges into \(task.base(in: project)). Click to copy it.")
+        }
             .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .primaryAction) { moreMenu(task, project) }
     }
@@ -339,7 +342,7 @@ struct TaskDetailView: View {
 
     /// ⇧⌘E and ⇧⌘O, into the same folder as ⇧⌘T.
     private func editorAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
-        guard let editor = OpenInMenu.editor(for: project) else { return nil }
+        guard let editor = OpenInMenu.editor() else { return nil }
         let folder = task.status == .merged ? project.repoURL : task.worktreeURL
         return TitledAction(title: "Open in \(apps.name(of: editor))") { apps.open(folder, withApp: editor) }
     }
@@ -351,7 +354,7 @@ struct TaskDetailView: View {
 
     /// ⇧⌘T. A merged task's folder is gone: its work is in the project's.
     private func terminalAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
-        guard let terminal = OpenInMenu.terminal(for: project) else { return nil }
+        guard let terminal = OpenInMenu.terminal() else { return nil }
         let folder = task.status == .merged ? project.repoURL : task.worktreeURL
         return { apps.open(folder, withApp: terminal) }
     }
