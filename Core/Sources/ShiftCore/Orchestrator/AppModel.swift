@@ -282,6 +282,8 @@ public final class AppModel {
         for task in tasks where task.status != .merged {
             await reconcile(task.id)
         }
+        // Its base may have gained code while Shift was closed (a pull request merged, a commit by hand).
+        for project in projects { await adoptDetectedType(project.id) }
         changed()
         Task { [weak self] in
             while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
@@ -453,6 +455,38 @@ public final class AppModel {
         return project
     }
 
+    /// A project added as an empty folder gets Static website and no commands. Once its base has code (a merged
+    /// task, the chat's work), it takes the type and commands that code calls for, so its servers run.
+    // ponytail: also re-types a project the user set to Static website by hand on a repo with a dev script;
+    // a "type chosen by the user" flag if that comes up.
+    func adoptDetectedType(_ projectID: Project.ID) async {
+        func undetected(_ project: Project) -> Bool {
+            [.staticWebsite, .other].contains(project.type) && project.serverCommand.isEmpty
+                && project.setupCommand.isEmpty && !project.buildTargets.contains(where: \.hasCommand)
+        }
+        guard let services, let project = project(projectID), undetected(project) else { return }
+        let suggested = await ProjectSetup.suggest(repo: project.repoURL, git: services.git, servers: services.servers)
+        guard [.dynamicWebsite, .nativeApp, .electronApp].contains(suggested.type),
+              var now = self.project(projectID), undetected(now) else { return }
+        now.type = suggested.type
+        now.serverCommand = suggested.server
+        now.setupCommand = suggested.setup
+        now.buildTargets = suggested.targets
+        updateProject(now)
+    }
+
+    /// Set while the project's base is empty and another task holds work: a new task starts from the empty base,
+    /// without that work.
+    // ponytail: reads the repo folder, so it speaks for the checked-out branch, which is the base in practice.
+    public func emptyBaseWarning(projectID: Project.ID) -> String? {
+        guard let project = project(projectID),
+              let other = tasks(in: projectID).last(where: { $0.status != .merged }) else { return nil }
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: project.repoPath)) ?? []
+        guard !files.contains(where: { $0 != ".git" && $0 != ".DS_Store" }) else { return nil }
+        return "\(project.baseBranch) is empty, so a new task starts without the work in “\(other.title)”. "
+            + "To build on that work, continue in that task, or merge it first."
+    }
+
     public func moveProjects(from source: IndexSet, to destination: Int) {
         guard services != nil else { return }
         let moved = source.map { projects[$0] }
@@ -606,6 +640,7 @@ public final class AppModel {
             case .merged:
                 await cleanUp(taskID, keepingBranchUnlessIn: task.base(in: project))
                 markMerged(taskID)
+                await adoptDetectedType(project.id)
                 await refreshPushState(projectID: project.id)
                 // Base moved: other tasks may not merge cleanly any more.
                 await refreshMergeability()
@@ -1514,6 +1549,7 @@ public final class AppModel {
                 replyingChats.remove(projectID)
             }
             Task { [weak self] in
+                await self?.adoptDetectedType(projectID)
                 await self?.refreshPushState(projectID: projectID)
                 await self?.refreshMergeability()
             }

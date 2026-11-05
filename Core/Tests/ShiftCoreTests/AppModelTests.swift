@@ -393,6 +393,38 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(added?.serverCommand, "pnpm run dev --port $PORT")
     }
 
+    func testEmptyProjectTakesTheTypeItsCodeCallsFor() async throws {
+        let repo = temp.appendingPathComponent("blank")
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        let maybeAdded = await model.addProject(at: repo)
+        let added = try XCTUnwrap(maybeAdded)
+        XCTAssertEqual(added.type, .staticWebsite)
+        XCTAssertNil(model.emptyBaseWarning(projectID: added.id))
+
+        // A task holds the work while the base is still empty.
+        model.createTask(projectID: added.id, prompt: "Make a Next.js app")
+        XCTAssertNotNil(model.emptyBaseWarning(projectID: added.id))
+
+        // The work reaches the base.
+        for (name, text) in [("package-lock.json", "{}"), ("package.json", #"{"scripts": {"dev": "next dev"}}"#)] {
+            try Data(text.utf8).write(to: repo.appendingPathComponent(name))
+        }
+        XCTAssertNil(model.emptyBaseWarning(projectID: added.id))
+        await model.adoptDetectedType(added.id)
+        let now = try XCTUnwrap(model.project(added.id))
+        XCTAssertEqual(now.type, .dynamicWebsite)
+        XCTAssertEqual(now.serverCommand, "npm run dev")
+        XCTAssertEqual(now.setupCommand, "npm install")
+
+        // Commands the user set are theirs: nothing is re-detected.
+        var custom = now
+        custom.type = .staticWebsite
+        custom.serverCommand = "make serve"
+        model.updateProject(custom)
+        await model.adoptDetectedType(added.id)
+        XCTAssertEqual(model.project(added.id)?.type, .staticWebsite)
+    }
+
     func testTaskKeepsItsOwnModelAndPermissions() async {
         project.models[project.defaultAgent] = "opus"
         model.updateProject(project)
