@@ -113,11 +113,22 @@ struct TaskListView: View {
     }
 
     private var footer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let warning = model.emptyBaseWarning(projectID: project.id) {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            newTaskField
+        }
+        .padding(12)
+    }
+
+    private var newTaskField: some View {
         PromptField(placeholder: "New task", submitTitle: "Start", isNewTaskField: true,
                     draftKey: "project \(project.id)") { text, attachments in
             if let id = model.createTask(projectID: project.id, prompt: text, attachments: attachments) { selection = id }
         }
-        .padding(12)
     }
 }
 
