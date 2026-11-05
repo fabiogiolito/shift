@@ -193,9 +193,14 @@ private struct LinkedText: View {
                 return Text("\(text)\(run.0 == nil ? piece : piece.customAttribute(LinkRun()))")
             }
             .textRenderer(LinkFrames(box: links))
-            // Set directly, not with `pointerStyle`: selectable text keeps its I-beam over that. Off a link, the text sets the I-beam back itself.
+            // Set directly on every move, not with `pointerStyle`: selectable text keeps its I-beam over that, and only
+            // sets it itself when the pointer enters the text. Again on the next turn, since entering straight onto a
+            // link, the text's I-beam lands after this one.
             .onContinuousHover { phase in
-                if case .active(let point) = phase, links.rects.contains(where: { $0.contains(point) }) { NSCursor.pointingHand.set() }
+                guard case .active(let point) = phase else { return }
+                let cursor: NSCursor = links.rects.contains { $0.contains(point) } ? .pointingHand : .iBeam
+                cursor.set()
+                DispatchQueue.main.async { cursor.set() }
             }
         } else {
             Text(string)
