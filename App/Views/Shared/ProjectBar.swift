@@ -128,9 +128,9 @@ struct ProjectBar: View {
 
             if let usage = model.usage[agent], let window = usage.tightest {
                 Text(Self.describe(window))
-                    .font(.caption)
+                    .font(.subheadline)
                     .monospacedDigit()
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .help(usage.windows.map { "\($0.name) limit: \(Self.describe($0, named: false))" }
                         .joined(separator: "\n"))

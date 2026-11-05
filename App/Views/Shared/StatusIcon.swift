@@ -48,7 +48,7 @@ struct TaskNumber: View {
     let task: TaskItem
 
     var body: some View {
-        Text(String(task.id)).font(.caption).monospacedDigit().foregroundStyle(.tertiary)
+        Text(String(task.id)).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
     }
 }
 

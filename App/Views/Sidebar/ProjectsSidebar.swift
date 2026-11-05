@@ -21,7 +21,7 @@ struct ProjectsSidebar: View {
                 Label {
                     VStack(alignment: .leading) {
                         Text(project.name)
-                        Text(subtitle(for: project)).font(.caption).foregroundStyle(.secondary)
+                        Text(subtitle(for: project)).font(.subheadline).foregroundStyle(.secondary)
                     }
                 } icon: {
                     ProjectIcon(repoPath: project.repoPath,

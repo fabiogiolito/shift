@@ -18,12 +18,12 @@ struct BranchButton: View {
             HStack(spacing: 3) {
                 Image(systemName: "arrow.triangle.branch").imageScale(.small)
                 if let base {
-                    Text(base).lineLimit(1).foregroundStyle(.tertiary)
+                    Text(base).lineLimit(1)
                     Image(systemName: "arrow.left").imageScale(.small).foregroundStyle(.tertiary)
                 }
                 Text(branch).lineLimit(1).truncationMode(.middle)
             }
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
         }

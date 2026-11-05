@@ -126,7 +126,7 @@ struct DiffView: View {
                 Text(verbatim: "−\(change.deletions)").foregroundStyle(.red)
             }
         }
-        .font(.caption.monospaced())
+        .font(.subheadline.monospaced())
     }
 
     private func fileHeader(_ change: FileChange) -> some View {
@@ -243,7 +243,7 @@ private struct DiffImages: View {
             }
             .buttonStyle(.plain)
             .help("Open in Quick Look")
-            if let label { Text(label).font(.caption).foregroundStyle(.secondary) }
+            if let label { Text(label).font(.subheadline).foregroundStyle(.secondary) }
         }
     }
 }
