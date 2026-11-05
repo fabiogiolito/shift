@@ -321,5 +321,18 @@
 - Long repository paths in the project bar now cut off the start instead of the end, so the end of the path stays visible]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.8/Shift-0.2.8.zip" sparkle:edSignature="RSoRMqh0stPTNfg+k+RnfsPtypp/qSoMA3szhUeUeRRk0S41zmR6dHgVNKxO3vdTnfQGV5yFlnWc4Qi4/+gVAA==" length="4775150" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.9</title>
+      <pubDate>Thu, 05 Nov 2026 16:17:24 +0000</pubDate>
+      <sparkle:version>26</sparkle:version>
+      <sparkle:shortVersionString>0.2.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Empty projects pick up their project type once code lands on main
+- Starting a new task from an empty main branch now shows a warning
+- Permissions now appear below Default agent and Model in the Agent settings
+- Prompt text uses a regular font weight
+- Messages stay wrapped to their width when you expand steps]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.9/Shift-0.2.9.zip" sparkle:edSignature="vOzF1iRV7GDYwZdp+KvdCyVkeD3ufxJiuqmHeRfUvCtzIgmi6zJYDSvMiWuH62gpSETkCP/ObTqYL/jT/q6yDw==" length="4779393" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
