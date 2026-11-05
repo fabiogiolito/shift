@@ -3,6 +3,7 @@ import Observation
 import Security
 import ShiftProtocol
 import UIKit
+import UserNotifications
 
 /// The Mac's live state as far as the phone knows, and its methods sent to the Mac as commands. A copy of the parts of
 /// `AppModel` the views read: nothing is stored, and with the Mac away nothing can be done.
@@ -46,6 +47,9 @@ final class RemoteModel {
         pairing = Keychain.load()
         if pairing != nil { connect() }
     }
+
+    /// Set on launch: asks for permission once, and shows banners with the app open too, as the Mac does.
+    @ObservationIgnored private let notifier = Notifier()
 
     // MARK: Pairing
 
@@ -161,6 +165,14 @@ final class RemoteModel {
         case .snapshot:
             state.apply(message)
             hasState = true
+        case .task(let task):
+            let old = self.task(task.id)?.status
+            state.apply(message)
+            // ponytail: only while the app runs; iOS suspends it soon after it leaves the screen. Push needs APNs.
+            if let old, task.status.notifies(from: old) {
+                let project = state.projects.first { $0.id == task.projectID }?.name ?? ""
+                notifier.notify(title: project, body: "\(task.title) \(task.status.needsAttention ? "needs your attention" : "is ready for review").", taskID: task.id)
+            }
         default:
             state.apply(message)
         }
@@ -360,5 +372,32 @@ private enum Keychain {
 
     static func delete() {
         SecItemDelete(query as CFDictionary)
+    }
+}
+
+/// Local notifications for task changes heard over the socket.
+private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
+    override init() {
+        super.init()
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    /// One per task: a newer one replaces the older.
+    func notify(title: String, body: String, taskID: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let id = "task-\(taskID)"
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [id])
+        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
     }
 }

@@ -69,6 +69,11 @@ public enum TaskStatus: String, Codable, Sendable {
 
     /// Statuses where the user is the one who has to act.
     public var needsAttention: Bool { self == .needsInput || self == .blocked || self == .conflict }
+
+    /// Whether going from `old` to this is worth a notification, as the Mac sends one: a run ended, or a new conflict.
+    public func notifies(from old: TaskStatus) -> Bool {
+        old == .working ? self != .working && self != .merged : self == .conflict && old != .conflict
+    }
 }
 
 /// What a project's agents may do. Every task inherits it from its project.
