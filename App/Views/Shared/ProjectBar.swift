@@ -56,8 +56,15 @@ struct ProjectBar: View {
                 }
                 Button("Project Settings…") { showingSettings = true }
             } label: {
-                Label((project.repoPath as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
+                // Drawn by SwiftUI, not AppKit, so a long path loses its start, not its end.
+                HStack(spacing: 4) {
+                    Label((project.repoPath as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
+                        .lineLimit(1).truncationMode(.head)
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                }
+                .contentShape(Rectangle())
             }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
             .help("Repository")
 
             Menu {
