@@ -64,11 +64,9 @@ struct ShiftApp: App {
         .defaultSize(width: 720, height: 480)
         .restorationBehavior(.disabled)
 
-        // One per project, like Force Quit Applications for its tasks.
-        WindowGroup(id: MemoryWindow.id, for: Project.ID.self) { $projectID in
-            if let projectID {
-                MemoryWindow(projectID: projectID).environment(delegate.model)
-            }
+        // Like Force Quit Applications, for every project's tasks. Listed in the Window menu by itself.
+        Window(MemoryWindow.title, id: MemoryWindow.id) {
+            MemoryWindow().environment(delegate.model)
         }
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)

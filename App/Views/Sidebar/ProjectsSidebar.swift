@@ -32,7 +32,7 @@ struct ProjectsSidebar: View {
                     if model.memoryWarning(projectID: project.id) {
                         Spacer()
                         // Before the attention badge: macOS counts the tasks' memory as Shift's, so say which project's it is.
-                        Button { openWindow(id: MemoryWindow.id, value: project.id) } label: {
+                        Button { openWindow(id: MemoryWindow.id) } label: {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                         }
                         .buttonStyle(.borderless)
