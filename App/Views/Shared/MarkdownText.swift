@@ -7,6 +7,22 @@ struct MarkdownText: View {
     @Environment(\.textScale) private var textScale
 
     var body: some View {
+        #if os(macOS)
+        // Runs of paragraphs, headings and lists in one text view each, so a selection can cross them.
+        let runs = MarkdownBlock.parse(text).reduce(into: [[MarkdownBlock]]()) { runs, block in
+            if ProseTextView.isProse(block), let last = runs.last?.last, ProseTextView.isProse(last) { runs[runs.count - 1].append(block) } else { runs.append([block]) }
+        }
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(runs.enumerated()), id: \.offset) { run in
+                if let first = run.element.first, ProseTextView.isProse(first) {
+                    ProseTextView(blocks: run.element, scale: textScale)
+                } else if let block = run.element.first {
+                    view(for: block)
+                }
+            }
+        }
+        .textSelection(.enabled)
+        #else
         // Parsed here rather than kept: it is cheap, and a message that's arriving changes each time.
         let groups = Self.group(MarkdownBlock.parse(text), scale: textScale)
         VStack(alignment: .leading, spacing: 10) {
@@ -27,6 +43,7 @@ struct MarkdownText: View {
             }
         }
         .textSelection(.enabled)
+        #endif
     }
 
     /// Runs of paragraphs and headings become one `Text`, since a selection can't cross from one `Text` to another.
