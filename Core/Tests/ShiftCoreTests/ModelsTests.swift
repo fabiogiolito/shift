@@ -2,6 +2,16 @@ import XCTest
 @testable import ShiftCore
 
 final class ModelsTests: XCTestCase {
+    func testStatusChangesThatNotify() {
+        XCTAssertTrue(TaskStatus.completed.notifies(from: .working))
+        XCTAssertTrue(TaskStatus.needsInput.notifies(from: .working))
+        XCTAssertTrue(TaskStatus.conflict.notifies(from: .completed))
+        XCTAssertFalse(TaskStatus.working.notifies(from: .working))
+        XCTAssertFalse(TaskStatus.working.notifies(from: .completed))
+        XCTAssertFalse(TaskStatus.merged.notifies(from: .completed))
+        XCTAssertFalse(TaskStatus.conflict.notifies(from: .conflict))
+    }
+
     func testAppStateRoundTrips() throws {
         let project = Project(name: "Spot", repoPath: "/tmp/spot", baseBranch: "main")
         let task = TaskItem(id: 3001, projectID: project.id, title: "Gap", agent: .codex,
