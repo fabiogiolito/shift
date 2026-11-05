@@ -293,5 +293,19 @@
 - Paired phones stay connected after Shift updates or restarts, so you don't have to pair them again]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.6/Shift-0.2.6.zip" sparkle:edSignature="w0NdKPls4Js9qQ/mFeqjQgmdas3kK9g/RePdvl0YlXd1Si47E0h/hQrm4UwpZweFo2r94WdBo7TTKKp0fTE2AQ==" length="4695894" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.7</title>
+      <pubDate>Thu, 05 Nov 2026 10:12:05 +0000</pubDate>
+      <sparkle:version>24</sparkle:version>
+      <sparkle:shortVersionString>0.2.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Select text across paragraphs, headings and list items in a message in one go
+- Prompts stand out more, with replies indented under them, and headings, bold text and lists are easier to read
+- Hide the sidebar from View › Hide Sidebar or with ⌃⌘S
+- The pointer turns into a hand over links in messages
+- List markers sit next to their text, and wrapped lines line up under it
+- Headings after a table or code block get the same space above them as after a paragraph]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.7/Shift-0.2.7.zip" sparkle:edSignature="haAovFJ2llkh9UZi3lZ0ACYXKhCVnzAmx6giSBweTL5PaoGaoe4mdQwsiZT4fLomM19IO4xecYKehnxY7nQcBQ==" length="4705892" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
