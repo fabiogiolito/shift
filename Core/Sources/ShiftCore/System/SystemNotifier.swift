@@ -1,5 +1,8 @@
 import AppKit
 import UserNotifications
+import os
+
+private let log = Logger(subsystem: "com.fabiogiolito.shift", category: "notifications")
 
 public final class SystemNotifier: NSObject, Notifying, UNUserNotificationCenterDelegate, @unchecked Sendable {
     /// Called with the task id when the user clicks a notification.
@@ -17,7 +20,13 @@ public final class SystemNotifier: NSObject, Notifying, UNUserNotificationCenter
     }
 
     public func requestAuthorization() async {
-        _ = try? await center?.requestAuthorization(options: [.alert, .sound, .badge])
+        guard let center else { return log.info("No notification center outside an .app bundle") }
+        do {
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            log.info("Notification authorization granted: \(granted)")
+        } catch {
+            log.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     public func notify(title: String, body: String, taskID: Int) async {
@@ -27,8 +36,17 @@ public final class SystemNotifier: NSObject, Notifying, UNUserNotificationCenter
         content.body = body
         content.sound = .default
         content.userInfo = ["taskID": taskID]
-        // One notification per task: a newer one replaces the older.
-        try? await center.add(UNNotificationRequest(identifier: "task-\(taskID)", content: content, trigger: nil))
+        // One notification per task: a newer one replaces the older. Removed, not reused: macOS updates a
+        // notification with the same identifier silently, with no banner.
+        let older = await center.deliveredNotifications()
+            .filter { $0.request.content.userInfo["taskID"] as? Int == taskID }
+            .map(\.request.identifier)
+        center.removeDeliveredNotifications(withIdentifiers: older)
+        do {
+            try await center.add(UNNotificationRequest(identifier: "task-\(taskID)-\(UUID().uuidString)", content: content, trigger: nil))
+        } catch {
+            log.error("Notification not delivered: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     public func setBadge(count: Int) async {

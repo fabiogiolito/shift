@@ -135,7 +135,9 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(agent.requests[0].prompt, "Set the gap to 4px. Thanks!")
         XCTAssertEqual(agent.requests[0].environment["PORT"], "3001")
         XCTAssertEqual(store.output(3001), "raw\n")
-        XCTAssertEqual(notifier.notifications, [.init(title: "Set the gap to 4px is ready", body: "Gap is 4px", taskID: 3001)])
+        XCTAssertEqual(notifier.notifications.map(\.body), ["Set the gap to 4px is ready for review."])
+        XCTAssertEqual(notifier.notifications.map(\.taskID), [3001])
+        XCTAssertEqual(notifier.notifications.map(\.title), [model.projects.first?.name])
         XCTAssertEqual(notifier.badges.last, 1)
         XCTAssertEqual(store.state.tasks, model.tasks)
         XCTAssertEqual(store.state.nextTaskID, 3002)
@@ -173,7 +175,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(agent.requests[1].sessionID, "s1")
         XCTAssertEqual(agent.requests[1].prompt, "The first")
         XCTAssertEqual(model.task(id)?.prompts.map(\.text), ["Add an empty state", "The first"])
-        XCTAssertEqual(notifier.notifications.map(\.title), ["Add an empty state needs your input", "Add an empty state is ready"])
+        XCTAssertEqual(notifier.notifications.map(\.body), ["Add an empty state needs your attention.", "Add an empty state is ready for review."])
         // Same worktree and server throughout.
         XCTAssertEqual(git.calls.filter { $0.hasPrefix("create") }.count, 1)
         XCTAssertEqual(servers.starts.count, 1)
@@ -329,7 +331,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(agent.requests.isEmpty)
         XCTAssertTrue(servers.starts.isEmpty)
         XCTAssertEqual(git.calls, ["create shift/3001 from main", "remove shift/3001"])
-        XCTAssertEqual(notifier.notifications.last?.title, "Do it is blocked")
+        XCTAssertEqual(notifier.notifications.last?.body, "Do it needs your attention.")
 
         // Fixed: the next prompt sets the task up again.
         servers.runResult = CommandResult(exitCode: 0)
@@ -535,7 +537,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(agent.requests[1].sessionID, "s1")
         XCTAssertNil(model.task(id)?.question)
         XCTAssertEqual(model.task(id)?.prompts.map(\.isPending), [false, false, false])
-        XCTAssertEqual(notifier.notifications.map(\.title), ["Do the thing is ready"])
+        XCTAssertEqual(notifier.notifications.map(\.body), ["Do the thing is ready for review."])
     }
 
     func testPromptSentWhileWorkingGoesIntoTheRunningSession() async {
@@ -1469,7 +1471,7 @@ final class AppModelTests: XCTestCase {
         await model.flush()
         XCTAssertEqual(model.task(id)?.title, "Marketing homepage")
         XCTAssertEqual(model.task(id)?.description, "The homepage sells the brand first.")
-        XCTAssertEqual(notifier.notifications.last?.title, "Marketing homepage is ready")
+        XCTAssertEqual(notifier.notifications.last?.body, "Marketing homepage is ready for review.")
         XCTAssertEqual(store.state.tasks, model.tasks)
     }
 
@@ -1680,7 +1682,8 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(task.activity)
         XCTAssertEqual(agent.requests.first?.permissions, .manual)
         await model.flush()
-        XCTAssertEqual(notifier.notifications, [.init(title: "Add date-fns needs your approval", body: "Run `pnpm install`", taskID: id)])
+        XCTAssertEqual(notifier.notifications.map(\.body), ["Add date-fns needs your attention."])
+        XCTAssertEqual(notifier.notifications.map(\.taskID), [id])
         XCTAssertEqual(notifier.badges.last, 1)
         XCTAssertEqual(store.state.tasks.first?.approvalRequest, "Run `pnpm install`")
 
@@ -1717,7 +1720,7 @@ final class AppModelTests: XCTestCase {
         await waitForStatus(id, .completed)
         XCTAssertEqual(agent.answers, [.init(id: "a1", allow: true), .init(id: "a2", allow: false)])
         await model.flush()
-        XCTAssertEqual(notifier.notifications.map(\.body), ["Run `pnpm install`", "Edit `src/app.css`", "Done"])
+        XCTAssertEqual(notifier.notifications.map(\.body), ["Add date-fns needs your attention.", "Add date-fns needs your attention.", "Add date-fns is ready for review."])
     }
 
     func testPromptInsteadOfAnAnswerDeniesWithIt() async {
@@ -1938,7 +1941,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(status(id), .conflict)
         await model.refreshMergeability()
         await model.flush()
-        XCTAssertEqual(notifier.notifications.map(\.title), ["Do the thing is ready", "Do the thing has a conflict"])
+        XCTAssertEqual(notifier.notifications.map(\.body), ["Do the thing is ready for review.", "Do the thing needs your attention."])
         XCTAssertEqual(git.calls.filter { $0.hasPrefix("commit") }.count, 3, "leftovers are committed first")
 
         git.canMerge = true

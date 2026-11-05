@@ -921,7 +921,7 @@ public final class AppModel {
             guard now.status != status else { continue }
             update(id) { $0.status = status }
             if status == .conflict {
-                enqueue { await services.notifier.notify(title: "\(now.title) has a conflict", body: "It does not merge cleanly.", taskID: id) }
+                notify(now)
                 reportToChat(now, "has a conflict: it no longer merges cleanly into \(now.base(in: project)).")
             }
         }
@@ -1655,7 +1655,7 @@ public final class AppModel {
 
     /// Shows the oldest unanswered approval request and tells the user.
     private func showApproval(_ id: TaskItem.ID) {
-        guard let services, let summary = pendingApprovals[id]?.first?.summary, let task = task(id) else { return }
+        guard services != nil, let summary = pendingApprovals[id]?.first?.summary, let task = task(id) else { return }
         let isNew = task.approvalRequest != summary || task.status != .needsInput
         update(id) {
             $0.status = .needsInput
@@ -1663,7 +1663,7 @@ public final class AppModel {
             $0.activity = nil
         }
         if isNew {
-            enqueue { await services.notifier.notify(title: "\(task.title) needs your approval", body: summary, taskID: id) }
+            notify(task, needsAttention: true)
         }
     }
 
@@ -2078,18 +2078,25 @@ public final class AppModel {
         }
     }
 
+    /// A notification titled with the project's name: "<task> is ready for review." or "<task> needs your attention."
+    private func notify(_ task: TaskItem, needsAttention: Bool = true) {
+        guard let services else { return }
+        let title = project(task.projectID)?.name ?? ""
+        let body = "\(task.title) \(needsAttention ? "needs your attention" : "is ready for review")."
+        enqueue { await services.notifier.notify(title: title, body: body, taskID: task.id) }
+    }
+
     /// Ends the current run: applies the outcome, releases the run and tells the user. No awaits.
     private func finish(_ id: TaskItem.ID, _ settled: Settled) {
-        guard let services, let task = task(id) else { return }
+        guard services != nil, let task = task(id) else { return }
         runs[id] = nil
         update(id) { Self.apply(settled, to: &$0) }
-        let (title, body): (String, String) = switch settled.status {
-        case .needsInput: ("\(task.title) needs your input", settled.question ?? "")
-        case .blocked: ("\(task.title) is blocked", settled.blockedReason ?? "")
-        case .conflict: ("\(task.title) has a conflict", "It does not merge cleanly.")
-        default: ("\(task.title) is ready", settled.summary ?? "")
+        notify(task, needsAttention: settled.status.needsAttention)
+        let body = switch settled.status {
+        case .needsInput: settled.question ?? ""
+        case .blocked: settled.blockedReason ?? ""
+        default: settled.summary ?? ""
         }
-        enqueue { await services.notifier.notify(title: title, body: body, taskID: id) }
         let report = switch settled.status {
         case .needsInput: "needs input: \(body)"
         case .blocked: "is blocked: \(body)"
