@@ -15,7 +15,9 @@ struct MarkdownText: View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(runs.enumerated()), id: \.offset) { run in
                 if let first = run.element.first, ProseTextView.isProse(first) {
+                    // A heading after a table, code block or quote gets the room it has after a paragraph: 18 with the stack's 10.
                     ProseTextView(blocks: run.element, scale: textScale)
+                        .padding(.top, run.offset > 0 && Self.isHeading(first) ? 18 * textScale - 10 : 0)
                 } else if let block = run.element.first {
                     view(for: block)
                 }
