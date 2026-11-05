@@ -774,9 +774,8 @@ struct TaskDetailView: View {
     }
 
     /// A pending prompt (not yet handed to the agent) pulses between secondary and tertiary.
-    /// Medium weight, a step above the replies under it, which are in the same size.
     private func promptText(_ prompt: Prompt) -> some View {
-        pendingPromptText(prompt).font(.scaled(.body, textScale).weight(.medium))
+        pendingPromptText(prompt).font(.scaled(.body, textScale))
     }
 
     @ViewBuilder private func pendingPromptText(_ prompt: Prompt) -> some View {
