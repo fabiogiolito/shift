@@ -4,6 +4,7 @@ import ShiftCore
 
 struct ProjectsSidebar: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     @Binding var selection: Project.ID?
     @State private var search = ""
     @FocusState private var searchFocused: Bool
@@ -18,14 +19,25 @@ struct ProjectsSidebar: View {
     var body: some View {
         List(selection: $selection) {
             ForEach(projects) { project in
-                Label {
-                    VStack(alignment: .leading) {
-                        Text(project.name)
-                        Text(subtitle(for: project)).font(.subheadline).foregroundStyle(.secondary)
+                HStack {
+                    Label {
+                        VStack(alignment: .leading) {
+                            Text(project.name)
+                            Text(subtitle(for: project)).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        ProjectIcon(repoPath: project.repoPath,
+                                    version: model.tasks(in: project.id).compactMap(\.mergedAt).max())
                     }
-                } icon: {
-                    ProjectIcon(repoPath: project.repoPath,
-                                version: model.tasks(in: project.id).compactMap(\.mergedAt).max())
+                    if model.memoryWarning(projectID: project.id) {
+                        Spacer()
+                        // Before the attention badge: macOS counts the tasks' memory as Shift's, so say which project's it is.
+                        Button { openWindow(id: MemoryWindow.id, value: project.id) } label: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Tasks are using \(MemoryWindow.format(model.memoryUsed(projectID: project.id))) of memory")
+                    }
                 }
                 .padding(.vertical, 5)
                 // Tasks waiting on the user; a zero badge is hidden.
