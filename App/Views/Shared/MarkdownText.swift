@@ -11,30 +11,51 @@ struct MarkdownText: View {
         let groups = Self.group(MarkdownBlock.parse(text), scale: textScale)
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(groups.enumerated()), id: \.offset) { group in
-                if let prose = group.element.prose { LinkedText(string: prose) } else if let block = group.element.block { view(for: block) }
+                let group = group.element
+                if let prose = group.prose {
+                    // A heading after a list, table or code block keeps its distance from it, as after a paragraph.
+                    LinkedText(string: prose).padding(.top, group.startsWithHeading ? 6 : 0)
+                } else if group.blocks.count > 1 || group.blocks.first.map(Self.isListItem) == true {
+                    // Tighter than paragraphs, and indented, so a list reads as one block.
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(Array(group.blocks.enumerated()), id: \.offset) { view(for: $0.element) }
+                    }
+                    .padding(.leading, 8)
+                } else if let block = group.blocks.first {
+                    view(for: block)
+                }
             }
         }
         .textSelection(.enabled)
     }
 
-    /// Runs of paragraphs, headings and list items become one `Text`, since a selection can't cross from one `Text` to another.
-    private struct Group { var prose: AttributedString?; var block: MarkdownBlock? }
+    /// Runs of paragraphs and headings become one `Text`, since a selection can't cross from one `Text` to another.
+    /// List items stay views of their own: wrapped lines can only hang under the item's text that way.
+    private struct Group { var prose: AttributedString?; var startsWithHeading = false; var blocks: [MarkdownBlock] = [] }
+
+    private static func isListItem(_ block: MarkdownBlock) -> Bool { if case .listItem = block { true } else { false } }
+    private static func isHeading(_ block: MarkdownBlock) -> Bool { if case .heading = block { true } else { false } }
 
     private static func group(_ blocks: [MarkdownBlock], scale: Double) -> [Group] {
         var groups: [Group] = []
         var previous: MarkdownBlock?
         for block in blocks {
-            guard let piece = prose(block, scale: scale) else { groups.append(Group(block: block)); previous = nil; continue }
-            if let last = groups.last?.prose, let previous {
-                var gap = AttributedString("\n")
-                if case .listItem = previous, case .listItem = block {} else {
-                    var space = AttributedString("\n") // A short blank line, like the stack's spacing.
-                    space.font = .system(size: 6 * scale)
-                    gap += space
+            guard let piece = prose(block, scale: scale) else {
+                if isListItem(block), let last = groups.last?.blocks.last, isListItem(last) {
+                    groups[groups.count - 1].blocks.append(block)
+                } else {
+                    groups.append(Group(blocks: [block]))
                 }
-                groups[groups.count - 1].prose = last + gap + piece
+                previous = nil
+                continue
+            }
+            if let last = groups.last?.prose, let previous {
+                // A short blank line between paragraphs, like the stack's spacing; more above a heading, less below it.
+                var space = AttributedString("\n")
+                space.font = .system(size: (isHeading(block) ? 16 : isHeading(previous) ? 2 : 6) * scale)
+                groups[groups.count - 1].prose = last + AttributedString("\n") + space + piece
             } else {
-                groups.append(Group(prose: piece))
+                groups.append(Group(prose: piece, startsWithHeading: isHeading(block)))
             }
             previous = block
         }
@@ -47,12 +68,8 @@ struct MarkdownText: View {
             return inline(text, scale: scale)
         case .heading(let level, let text):
             var heading = inline(text, scale: scale)
-            heading.font = .scaled(headingStyle(level), scale)
+            heading.font = headingFont(level, scale)
             return heading
-        case .listItem(let level, let marker, let text):
-            var bullet = AttributedString(String(repeating: "  ", count: level) + marker + " ")
-            bullet.foregroundColor = .secondary
-            return bullet + inline(text, scale: scale)
         default:
             return nil
         }
@@ -63,13 +80,13 @@ struct MarkdownText: View {
         case .paragraph(let text):
             inline(text)
         case .heading(let level, let text):
-            inline(text).font(.scaled(Self.headingStyle(level), textScale)).padding(.top, 4)
+            inline(text).font(Self.headingFont(level, textScale))
         case .listItem(let level, let marker, let text):
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(marker).foregroundStyle(.secondary)
                 inline(text)
             }
-            .padding(.leading, CGFloat(level) * 8)
+            .padding(.leading, CGFloat(level) * 16)
         case .table(let header, let rows):
             #if os(iOS)
             // Too narrow a screen to squeeze every column in: the table scrolls sideways in its box, not the page.
@@ -123,12 +140,21 @@ struct MarkdownText: View {
         #endif
     }
 
-    private static func headingStyle(_ level: Int) -> Font.TextStyle { level == 1 ? .title2 : level == 2 ? .title3 : .headline }
+    /// Bold, a step above the semibold of bold text, so a heading reads as one.
+    private static func headingFont(_ level: Int, _ scale: Double) -> Font {
+        .scaled(level == 1 ? .title2 : level == 2 ? .title3 : .headline, scale).weight(.bold)
+    }
 
     private func inline(_ text: String) -> LinkedText { LinkedText(string: Self.inline(text, scale: textScale)) }
 
     private static func inline(_ text: String, scale: Double) -> AttributedString {
         var string = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        // Bold text is semibold: full bold shouts in a long reply.
+        let strong = string.runs[\.inlinePresentationIntent].filter { $0.0?.contains(.stronglyEmphasized) == true }
+        for (intent, range) in strong {
+            string[range].inlinePresentationIntent = intent?.subtracting(.stronglyEmphasized)
+            string[range].font = .scaled(.body, scale).weight(.semibold)
+        }
         // Monospaced at the text's own size looks larger than the prose around it: inline code gets the code blocks' size.
         let code = string.runs[\.inlinePresentationIntent].filter { $0.0?.contains(.code) == true }.map(\.1)
         for range in code { string[range].font = .scaled(.callout, scale, design: .monospaced) }

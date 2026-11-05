@@ -764,7 +764,9 @@ struct TaskDetailView: View {
                     // The prompt is already right above.
                     ForEach(replies) { TurnView(turn: $0, prompts: [], reader: reader).equatable() }
                 }
+                // Under the prompt's text, not its chevron: the steps' chevrons then sit a level in.
                 .padding(.top, 2)
+                .padding(.leading, Self.promptIndent)
                 .transition(.opacity)
             }
         }
@@ -772,13 +774,14 @@ struct TaskDetailView: View {
     }
 
     /// A pending prompt (not yet handed to the agent) pulses between secondary and tertiary.
+    /// Medium weight, a step above the replies under it, which are in the same size.
     private func promptText(_ prompt: Prompt) -> some View {
-        pendingPromptText(prompt).font(.scaled(.body, textScale))
+        pendingPromptText(prompt).font(.scaled(.body, textScale).weight(.medium))
     }
 
     @ViewBuilder private func pendingPromptText(_ prompt: Prompt) -> some View {
         if !prompt.isPending {
-            Text(prompt.text).foregroundStyle(.primary.opacity(0.7))
+            Text(prompt.text).foregroundStyle(.primary)
         } else if reduceMotion {
             Text(prompt.text).foregroundStyle(.tertiary)
         } else {
