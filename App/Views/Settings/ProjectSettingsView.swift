@@ -168,18 +168,6 @@ struct ProjectSettingsView: View {
             }
 
             Section {
-                Picker("Permissions", selection: project.permissions) {
-                    ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
-                }
-            } header: {
-                Text("Agent")
-            } footer: {
-                Text(current.permissions.summary)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Section {
                 Picker("Default agent", selection: project.defaultAgent) {
                     ForEach(AgentKind.allCases) { kind in
                         let installed = model.installedAgents[kind] != nil
@@ -189,6 +177,15 @@ struct ProjectSettingsView: View {
                     }
                 }
                 ModelPicker(agent: current.defaultAgent, selection: project.defaultModel)
+                Picker("Permissions", selection: project.permissions) {
+                    ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
+                }
+            } header: {
+                Text("Agent")
+            } footer: {
+                Text(current.permissions.summary)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Section {
