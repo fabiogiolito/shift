@@ -2,8 +2,10 @@ import AppKit
 import SwiftUI
 
 /// A branch name in a topbar, with room before the button that follows it: click to copy the name.
+/// With a base, shown the way GitHub shows a pull request's branches: "main ← shift/3018", the base dimmed.
 struct BranchButton: View {
     let branch: String
+    var base: String? = nil
     let help: String
     @State private var copied = false
 
@@ -15,10 +17,15 @@ struct BranchButton: View {
             // Not a Label: its icon column can't be tightened.
             HStack(spacing: 3) {
                 Image(systemName: "arrow.triangle.branch").imageScale(.small)
+                if let base {
+                    Text(base).lineLimit(1).foregroundStyle(.tertiary)
+                    Image(systemName: "arrow.left").imageScale(.small).foregroundStyle(.tertiary)
+                }
                 Text(branch).lineLimit(1).truncationMode(.middle)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
         }
         .buttonStyle(.accessoryBar)
         .help(help)

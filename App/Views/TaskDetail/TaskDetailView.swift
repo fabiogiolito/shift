@@ -159,7 +159,10 @@ struct TaskDetailView: View {
         ToolbarItem { Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset) }
             .sharedBackgroundVisibility(.hidden)
         ToolbarSpacer(.flexible)
-        ToolbarItem { BranchButton(branch: task.branch, help: "This task's branch. Click to copy it.") }
+        ToolbarItem {
+            BranchButton(branch: task.branch, base: task.base(in: project),
+                         help: "This task's branch, which merges into \(task.base(in: project)). Click to copy it.")
+        }
             .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .primaryAction) { moreMenu(task, project) }
     }
