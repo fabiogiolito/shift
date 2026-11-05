@@ -281,5 +281,17 @@
 - Right-click a task in the list for the same actions as the More menu. The branch button shows the task's base branch, like main ← shift/3018.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.5/Shift-0.2.5.zip" sparkle:edSignature="9rSLbhf2j+9IKkDQpSicB6Ke27vn6Sil9M7LSgUzTtu0yueam4HJmFOVyUNJairFq4cCvW/qPTCdIDtUDWuFAQ==" length="4690043" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.6</title>
+      <pubDate>Thu, 05 Nov 2026 00:29:13 +0000</pubDate>
+      <sparkle:version>23</sparkle:version>
+      <sparkle:shortVersionString>0.2.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Type `/task` followed by a prompt in a task or the project chat to start a new task in the same project
+- Easier-to-read text across the app: no more tiny labels, and stronger contrast on task numbers, branch names and usage limits
+- Chat replies are easier to read, with more space between lines and paragraphs and inline code that matches the size of the text around it
+- Paired phones stay connected after Shift updates or restarts, so you don't have to pair them again]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.6/Shift-0.2.6.zip" sparkle:edSignature="w0NdKPls4Js9qQ/mFeqjQgmdas3kK9g/RePdvl0YlXd1Si47E0h/hQrm4UwpZweFo2r94WdBo7TTKKp0fTE2AQ==" length="4695894" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
