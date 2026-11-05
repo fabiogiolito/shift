@@ -265,5 +265,21 @@
 - The pointer turns into a hand over links in messages]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.4/Shift-0.2.4.zip" sparkle:edSignature="H+MF07Lc7n2WOw2jdw1WPq10kHukhEofUeCYij++LZliOfkKUeG+sQ5yXHIO2pfeosFt/VVgHtxaYc73eVpkCw==" length="4603804" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.5</title>
+      <pubDate>Thu, 05 Nov 2026 00:06:04 +0000</pubDate>
+      <sparkle:version>21</sparkle:version>
+      <sparkle:shortVersionString>0.2.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Each task keeps the agent, model and permissions it started with. Changing the project's settings no longer changes your open tasks, and you can switch a task's agent from the footer.
+- Settings (⌘,) now holds your editor, terminal, idle server timeout and paired devices. Project Settings moves to ⇧⌘,.
+- Opening a task no longer starts its server, and idle servers stop after 5 minutes by default. The server dot shows gray, yellow or green.
+- New keyboard shortcuts: ⌘R runs or opens the preview, ⌘. stops the app, ⇧⌘E opens your editor, ⇧⌘O shows the folder in Finder. There are also shortcuts to switch projects and tasks, search, message the agent, copy the preview link and open in the terminal.
+- The Open in menu lists your editor and terminal first, with their app icons. Other apps are under Open in Other.
+- Make text bigger or smaller with ⌘+, ⌘− and ⌘0 in the conversation, prompts, diff and the agent's questions.
+- The pull request badge is green while a pull request is open and grey once it's merged. Push Changes sends new work to an open pull request.
+- Right-click a task in the list for the same actions as the More menu. The branch button shows the task's base branch, like main ← shift/3018.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.5/Shift-0.2.5.zip" sparkle:edSignature="9rSLbhf2j+9IKkDQpSicB6Ke27vn6Sil9M7LSgUzTtu0yueam4HJmFOVyUNJairFq4cCvW/qPTCdIDtUDWuFAQ==" length="4690043" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
