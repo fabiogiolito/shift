@@ -41,6 +41,7 @@ struct ShiftApp: App {
             }
         }
         .commands {
+            SidebarCommands()
             NewTaskCommand()
             ProjectSettingsCommand()
             ShortcutCommands()
