@@ -59,17 +59,21 @@ struct ProseTextView: NSViewRepresentable {
                 piece = inline(text, size: NSFont.preferredFont(forTextStyle: style).pointSize * scale)
                 piece.addAttribute(.font, value: NSFont.systemFont(ofSize: NSFont.preferredFont(forTextStyle: style).pointSize * scale, weight: .bold),
                                    range: NSRange(location: 0, length: piece.length))
-            case .listItem(let level, let marker, let text):
+            case .listItem(let level, let marker, let itemText):
                 let size = bodySize(scale)
                 let markerFont = NSFont.systemFont(ofSize: size)
-                // A column a little wider than the marker, at least two digits' worth, so items' text mostly lines up.
-                let column = max((marker as NSString).size(withAttributes: [.font: markerFont]).width, ("00." as NSString).size(withAttributes: [.font: markerFont]).width) + 6 * scale
+                // Markers right-aligned in a column as wide as the level's widest one, a small gap from the text.
+                let column = blocks.reduce(CGFloat(0)) { widest, block in
+                    guard case .listItem(level, let other, _) = block else { return widest }
+                    return max(widest, (other as NSString).size(withAttributes: [.font: markerFont]).width)
+                }
                 let indent = (8 + CGFloat(level) * 16) * scale
+                let text = indent + column + 5 * scale
                 style.firstLineHeadIndent = indent
-                style.headIndent = indent + column
-                style.tabStops = [NSTextTab(textAlignment: .left, location: indent + column)]
-                piece = NSMutableAttributedString(string: marker + "\t", attributes: [.font: markerFont, .foregroundColor: NSColor.secondaryLabelColor])
-                piece.append(inline(text, size: size))
+                style.headIndent = text
+                style.tabStops = [NSTextTab(textAlignment: .right, location: indent + column), NSTextTab(textAlignment: .left, location: text)]
+                piece = NSMutableAttributedString(string: "\t" + marker + "\t", attributes: [.font: markerFont, .foregroundColor: NSColor.secondaryLabelColor])
+                piece.append(inline(itemText, size: size))
             default:
                 continue
             }
