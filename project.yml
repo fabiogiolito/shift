@@ -13,7 +13,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "0.2.5"
-    CURRENT_PROJECT_VERSION: "21"
+    CURRENT_PROJECT_VERSION: "22"
 packages:
   ShiftCore:
     path: Core
