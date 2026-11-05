@@ -93,7 +93,7 @@ struct TaskListView: View {
                 } else {
                     Image(systemName: "arrow.up").imageScale(.small).fontWeight(.medium)
                 }
-                if state.unpushed > 0 { Text("\(state.unpushed)").font(.callout).monospacedDigit() }
+                if state.unpushed > 0 { Text("\(state.unpushed)").monospacedDigit() }
             }
         }
         .disabled(state.unpushed == 0 || state.isPushing)
@@ -138,7 +138,7 @@ struct TaskRow: View {
             }
             // Always two lines tall, even before the description arrives: the list doesn't re-measure a row
             // whose content changes in place, so a fixed height keeps every row sized right.
-            Text(task.description ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
+            Text(task.description ?? "").font(.subheadline).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
         }
         .padding(.vertical, 2)
         .contextMenu {

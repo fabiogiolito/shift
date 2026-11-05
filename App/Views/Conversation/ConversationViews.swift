@@ -17,12 +17,12 @@ struct TurnView: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let note = turn.note {
-                Label(note, systemImage: "info.circle").font(.scaled(.callout, textScale)).foregroundStyle(.secondary)
+                Label(note, systemImage: "info.circle").foregroundStyle(.secondary)
             }
             ForEach(prompts) { PromptBubble(prompt: $0) }
             if let text = turn.text {
                 // Shift's own instructions, not the user's words.
-                Text(text).font(.scaled(.callout, textScale)).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
+                Text(text).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
             }
             ForEach(turn.sections) { section in
                 switch section {
@@ -41,6 +41,7 @@ struct TurnView: View, Equatable {
             }
         }
         .font(.scaled(.body, textScale))
+        .lineSpacing(2 * textScale) // Long replies read easier with a little air between lines.
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

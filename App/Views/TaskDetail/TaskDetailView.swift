@@ -792,7 +792,7 @@ struct TaskDetailView: View {
             Text("+\(additions)").foregroundStyle(.green)
             Text("−\(deletions)").foregroundStyle(.red)
         }
-        .font(.caption.monospaced())
+        .font(.subheadline.monospaced())
     }
 
     private func moreMenu(_ task: TaskItem, _ project: Project) -> some View {

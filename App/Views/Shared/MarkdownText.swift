@@ -9,7 +9,7 @@ struct MarkdownText: View {
     var body: some View {
         // Parsed here rather than kept: it is cheap, and a message that's arriving changes each time.
         let groups = Self.group(MarkdownBlock.parse(text), scale: textScale)
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(groups.enumerated()), id: \.offset) { group in
                 if let prose = group.element.prose { LinkedText(string: prose) } else if let block = group.element.block { view(for: block) }
             }
@@ -29,7 +29,7 @@ struct MarkdownText: View {
                 var gap = AttributedString("\n")
                 if case .listItem = previous, case .listItem = block {} else {
                     var space = AttributedString("\n") // A short blank line, like the stack's spacing.
-                    space.font = .system(size: 4 * scale)
+                    space.font = .system(size: 6 * scale)
                     gap += space
                 }
                 groups[groups.count - 1].prose = last + gap + piece
@@ -44,15 +44,15 @@ struct MarkdownText: View {
     private static func prose(_ block: MarkdownBlock, scale: Double) -> AttributedString? {
         switch block {
         case .paragraph(let text):
-            return inline(text)
+            return inline(text, scale: scale)
         case .heading(let level, let text):
-            var heading = inline(text)
+            var heading = inline(text, scale: scale)
             heading.font = .scaled(headingStyle(level), scale)
             return heading
         case .listItem(let level, let marker, let text):
             var bullet = AttributedString(String(repeating: "  ", count: level) + marker + " ")
             bullet.foregroundColor = .secondary
-            return bullet + inline(text)
+            return bullet + inline(text, scale: scale)
         default:
             return nil
         }
@@ -125,10 +125,14 @@ struct MarkdownText: View {
 
     private static func headingStyle(_ level: Int) -> Font.TextStyle { level == 1 ? .title2 : level == 2 ? .title3 : .headline }
 
-    private func inline(_ text: String) -> LinkedText { LinkedText(string: Self.inline(text)) }
+    private func inline(_ text: String) -> LinkedText { LinkedText(string: Self.inline(text, scale: textScale)) }
 
-    private static func inline(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+    private static func inline(_ text: String, scale: Double) -> AttributedString {
+        var string = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        // Monospaced at the text's own size looks larger than the prose around it: inline code gets the code blocks' size.
+        let code = string.runs[\.inlinePresentationIntent].filter { $0.0?.contains(.code) == true }.map(\.1)
+        for range in code { string[range].font = .scaled(.callout, scale, design: .monospaced) }
+        return string
     }
 }
 

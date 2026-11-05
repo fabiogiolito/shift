@@ -99,7 +99,7 @@ struct PromptField: View {
             }
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
-                    Text(placeholder).foregroundStyle(.tertiary).padding(.horizontal, 5).allowsHitTesting(false)
+                    Text(placeholder).foregroundStyle(Color(nsColor: .placeholderTextColor)).padding(.horizontal, 5).allowsHitTesting(false)
                 }
             }
     }
