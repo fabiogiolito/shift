@@ -15,6 +15,7 @@ struct ProseTextView: NSViewRepresentable {
         view.drawsBackground = false
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
+        view.textContainer?.widthTracksTextView = true // The drawn width follows the frame SwiftUI gives it.
         view.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .cursor: NSCursor.pointingHand]
         return view
     }
@@ -26,9 +27,14 @@ struct ProseTextView: NSViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: TextView, context: Context) -> CGSize? {
         guard let width = proposal.width, width > 0, let container = view.textContainer, let layout = view.layoutManager else { return nil }
+        // SwiftUI probes other widths too (narrow ones while a disclosure above animates). Put the drawn width back after
+        // measuring, or the text stays wrapped to the last probe, one word a line, spilling over what's below it.
+        let drawn = container.size
         container.size = CGSize(width: width, height: .greatestFiniteMagnitude)
         layout.ensureLayout(for: container)
-        return CGSize(width: width, height: ceil(layout.usedRect(for: container).height))
+        let height = ceil(layout.usedRect(for: container).height)
+        container.size = drawn
+        return CGSize(width: width, height: height)
     }
 
     final class TextView: NSTextView {
