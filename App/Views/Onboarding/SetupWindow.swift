@@ -242,11 +242,12 @@ struct SetupStateLabel<Action: View>: View {
                 ProgressView().controlSize(.small)
                 Text(step.workingTitle).foregroundStyle(.secondary)
             }
+        // Icon last, so the icons line up on the right edge.
         case .done:
-            Label(step.doneTitle, systemImage: "checkmark.circle.fill")
+            HStack(spacing: 6) { Text(step.doneTitle); Image(systemName: "checkmark.circle.fill") }
                 .foregroundStyle(.green)
         case .failed:
-            Label("Failed", systemImage: "xmark.octagon.fill")
+            HStack(spacing: 6) { Text("Failed"); Image(systemName: "xmark.octagon.fill") }
                 .foregroundStyle(.red)
         case .skipped:
             Text("Skipped").foregroundStyle(.secondary)

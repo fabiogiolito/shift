@@ -22,6 +22,7 @@ struct SetupSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .labelStyle(FixedIconLabelStyle())
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         .task {
@@ -83,5 +84,15 @@ struct SetupSettingsView: View {
     private func open(_ step: SetupStep) {
         flow.start([step])
         openWindow(id: SetupWindow.id)
+    }
+}
+
+/// The icon in a fixed-width column, so every row's title starts at the same place.
+private struct FixedIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            configuration.icon.frame(width: 22)
+            configuration.title
+        }
     }
 }
