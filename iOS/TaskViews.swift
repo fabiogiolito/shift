@@ -367,7 +367,7 @@ private struct TaskStatusView: View {
             } else if task.status == .conflict {
                 Label("It doesn't merge cleanly into its base.", systemImage: "checkmark.circle.fill").foregroundStyle(.orange)
             } else if task.status == .archived {
-                Text("Archived without changes. Nothing was merged.").foregroundStyle(.secondary)
+                Text("Archived. Nothing was merged; any changes stay on its branch, \(task.branch).").foregroundStyle(.secondary)
             } else if task.status == .merged, let project = model.state.projects.first(where: { $0.id == task.projectID }) {
                 Text("Merged into \(task.base(in: project))").foregroundStyle(.secondary)
             }

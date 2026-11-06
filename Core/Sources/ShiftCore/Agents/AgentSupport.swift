@@ -93,7 +93,7 @@ extension OutcomeProtocol {
         To answer about a task, look at its code rather than guessing: an open task's worktree has its current work, \
         which you can read without switching branches (git won't check out a branch here while a worktree has it). \
         Don't change anything in a worktree unless asked, as an agent may be working there. A merged task's work is \
-        in its base branch and its worktree is gone; an archived one closed with no changes. What was said and done in any task is in its agent's log, \
+        in its base branch and its worktree is gone; an archived one closed without merging, any work it had kept on its branch. What was said and done in any task is in its agent's log, \
         \(ShiftPaths.logs.path)/agent-<task number>.log, which is long: search it or read its end.
         """]
         parts.append("Open tasks, newest first:\n" + (open.isEmpty ? "None" : open.map(entry).joined(separator: "\n")))

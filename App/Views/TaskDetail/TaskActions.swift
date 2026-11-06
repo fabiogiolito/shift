@@ -7,7 +7,7 @@ struct TaskActions {
     var renaming = false
     var editingTags = false
     var confirmingDelete = false
-    /// Completed with nothing committed or uncommitted against its base: it can be archived.
+    /// Completed with nothing committed or uncommitted against its base: Archive is its main action.
     var unchanged = false
 }
 
@@ -47,7 +47,7 @@ struct TaskActionItems: View {
             }
             Divider()
         }
-        if actions.unchanged && !task.status.isClosed {
+        if !task.status.isClosed {
             Button("Archive Task") { Task { await model.archive(taskID: task.id) } }
         }
         Button("Tags…") { actions.editingTags = true }
