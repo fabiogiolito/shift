@@ -183,15 +183,18 @@ struct TaskDetailView: View {
     /// a status line, then the action row. What the task needs from the user is in the bottom bar.
     private func header(_ task: TaskItem, _ project: Project) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let headline = headline(task) {
-                Text(headline).font(.title3).textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 8) {
+                if let headline = headline(task) {
+                    Text(headline).font(.title3).textSelection(.enabled)
+                }
+                if task.tags?.isEmpty == false {
+                    TaskTags(tags: task.tags, project: project, onRemove: { model.removeTag(taskID: task.id, $0) },
+                             onDelete: { model.deleteTag(projectID: project.id, $0) },
+                             isShared: { model.tagIsShared(taskID: task.id, $0) },
+                             onColor: { model.setTagColor(projectID: project.id, $0, $1) })
+                }
             }
-            if task.tags?.isEmpty == false {
-                TaskTags(tags: task.tags, project: project, onRemove: { model.removeTag(taskID: task.id, $0) },
-                         onDelete: { model.deleteTag(projectID: project.id, $0) },
-                         isShared: { model.tagIsShared(taskID: task.id, $0) },
-                         onColor: { model.setTagColor(projectID: project.id, $0, $1) })
-            }
+            .padding(.bottom, 8)
             actions(task, project)
             statusLine(task, project)
             if let schedule = task.scheduleID.flatMap(model.schedule) {
