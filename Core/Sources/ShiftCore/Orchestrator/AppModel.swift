@@ -1998,11 +1998,6 @@ public final class AppModel {
               project.takesScreenshots, project.isApp || task.port != nil, !task.isResolvingConflict,
               let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)) else { return nil }
         let wantsBefore = diff.isEmpty && task.screenshots?.contains(where: \.isBefore) != true
-        // The agent starts as soon as this returns, and the "before" has to beat its first edit.
-        if wantsBefore && !project.isApp {
-            await wakeServer(id)
-            _ = await serverAnswers(id)
-        }
         return ScreenshotTurn(diff: diff, wantsBefore: wantsBefore, isApp: project.isApp,
                               targets: project.isApp ? [] : [ScreenshotTarget(page: "/")])
     }
@@ -2010,6 +2005,12 @@ public final class AppModel {
     /// ponytail: checked only once, before the page loads; an edit during the seconds it takes can end up in the
     /// picture. Checking after too would drop good ones: dev servers rewrite tracked files on first compile.
     private func takeBeforeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, unchangedFrom diff: [FileDiff]) async -> Bool {
+        // The server starts only now that the agent has named a page: a turn that changes nothing visible never needs it.
+        // The agent is already working, so the changes are checked once it answers.
+        if let task = task(id), project(task.projectID)?.isApp == false {
+            await wakeServer(id)
+            _ = await serverAnswers(id)
+        }
         guard let services, let task = task(id), let project = project(task.projectID),
               (try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project))) == diff else { return false }
         // A page as it loads: what a script would select is what the agent is about to build.
