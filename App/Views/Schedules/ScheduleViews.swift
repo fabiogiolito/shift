@@ -634,7 +634,8 @@ private struct SchedulePrompt: View {
     }
 }
 
-/// A schedule's run settings on its page, as a box of rows like System Settings: each changes in place.
+/// The run settings the form leaves out, on the schedule's page as a box of rows like System Settings, each
+/// changed in place.
 struct ScheduleSettings: View {
     @Environment(AppModel.self) private var model
     @Binding var schedule: Schedule
@@ -647,18 +648,6 @@ struct ScheduleSettings: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Settings").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             VStack(spacing: 0) {
-                row("When done") {
-                    Picker("When done", selection: $schedule.finish) {
-                        ForEach([Schedule.FinishAction.review, .archive, .pullRequest, .merge], id: \.self) { Text($0.menuTitle).tag($0) }
-                    }
-                }
-                Divider()
-                row("Agent") { Self.agentPicker($schedule, model: model) }
-                Divider()
-                row("Model") {
-                    ModelPicker(agent: schedule.agent, selection: Binding { schedule.model ?? "" } set: { schedule.model = $0.isEmpty ? nil : $0 })
-                }
-                Divider()
                 row("Permissions", note: schedule.permissions == .manual ? "Runs wait for you to allow their commands." : nil) {
                     Picker("Permissions", selection: $schedule.permissions) {
                         ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
@@ -723,17 +712,6 @@ struct ScheduleSettings: View {
     }
 }
 
-extension Schedule.FinishAction {
-    /// In the menu: the whole rule.
-    var menuTitle: String {
-        switch self {
-        case .review: "Leave for review"
-        case .archive: "Archive if it has no changes"
-        case .pullRequest: "Open a pull request"
-        case .merge: "Merge if it merges cleanly"
-        }
-    }
-}
 
 
 /// A date or a time as a plain field, the way Calendar and Reminders show them: no stepper, and clicking a date
