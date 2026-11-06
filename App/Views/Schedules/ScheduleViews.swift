@@ -289,7 +289,8 @@ struct ScheduleForm: View {
             }
             // When it runs, set apart on a light gray panel.
             timing
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.quinary, in: .rect(cornerRadius: 10))
                 .padding(.top, 16)
