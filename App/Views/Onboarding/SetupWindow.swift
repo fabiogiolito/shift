@@ -46,6 +46,7 @@ struct SetupWindow: View {
                 }
                 if state == .skipped {
                     Button(step.actionTitle) { flow.perform(step) }
+                        .disabled(!flow.canPerform(step))
                 }
                 primaryButton(step, state)
                     .keyboardShortcut(.defaultAction)

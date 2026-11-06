@@ -90,11 +90,12 @@ enum SetupStep: String, CaseIterable, Identifiable {
         }
     }
 
-    var canSkip: Bool { [.github, .packageManager, .xcode].contains(self) }
+    var canSkip: Bool { [.gitIdentity, .github, .packageManager, .xcode].contains(self) }
 
     /// What won't work if it's skipped.
     var skipWarning: String? {
         switch self {
+        case .gitIdentity: "Commits will be signed with a name made from your Mac's name. You can set yours later in Settings."
         case .github: "Shift can't open pull requests or follow them, and pushing may fail. You can connect GitHub later in Settings."
         case .packageManager: "The project's dev server won't start until it's installed."
         case .xcode: "The project can't be built or run until Xcode is installed."
