@@ -21,8 +21,8 @@ struct TaskListView: View {
                         waiting: model.chatApprovalRequest(projectID: project.id) != nil).tag(ChatRow.id)
                 ForEach(sections, id: \.0) { section($0.0, $0.1) }
             }
-            // Tags add a line to a row, so adding or clearing them rebuilds it too.
-            .id(sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.tags?.isEmpty == false)" })" }.joined())
+            // A description or tags add lines to a row, so one arriving or going rebuilds it too.
+            .id(sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined())
         }
         // Sidebar style keeps section headers from pinning below the toolbar, so the toolbar's edge line
         // lines up with the detail column's. Its sidebar background is dropped: this is the content column.
@@ -107,8 +107,8 @@ struct TaskListView: View {
             Section {
                 ForEach(tasks) { TaskRow(task: $0) }
             } header: {
-                // Extra room above each header so the groups read apart.
-                Text(title).padding(.top, 10)
+                // Extra room around each header so the groups read apart and the first row isn't tight under it.
+                Text(title).padding(.top, 10).padding(.bottom, 4)
             }
         }
     }
@@ -148,9 +148,10 @@ struct TaskRow: View {
                 Spacer()
                 TaskNumber(task: task)
             }
-            // Always two lines tall, even before the description arrives: the list doesn't re-measure a row
-            // whose content changes in place, so a fixed height keeps every row sized right.
-            Text(task.description ?? "").font(.subheadline).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
+            // Two lines tall when there is one, nothing when not: the list rebuilds when a description arrives.
+            if task.description?.isEmpty == false {
+                Text(task.description ?? "").font(.subheadline).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
+            }
             if task.tags?.isEmpty == false { TaskTags(tags: task.tags).padding(.top, 2) }
         }
         .padding(.vertical, 2)
