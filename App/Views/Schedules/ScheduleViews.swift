@@ -107,7 +107,6 @@ struct ScheduleDetailView: View {
     let scheduleID: Schedule.ID
     @Binding var selection: TaskItem.ID?
     @State private var confirmingDelete = false
-    @State private var branches: [String] = []
 
     var body: some View {
         if let schedule = model.schedule(scheduleID) {
@@ -125,7 +124,7 @@ struct ScheduleDetailView: View {
                         ScheduleRunMenus(schedule: Binding { schedule } set: { model.saveSchedule($0) })
                     }
                     // Changed here, without the form; saved right away.
-                    ScheduleSettings(schedule: Binding { schedule } set: { model.saveSchedule($0) }, branches: branches)
+                    ScheduleSettings(schedule: Binding { schedule } set: { model.saveSchedule($0) })
                     runs(schedule)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -148,7 +147,6 @@ struct ScheduleDetailView: View {
                 }
             }
             .deleteScheduleConfirmation(schedule, isPresented: $confirmingDelete, model: model)
-            .task(id: schedule.projectID) { branches = await model.branches(for: schedule.projectID) }
         } else {
             EmptyState("Schedule Deleted", systemImage: "calendar")
         }
@@ -257,7 +255,6 @@ struct ScheduleForm: View {
     @State var draft: Schedule
     let isNew: Bool
     let onSave: (Schedule) -> Void
-    @State private var branches: [String] = []
 
     enum End: Hashable { case never, after, on }
     enum MonthMode: Hashable { case days, ordinal }
@@ -266,7 +263,7 @@ struct ScheduleForm: View {
         VStack(alignment: .leading, spacing: 0) {
             // A sheet has no title bar: say what it is, since several places open it.
             Text(isNew ? "New Schedule" : "Edit Schedule").font(.headline)
-                .padding(.bottom, 20)
+                .padding(.bottom, 16)
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Title", text: $draft.title, prompt: Text("Title"))
                     .textFieldStyle(.plain)
@@ -292,11 +289,10 @@ struct ScheduleForm: View {
             }
             Divider().padding(.vertical, 20)
             timing
-            Divider().padding(.top, 20)
             HStack { Spacer(); buttons }
-                .padding(.top, 20)
+                .padding(.top, 24)
         }
-        .frame(width: 600)
+        .frame(width: 640)
         .padding(24)
     }
 
@@ -319,13 +315,6 @@ struct ScheduleForm: View {
         Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
-    private func field(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-            content()
-        }
-    }
-
     // MARK: Timing
 
     /// The segmented Repeat: nil is Never.
@@ -337,29 +326,28 @@ struct ScheduleForm: View {
         }
     }
 
+    /// Labels in a column on the left and every control on one edge, in the order a schedule reads: when it
+    /// starts, how it repeats, when it ends.
     @ViewBuilder private var timing: some View {
         let rule = draft.timing.repeat
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top, spacing: 40) {
-                field("Starts") { DateField(date: $draft.timing.start, part: .dateTime) }
-                if rule != nil { field("Ends") { endRow } }
-            }
-            field("Repeat") {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 14) {
+            row("Starts") { DateField(date: $draft.timing.start, part: .dateTime) }
+            row("Repeat") {
                 Picker("Repeat", selection: frequency) {
                     Text("Never").tag(ScheduleTiming.Recurrence.Frequency?.none)
-                    Text("Hour").tag(ScheduleTiming.Recurrence.Frequency?.some(.hourly))
-                    Text("Day").tag(ScheduleTiming.Recurrence.Frequency?.some(.daily))
-                    Text("Week").tag(ScheduleTiming.Recurrence.Frequency?.some(.weekly))
-                    Text("Month").tag(ScheduleTiming.Recurrence.Frequency?.some(.monthly))
+                    Text("Hourly").tag(ScheduleTiming.Recurrence.Frequency?.some(.hourly))
+                    Text("Daily").tag(ScheduleTiming.Recurrence.Frequency?.some(.daily))
+                    Text("Weekly").tag(ScheduleTiming.Recurrence.Frequency?.some(.weekly))
+                    Text("Monthly").tag(ScheduleTiming.Recurrence.Frequency?.some(.monthly))
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
             }
             if let rule {
-                VStack(alignment: .leading, spacing: 12) {
-                    // "Every [2] weeks", as in Calendar's custom repeat. Hours sit beside it.
-                    HStack(spacing: 24) {
+                // "Every [2] weeks", as in Calendar's custom repeat. Hours sit beside it.
+                row("") {
+                    HStack(spacing: 20) {
                         Stepper(value: self.rule(\.interval, 1), in: 1...99) {
                             steady(every(rule), widest: every(.init(rule.frequency, interval: 99)))
                         }
@@ -376,13 +364,21 @@ struct ScheduleForm: View {
                             }
                         }
                     }
-                    if rule.frequency == .weekly { weekdays(rule) }
-                    if rule.frequency == .monthly { monthly(rule) }
-                    if rule.frequency == .hourly {
-                        note("Every run is a new task, and each one takes disk space until it's archived or merged.")
-                    }
                 }
+                if rule.frequency == .weekly { row("On") { weekdays(rule) } }
+                if rule.frequency == .monthly { row("On") { monthly(rule) } }
+                if rule.frequency == .hourly {
+                    row("") { note("Every run is a new task, and each one takes disk space until it's archived or merged.") }
+                }
+                row("Ends") { endRow }
             }
+        }
+    }
+
+    private func row(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        GridRow {
+            Text(title).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
+            content()
         }
     }
 
@@ -605,9 +601,20 @@ private struct SchedulePrompt: View {
 struct ScheduleRunMenus: View {
     @Environment(AppModel.self) private var model
     @Binding var schedule: Schedule
+    @State private var branches: [String] = []
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
+            Menu {
+                Picker("Branch", selection: $schedule.baseBranch) {
+                    // The current value is always offered, so the menu is valid before branches load.
+                    ForEach(branches.contains(schedule.baseBranch) ? branches : [schedule.baseBranch] + branches, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(schedule.baseBranch, systemImage: "arrow.triangle.branch")
+            }
+            .help("Branch each run starts from")
             Menu {
                 ScheduleSettings.agentPicker($schedule, model: model).pickerStyle(.inline)
             } label: {
@@ -647,6 +654,7 @@ struct ScheduleRunMenus: View {
         .labelStyle(.titleAndIcon)
         .fixedSize()
         .foregroundStyle(.secondary)
+        .task(id: schedule.projectID) { branches = await model.branches(for: schedule.projectID) }
     }
 
     static func title(_ action: Schedule.FinishAction) -> String {
@@ -673,7 +681,6 @@ struct ScheduleRunMenus: View {
 struct ScheduleSettings: View {
     @Environment(AppModel.self) private var model
     @Binding var schedule: Schedule
-    let branches: [String]
 
     /// What a run does when the Mac is asleep at its time: the two settings as one choice.
     enum Asleep: Hashable { case skip, stayAwake, wake }
@@ -682,13 +689,6 @@ struct ScheduleSettings: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Settings").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             VStack(spacing: 0) {
-                row("Branch") {
-                    Picker("Branch", selection: $schedule.baseBranch) {
-                        // The current value is always offered, so the menu is valid before branches load.
-                        ForEach(branches.contains(schedule.baseBranch) ? branches : [schedule.baseBranch] + branches, id: \.self) { Text($0) }
-                    }
-                }
-                Divider()
                 row("When the Mac is asleep",
                     note: schedule.wakeMac ? "Shift asks for your administrator password to schedule the wakes." : nil) {
                     Picker("When the Mac is asleep", selection: asleep) {
