@@ -276,6 +276,7 @@ struct TaskDetailView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     Text(task.title).font(.title2.bold())
                     if let about = task.summary ?? task.description { MarkdownText(text: about) }
+                    if task.tags?.isEmpty == false { TaskTags(tags: task.tags) }
                     TaskStatusView(task: task)
                     if let shots = task.screenshots, !shots.isEmpty { ScreenshotsRow(shots: shots.reversed()) }
                     if let changes, !changes.files.isEmpty { ChangesRow(taskID: taskID, changes: changes) }

@@ -111,6 +111,8 @@ final class AppModelTests: XCTestCase {
         model.sendPrompt(taskID: id, text: "/tag Bar, baz")
         XCTAssertEqual(model.task(id)?.tags, ["foo", "bar", "baz"])
         XCTAssertEqual(model.task(id)?.prompts.map(\.text), ["Do the thing"])
+        model.removeTag(taskID: id, "bar")
+        XCTAssertEqual(model.task(id)?.tags, ["foo", "baz"])
         model.sendPrompt(taskID: id, text: "/tag")
         XCTAssertNil(model.task(id)?.tags)
         XCTAssertNil(AppModel.command("tag", "/tags x"))

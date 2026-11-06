@@ -178,6 +178,9 @@ struct TaskDetailView: View {
             if let headline = headline(task) {
                 Text(headline).font(.title3).textSelection(.enabled)
             }
+            if task.tags?.isEmpty == false {
+                TaskTags(tags: task.tags) { model.removeTag(taskID: task.id, $0) }
+            }
             statusLine(task, project)
             actions(task, project)
         }

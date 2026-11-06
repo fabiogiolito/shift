@@ -82,6 +82,8 @@ extension TaskStatus {
 /// ponytail: one line, tags past the row's width are clipped; a wrapping layout if tasks get many tags.
 struct TaskTags: View {
     let tags: [String]?
+    /// Given, right-clicking a tag offers to delete it.
+    var onDelete: ((String) -> Void)?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -89,6 +91,9 @@ struct TaskTags: View {
                 Text(tag).font(.caption2).fixedSize().foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(.quaternary, in: .capsule)
+                    .contextMenu {
+                        if let onDelete { Button("Delete Tag", role: .destructive) { onDelete(tag) } }
+                    }
             }
         }
     }

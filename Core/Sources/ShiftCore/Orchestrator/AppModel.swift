@@ -610,6 +610,13 @@ public final class AppModel {
         return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public func removeTag(taskID: TaskItem.ID, _ tag: String) {
+        update(taskID) { task in
+            task.tags?.removeAll { $0 == tag }
+            if task.tags?.isEmpty == true { task.tags = nil }
+        }
+    }
+
     /// Adds comma-separated tags, skipping ones it already has (ignoring case). An empty list clears them.
     public func addTags(taskID: TaskItem.ID, _ list: String) {
         let new = list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
