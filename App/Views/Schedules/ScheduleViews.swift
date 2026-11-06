@@ -109,41 +109,6 @@ struct ScheduleDetailView: View {
     @State private var confirmingDelete = false
     @State private var branches: [String] = []
 
-    /// What each run's agent works with, as menus like the window's footer, changed in place.
-    private func runSettings(_ schedule: Binding<Schedule>) -> some View {
-        let value = schedule.wrappedValue
-        return HStack(spacing: 16) {
-            Menu {
-                ScheduleSettings.agentPicker(schedule, model: model).pickerStyle(.inline)
-            } label: {
-                Label(value.agent.displayName, image: value.agent.icon)
-            }
-            .help("Agent")
-            Menu {
-                ModelPicker(agent: value.agent, selection: Binding { value.model ?? "" } set: {
-                    schedule.wrappedValue.model = $0.isEmpty ? nil : $0
-                })
-                .pickerStyle(.inline)
-            } label: {
-                Label(model.modelName(value.model ?? "", for: value.agent), systemImage: "cpu")
-            }
-            .help("Model")
-            Menu {
-                Picker("Permissions", selection: schedule.permissions) {
-                    ForEach(AgentPermissions.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Label(value.permissions.displayName, systemImage: value.permissions.symbol)
-            }
-            .help(value.permissions == .manual ? "Runs wait for you to allow their commands" : "Permissions")
-        }
-        .menuStyle(.borderlessButton)
-        .labelStyle(.titleAndIcon)
-        .fixedSize()
-        .foregroundStyle(.secondary)
-    }
-
     var body: some View {
         if let schedule = model.schedule(scheduleID) {
             ScrollView {
@@ -157,7 +122,7 @@ struct ScheduleDetailView: View {
                                 .padding(8)
                         }
                         .id(schedule.id)
-                        runSettings(Binding { schedule } set: { model.saveSchedule($0) })
+                        ScheduleRunMenus(schedule: Binding { schedule } set: { model.saveSchedule($0) })
                     }
                     // Changed here, without the form; saved right away.
                     ScheduleSettings(schedule: Binding { schedule } set: { model.saveSchedule($0) }, branches: branches)
@@ -294,72 +259,45 @@ struct ScheduleForm: View {
     let onSave: (Schedule) -> Void
     @State private var branches: [String] = []
 
-    enum Repeat: Hashable { case never, hour, day, week, month, custom }
     enum End: Hashable { case never, after, on }
     enum MonthMode: Hashable { case days, ordinal }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             // A sheet has no title bar: say what it is, since several places open it.
-            Text(isNew ? "New Schedule" : "Edit Schedule")
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding([.horizontal, .top], 24)
-            Form {
-                // What
-                TextField("Name:", text: $draft.title, prompt: Text("Named after the prompt"))
+            Text(isNew ? "New Schedule" : "Edit Schedule").font(.headline)
+                .padding(.bottom, 20)
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("Title", text: $draft.title, prompt: Text("Title"))
+                    .textFieldStyle(.plain)
+                    .padding(.vertical, 7).padding(.horizontal, 8)
+                    .background(.background, in: .rect(cornerRadius: 6))
+                    .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
                 // A text editor, not a field: Return adds a line here instead of pressing Save.
-                LabeledContent {
-                    TextEditor(text: $draft.prompt)
-                        .font(.body)
-                        .scrollContentBackground(.hidden)
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 1)
-                        .frame(height: 110)
-                        .background(.background, in: .rect(cornerRadius: 6))
-                        .overlay(alignment: .topLeading) {
-                            if draft.prompt.isEmpty {
-                                Text("Everything each run's agent needs to know").foregroundStyle(.placeholder)
-                                    .padding(.vertical, 4).padding(.horizontal, 6)
-                                    .allowsHitTesting(false)
-                            }
+                TextEditor(text: $draft.prompt)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(.vertical, 7).padding(.horizontal, 3)
+                    .frame(height: 120)
+                    .background(.background, in: .rect(cornerRadius: 6))
+                    .overlay(alignment: .topLeading) {
+                        if draft.prompt.isEmpty {
+                            Text("Prompt").foregroundStyle(.placeholder)
+                                .padding(.vertical, 7).padding(.horizontal, 8)
+                                .allowsHitTesting(false)
                         }
-                        .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
-                    // An editor has no text baseline: give it its first line's, so the label sits level with it.
-                    .alignmentGuide(.firstTextBaseline) { _ in 4 + NSFont.systemFont(ofSize: NSFont.systemFontSize).ascender }
-                } label: {
-                    Text("Prompt:")
-                }
-                divider
-                // When
-                timingRows
-                divider
-                // How each run works. Permissions, branch and sleep come from the window's bar and change on the page.
-                LabeledContent("Agent:") {
-                    HStack {
-                        ScheduleSettings.agentPicker($draft, model: model).labelsHidden().fixedSize()
-                        ModelPicker(agent: draft.agent, selection: Binding { draft.model ?? "" } set: { draft.model = $0.isEmpty ? nil : $0 })
-                            .labelsHidden()
-                            .fixedSize()
                     }
-                }
-                Picker("When done:", selection: $draft.finish) {
-                    Text("Leave for review").tag(Schedule.FinishAction.review)
-                    Text("Archive if it has no changes").tag(Schedule.FinishAction.archive)
-                    Text("Open a pull request").tag(Schedule.FinishAction.pullRequest)
-                    Text("Merge if it merges cleanly").tag(Schedule.FinishAction.merge)
-                }
-                .fixedSize()
-                if draft.finish == .archive || draft.finish == .merge { note("Otherwise it's left for review.") }
+                    .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
+                ScheduleRunMenus(schedule: $draft)
             }
-            .formStyle(.columns)
-            .padding(24)
-            Divider().padding(.horizontal, 24)
+            Divider().padding(.vertical, 20)
+            timing
+            Divider().padding(.top, 20)
             HStack { Spacer(); buttons }
-                .padding(24)
+                .padding(.top, 20)
         }
-        .frame(width: 560)
-        .task { branches = await model.branches(for: draft.projectID) }
+        .frame(width: 600)
+        .padding(24)
     }
 
     @ViewBuilder private var buttons: some View {
@@ -377,105 +315,82 @@ struct ScheduleForm: View {
         .controlSize(.large)
     }
 
-    private var divider: some View { Divider().padding(.vertical, 8) }
-
-    /// Help under a control, in the controls' column.
     private func note(_ text: String) -> some View {
-        LabeledContent {
-            Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 400, alignment: .leading)
-        } label: {
-            EmptyView()
+        Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func field(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+            content()
         }
     }
 
     // MARK: Timing
 
-    private var repeatChoice: Binding<Repeat> {
-        Binding {
-            guard let rule = draft.timing.repeat else { return .never }
-            guard rule.interval == 1, rule.weekdays.isEmpty, rule.monthDays.isEmpty, rule.ordinal == nil else { return .custom }
-            switch rule.frequency {
-            case .hourly: return .hour
-            case .daily: return .day
-            case .weekly: return .week
-            case .monthly: return .month
-            }
-        } set: { choice in
-            switch choice {
-            case .never: draft.timing.repeat = nil
-            case .hour: draft.timing.repeat = .init(.hourly)
-            case .day: draft.timing.repeat = .init(.daily)
-            case .week: draft.timing.repeat = .init(.weekly)
-            case .month: draft.timing.repeat = .init(.monthly)
-            case .custom:
-                // Shown as custom from here on: weekly on the start's day, which the user then changes.
-                let day = Weekday.allCases[Calendar.current.component(.weekday, from: draft.timing.start) - 1]
-                draft.timing.repeat = .init(.weekly, weekdays: [day])
-            }
-            if choice == .never { draft.timing.between = nil; draft.timing.endAfter = nil; draft.timing.endOn = nil }
+    /// The segmented Repeat: nil is Never.
+    private var frequency: Binding<ScheduleTiming.Recurrence.Frequency?> {
+        Binding { draft.timing.repeat?.frequency } set: { choice in
+            draft.timing.repeat = choice.map { .init($0) }
+            if choice != .hourly { draft.timing.between = nil }
+            if choice == nil { draft.timing.endAfter = nil; draft.timing.endOn = nil }
         }
     }
 
-    @ViewBuilder private var timingRows: some View {
-        let rule = draft.timing.repeat ?? .init(.daily)
-        // A date and a time field, as in Calendar: clicking the date opens a calendar.
-        LabeledContent("Starts:") {
-            HStack(spacing: 6) {
-                DateField(date: $draft.timing.start, part: .date)
-                DateField(date: $draft.timing.start, part: .time)
+    @ViewBuilder private var timing: some View {
+        let rule = draft.timing.repeat
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 40) {
+                field("Starts") { DateField(date: $draft.timing.start, part: .dateTime) }
+                if rule != nil { field("Ends") { endRow } }
             }
-        }
-        Picker("Repeat:", selection: repeatChoice) {
-            Text("Never").tag(Repeat.never)
-            Divider()
-            Text("Every Hour").tag(Repeat.hour)
-            Text("Every Day").tag(Repeat.day)
-            Text("Every Week").tag(Repeat.week)
-            Text("Every Month").tag(Repeat.month)
-            Divider()
-            Text("Custom").tag(Repeat.custom)
-        }
-        .fixedSize()
-        if draft.timing.repeat?.frequency == .hourly {
-            note("Every run is a new task, and each one takes disk space until it's archived or merged.")
-        }
-        if draft.timing.repeat != nil {
-            if repeatChoice.wrappedValue == .custom {
-                // "Every [2] [weeks]", as in Calendar.
-                LabeledContent("Every:") {
-                    HStack {
-                        Stepper(value: self.rule(\.interval, 1), in: 1...99) { Text("\(rule.interval)").monospacedDigit() }
-                        Picker("", selection: self.rule(\.frequency, .daily)) {
-                            let one = rule.interval == 1
-                            Text(one ? "hour" : "hours").tag(ScheduleTiming.Recurrence.Frequency.hourly)
-                            Text(one ? "day" : "days").tag(ScheduleTiming.Recurrence.Frequency.daily)
-                            Text(one ? "week" : "weeks").tag(ScheduleTiming.Recurrence.Frequency.weekly)
-                            Text(one ? "month" : "months").tag(ScheduleTiming.Recurrence.Frequency.monthly)
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                    }
+            field("Repeat") {
+                Picker("Repeat", selection: frequency) {
+                    Text("Never").tag(ScheduleTiming.Recurrence.Frequency?.none)
+                    Text("Hour").tag(ScheduleTiming.Recurrence.Frequency?.some(.hourly))
+                    Text("Day").tag(ScheduleTiming.Recurrence.Frequency?.some(.daily))
+                    Text("Week").tag(ScheduleTiming.Recurrence.Frequency?.some(.weekly))
+                    Text("Month").tag(ScheduleTiming.Recurrence.Frequency?.some(.monthly))
                 }
-                if rule.frequency == .weekly { weekdays(rule) }
-                if rule.frequency == .monthly { monthly(rule) }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
-            if rule.frequency == .hourly || draft.timing.between != nil {
-                LabeledContent("Hours:") {
-                    HStack {
-                        Toggle("Only between", isOn: Binding { draft.timing.between != nil } set: {
-                            draft.timing.between = $0 ? .init(from: .init(9), to: .init(17)) : nil
-                        })
-                        if draft.timing.between != nil {
-                            DateField(date: time(\.from), part: .time)
-                            Text("and")
-                            DateField(date: time(\.to), part: .time)
+            if let rule {
+                VStack(alignment: .leading, spacing: 12) {
+                    // "Every [2] weeks", as in Calendar's custom repeat.
+                    Stepper(value: self.rule(\.interval, 1), in: 1...99) {
+                        Text(every(rule)).monospacedDigit()
+                    }
+                    if rule.frequency == .weekly { weekdays(rule) }
+                    if rule.frequency == .monthly { monthly(rule) }
+                    if rule.frequency == .hourly {
+                        HStack {
+                            Toggle("Only between", isOn: Binding { draft.timing.between != nil } set: {
+                                draft.timing.between = $0 ? .init(from: .init(9), to: .init(17)) : nil
+                            })
+                            if draft.timing.between != nil {
+                                DateField(date: time(\.from), part: .time)
+                                Text("and")
+                                DateField(date: time(\.to), part: .time)
+                            }
                         }
+                        note("Every run is a new task, and each one takes disk space until it's archived or merged.")
                     }
                 }
             }
-            endRow
         }
+    }
+
+    private func every(_ rule: ScheduleTiming.Recurrence) -> String {
+        let n = rule.interval
+        let unit = switch rule.frequency {
+        case .hourly: n == 1 ? "hour" : "hours"
+        case .daily: n == 1 ? "day" : "days"
+        case .weekly: n == 1 ? "week" : "weeks"
+        case .monthly: n == 1 ? "month" : "months"
+        }
+        return n == 1 ? "Every \(unit)" : "Every \(n) \(unit)"
     }
 
     private func rule<T>(_ keyPath: WritableKeyPath<ScheduleTiming.Recurrence, T>, _ fallback: T) -> Binding<T> {
@@ -497,7 +412,7 @@ struct ScheduleForm: View {
         let calendar = Calendar.current
         let order = (0..<7).map { Weekday.allCases[(calendar.firstWeekday - 1 + $0) % 7] }
         let chosen = rule.weekdays.isEmpty ? [Weekday.allCases[calendar.component(.weekday, from: draft.timing.start) - 1]] : rule.weekdays
-        return LabeledContent("On:") {
+        return Group {
             HStack(spacing: 4) {
                 ForEach(order, id: \.self) { day in
                     Toggle(isOn: Binding { chosen.contains(day) } set: { on in
@@ -516,7 +431,7 @@ struct ScheduleForm: View {
 
     @ViewBuilder private func monthly(_ rule: ScheduleTiming.Recurrence) -> some View {
         let calendar = Calendar.current
-        LabeledContent("On:") {
+        Group {
             VStack(alignment: .leading, spacing: 8) {
                 Picker("", selection: Binding { rule.ordinal == nil ? MonthMode.days : .ordinal } set: { mode in
                     if mode == .days {
@@ -581,7 +496,7 @@ struct ScheduleForm: View {
     /// "End: [After] [5] times" or "End: [On Date] [date]".
     private var endRow: some View {
         let end: End = draft.timing.endAfter != nil ? .after : draft.timing.endOn != nil ? .on : .never
-        return LabeledContent("End:") {
+        return Group {
             HStack {
                 Picker("", selection: Binding { end } set: { choice in
                     draft.timing.endAfter = choice == .after ? 10 : nil
@@ -675,6 +590,74 @@ private struct SchedulePrompt: View {
     }
 }
 
+/// What each run's agent works with, as plain menus like the window's footer: under the prompt in the panel
+/// and on the page, where a change saves right away.
+struct ScheduleRunMenus: View {
+    @Environment(AppModel.self) private var model
+    @Binding var schedule: Schedule
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Menu {
+                ScheduleSettings.agentPicker($schedule, model: model).pickerStyle(.inline)
+            } label: {
+                Label(schedule.agent.displayName, image: schedule.agent.icon)
+            }
+            .help("Agent")
+            Menu {
+                ModelPicker(agent: schedule.agent, selection: Binding { schedule.model ?? "" } set: {
+                    schedule.model = $0.isEmpty ? nil : $0
+                })
+                .pickerStyle(.inline)
+            } label: {
+                Label(model.modelName(schedule.model ?? "", for: schedule.agent), systemImage: "cpu")
+            }
+            .help("Model")
+            Menu {
+                Picker("Permissions", selection: $schedule.permissions) {
+                    ForEach(AgentPermissions.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(schedule.permissions.displayName, systemImage: schedule.permissions.symbol)
+            }
+            .help(schedule.permissions == .manual ? "Runs wait for you to allow their commands" : "Permissions")
+            Menu {
+                Picker("When done", selection: $schedule.finish) {
+                    ForEach(Schedule.FinishAction.allCases, id: \.self) { Label(Self.title($0), systemImage: Self.symbol($0)).tag($0) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(Self.title(schedule.finish), systemImage: Self.symbol(schedule.finish))
+            }
+            .help(schedule.finish == .archive || schedule.finish == .merge
+                  ? "When a run is done. Otherwise it's left for review." : "When a run is done")
+        }
+        .menuStyle(.borderlessButton)
+        .labelStyle(.titleAndIcon)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+    }
+
+    static func title(_ action: Schedule.FinishAction) -> String {
+        switch action {
+        case .review: "Leave for review"
+        case .archive: "Archive if no changes"
+        case .pullRequest: "Open a pull request"
+        case .merge: "Merge if clean"
+        }
+    }
+
+    static func symbol(_ action: Schedule.FinishAction) -> String {
+        switch action {
+        case .review: "eye"
+        case .archive: "archivebox"
+        case .pullRequest: "arrow.triangle.pull"
+        case .merge: "arrow.triangle.merge"
+        }
+    }
+}
+
 /// The run settings the form leaves out, on the schedule's page as a box of rows like System Settings, each
 /// changed in place.
 struct ScheduleSettings: View {
@@ -752,15 +735,19 @@ struct ScheduleSettings: View {
 /// A date or a time as a plain field, the way Calendar and Reminders show them: no stepper, and clicking a date
 /// opens a small calendar under it. SwiftUI's DatePicker can't show that calendar, so this is AppKit's.
 struct DateField: NSViewRepresentable {
-    enum Part { case date, time }
+    enum Part { case date, time, dateTime }
     @Binding var date: Date
     let part: Part
 
     func makeNSView(context: Context) -> NSDatePicker {
         let picker = NSDatePicker()
         picker.datePickerStyle = .textField
-        picker.datePickerElements = part == .date ? .yearMonthDay : .hourMinute
-        picker.presentsCalendarOverlay = part == .date
+        picker.datePickerElements = switch part {
+        case .date: .yearMonthDay
+        case .time: .hourMinute
+        case .dateTime: [.yearMonthDay, .hourMinute]
+        }
+        picker.presentsCalendarOverlay = part != .time
         picker.isBezeled = true
         picker.drawsBackground = true
         picker.target = context.coordinator
