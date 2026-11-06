@@ -46,6 +46,14 @@ public enum MacSetup {
         return licensed && launched
     }
 
+    public static func hasTailscaleApp() -> Bool { FileManager.default.fileExists(atPath: tailscaleApp) }
+
+    /// Signed in and connected, with HTTPS certificates on: what pairing a phone and sharing servers need.
+    public static func isTailscaleReady() async -> Bool {
+        let status = await tailscaleStatus()
+        return status?["BackendState"] as? String == "Running" && !(status?["CertDomains"] as? [String] ?? []).isEmpty
+    }
+
     /// The package manager a JavaScript project uses, nil when it isn't one. Its `packageManager` field first.
     public static func packageManager(of project: URL) -> String? {
         guard let data = try? Data(contentsOf: project.appendingPathComponent("package.json")) else { return nil }
@@ -144,6 +152,23 @@ public enum MacSetup {
             + " && '\(developer)/usr/bin/xcodebuild' -runFirstLaunch")
     }
 
+    /// Installs Tailscale if needed and opens it to sign in, then waits for it; then for HTTPS certificates, turned on
+    /// in its admin console.
+    public static func setUpTailscale() async throws {
+        if !hasTailscaleApp() {
+            try await installPackage(from: URL(string: "https://pkgs.tailscale.com/stable/Tailscale-latest-macos.pkg")!)
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: tailscaleApp))
+        try await wait(minutes: 15, "Tailscale didn't connect. Sign in from its menu bar icon and try again.") {
+            await tailscaleStatus()?["BackendState"] as? String == "Running"
+        }
+        guard !(await isTailscaleReady()) else { return }
+        NSWorkspace.shared.open(URL(string: "https://login.tailscale.com/admin/dns")!)
+        try await wait(minutes: 15, "HTTPS certificates are off. Turn them on in Tailscale's admin console, under DNS.") {
+            await isTailscaleReady()
+        }
+    }
+
     /// Terminal with `agent` asked to fix `problem`, for "Help Me Fix This".
     public static func askForHelp(_ agent: AgentKind, with problem: String) {
         let prompt = "I'm setting up Shift on this Mac and this step failed: \(problem) Please help me fix it."
@@ -174,6 +199,15 @@ public enum MacSetup {
     }
 
     private static let xcode = "/Applications/Xcode.app"
+    private static let tailscaleApp = "/Applications/Tailscale.app"
+
+    private static func tailscaleStatus() async -> [String: Any]? {
+        guard let cli = Tailscale.candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else { return nil }
+        let output = await run([cli, "status", "--json"]).output
+        // From the JSON on: a version warning can come first.
+        guard let start = output.firstIndex(of: "{") else { return nil }
+        return try? JSONSerialization.jsonObject(with: Data(output[start...].utf8)) as? [String: Any]
+    }
     /// Where Shift installs npm tools: its bin is on Shift's PATH, and no administrator is needed.
     private static let localPrefix = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local").path
 

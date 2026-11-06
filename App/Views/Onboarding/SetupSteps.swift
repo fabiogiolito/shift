@@ -7,6 +7,8 @@ enum SetupStep: String, CaseIterable, Identifiable {
     case commandLineTools, node, agent, signIn, gitIdentity, github
     /// Asked when a project that needs them is added, not at first launch.
     case packageManager, xcode
+    /// From Settings only: for pairing a phone and sharing servers.
+    case tailscale
 
     static let firstLaunch: [SetupStep] = [.commandLineTools, .node, .agent, .signIn, .gitIdentity, .github]
     static let projectSteps: [SetupStep] = [.packageManager, .xcode]
@@ -23,6 +25,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .node: "Node.js"
         case .packageManager: "This project needs a package manager"
         case .xcode: "This project needs Xcode"
+        case .tailscale: "Tailscale"
         }
     }
 
@@ -36,6 +39,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .node: "cube"
         case .packageManager: "shippingbox"
         case .xcode: "hammer"
+        case .tailscale: "network"
         }
     }
 
@@ -49,6 +53,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .node: "Most web projects need it to run."
         case .packageManager: "It installs its packages with a package manager Node.js doesn't include."
         case .xcode: "It builds a native app, which needs Xcode."
+        case .tailscale: "Lets your iPhone reach this Mac, and opens task servers on your other devices."
         }
     }
 
@@ -57,6 +62,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "Sign In"
         case .gitIdentity: "Save"
         case .github: "Connect GitHub"
+        case .tailscale: "Set Up"
         default: "Install"
         }
     }
@@ -65,7 +71,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         switch self {
         case .signIn: "Waiting for sign-in…"
         case .gitIdentity: "Saving…"
-        case .github: "Connecting…"
+        case .github, .tailscale: "Connecting…"
         default: "Installing…"
         }
     }
@@ -74,12 +80,12 @@ enum SetupStep: String, CaseIterable, Identifiable {
         switch self {
         case .signIn: "Signed in"
         case .gitIdentity: "Saved"
-        case .github: "Connected"
+        case .github, .tailscale: "Connected"
         default: "Installed"
         }
     }
 
-    var canSkip: Bool { [.github, .packageManager, .xcode].contains(self) }
+    var canSkip: Bool { [.github, .packageManager, .xcode, .tailscale].contains(self) }
 
     /// What won't work if it's skipped.
     var skipWarning: String? {
@@ -87,6 +93,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .github: "Shift can't open pull requests or follow them, and pushing may fail. You can connect GitHub later in Settings."
         case .packageManager: "The project's dev server won't start until it's installed."
         case .xcode: "The project can't be built or run until Xcode is installed."
+        case .tailscale: "Your iPhone can't reach this Mac until Tailscale is set up."
         default: nil
         }
     }
@@ -201,18 +208,20 @@ final class SetupFlow {
         async let node = MacSetup.hasNode()
         async let identity = MacSetup.gitIdentity()
         async let github = MacSetup.isGitHubConnected()
+        async let tailscale = MacSetup.isTailscaleReady()
         var agentsFound: [AgentKind: Bool] = [:]
         var agentsSignedIn: [AgentKind: Bool] = [:]
         for agent in AgentKind.allCases {
             agentsFound[agent] = await MacSetup.isInstalled(agent)
             if agentsFound[agent] == true { agentsSignedIn[agent] = await MacSetup.isSignedIn(agent) }
         }
-        let (hasTools, hasNode, (name, email), hasGitHub) = await (tools, node, identity, github)
+        let (hasTools, hasNode, (name, email), hasGitHub, hasTailscale) = await (tools, node, identity, github, tailscale)
 
         set(.commandLineTools, done: hasTools)
         set(.node, done: hasNode)
         set(.gitIdentity, done: !name.isEmpty && !email.isEmpty)
         set(.github, done: hasGitHub)
+        set(.tailscale, done: hasTailscale)
         for agent in AgentKind.allCases {
             if installed[agent] != .working { installed[agent] = agentsFound[agent] == true ? .done : .notDone }
             if signedIn[agent] != .working { signedIn[agent] = agentsSignedIn[agent] == true ? .done : .notDone }
@@ -269,6 +278,7 @@ final class SetupFlow {
         case .github: try await MacSetup.connectGitHub()
         case .packageManager: try await MacSetup.installPackageManager(packageManager)
         case .xcode: try await MacSetup.installXcode()
+        case .tailscale: try await MacSetup.setUpTailscale()
         case .agent, .signIn: break
         }
     }

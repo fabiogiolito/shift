@@ -14,8 +14,9 @@ struct SetupSettingsView: View {
                 ForEach(AgentKind.allCases) { agent in agentRow(agent) }
                 row("Git identity", systemImage: SetupStep.gitIdentity.symbol, step: .gitIdentity)
                 row("GitHub", systemImage: SetupStep.github.symbol, step: .github)
+                row("Tailscale", systemImage: SetupStep.tailscale.symbol, step: .tailscale)
             } footer: {
-                Text("Commits need a Git name and email. Without GitHub, Shift can't open pull requests or follow them.")
+                Text("Commits need a Git name and email. Without GitHub, Shift can't open pull requests or follow them. Tailscale lets your iPhone reach this Mac.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -67,6 +68,7 @@ struct SetupSettingsView: View {
         switch step {
         case .github: "Connect"
         case .gitIdentity: "Create"
+        case .tailscale: MacSetup.hasTailscaleApp() ? "Set Up" : "Install"
         default: "Install"
         }
     }
