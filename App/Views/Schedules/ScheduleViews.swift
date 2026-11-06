@@ -259,6 +259,7 @@ struct ScheduleDetailView: View {
 // MARK: - Form
 
 /// The schedule form, modeled on Calendar's event form: new or edited, nothing is saved until Save.
+/// A floating panel like Reminders' New List: labels on the left, groups split by lines, Cancel and Save at the bottom.
 struct ScheduleForm: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -272,59 +273,67 @@ struct ScheduleForm: View {
     enum MonthMode: Hashable { case days, ordinal }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
             Form {
-                Section {
-                    TextField("Title", text: $draft.title, prompt: Text("Named after the prompt if empty"))
-                    TextField("Prompt", text: $draft.prompt, prompt: Text("What each run's agent should do"), axis: .vertical)
-                        .lineLimit(4...12)
-                } footer: {
-                    Text("Every run is a new task with this prompt. Its agent knows nothing else, so say everything it needs.")
-                        .foregroundStyle(.secondary)
+                TextField("Title:", text: $draft.title, prompt: Text("Named after the prompt if empty"))
+                TextField("Prompt:", text: $draft.prompt, prompt: Text("What each run's agent should do"), axis: .vertical)
+                    .lineLimit(4...10)
+                note("Every run is a new task with this prompt. Its agent knows nothing else, so say everything it needs.")
+                divider
+                timingRows
+                divider
+                Picker("When done:", selection: $draft.finish) {
+                    Text("Leave for review").tag(Schedule.FinishAction.review)
+                    Text("Archive if it has no changes").tag(Schedule.FinishAction.archive)
+                    Text("Open a pull request").tag(Schedule.FinishAction.pullRequest)
+                    Text("Merge if it merges cleanly").tag(Schedule.FinishAction.merge)
                 }
-                timingSection
-                if draft.timing.repeat != nil { customSection; endSection }
-                Section {
-                    Picker("When it finishes", selection: $draft.finish) {
-                        Text("Leave for review").tag(Schedule.FinishAction.review)
-                        Text("Archive if it has no changes").tag(Schedule.FinishAction.archive)
-                        Text("Open a pull request").tag(Schedule.FinishAction.pullRequest)
-                        Text("Merge if it merges cleanly").tag(Schedule.FinishAction.merge)
-                    }
-                } footer: {
-                    if draft.finish == .archive || draft.finish == .merge {
-                        Text("Otherwise it's left for review.").foregroundStyle(.secondary)
-                    }
-                }
-                agentSection
-                Section {
-                    Toggle("Keep Mac awake while a run is coming", isOn: $draft.keepAwake)
-                    Toggle("Wake Mac for runs", isOn: $draft.wakeMac)
-                } footer: {
-                    if draft.wakeMac {
-                        Text("Shift asks for your administrator password to schedule the wakes. A closed MacBook without an external display may not fully wake.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Runs missed while the Mac sleeps or Shift is closed aren't caught up.").foregroundStyle(.secondary)
+                .fixedSize()
+                if draft.finish == .archive || draft.finish == .merge { note("Otherwise it's left for review.") }
+                agentRows
+                divider
+                LabeledContent("Mac:") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Keep awake while a run is coming", isOn: $draft.keepAwake)
+                        Toggle("Wake for runs", isOn: $draft.wakeMac)
                     }
                 }
+                note(draft.wakeMac
+                     ? "Shift asks for your administrator password to schedule the wakes. A closed MacBook without an external display may not fully wake."
+                     : "Runs missed while the Mac sleeps or Shift is closed aren't caught up.")
             }
-            .formStyle(.grouped)
-            .navigationTitle(isNew ? "New Schedule" : "Edit Schedule")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        model.saveSchedule(draft)
-                        onSave(draft)
-                        dismiss()
-                    }
-                    .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .formStyle(.columns)
+            .padding(24)
+            Divider().padding(.horizontal, 24)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(isNew ? "Create" : "Save") {
+                    model.saveSchedule(draft)
+                    onSave(draft)
+                    dismiss()
                 }
+                .keyboardShortcut(.defaultAction)
+                .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .controlSize(.large)
+            .padding(24)
         }
-        .frame(minWidth: 520, idealWidth: 560, minHeight: 560, idealHeight: 720)
+        .frame(width: 560)
         .task { branches = await model.branches(for: draft.projectID) }
+    }
+
+    private var divider: some View { Divider().padding(.vertical, 8) }
+
+    /// Help under a control, in the controls' column.
+    private func note(_ text: String) -> some View {
+        LabeledContent {
+            Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 400, alignment: .leading)
+        } label: {
+            EmptyView()
+        }
     }
 
     // MARK: Timing
@@ -355,70 +364,63 @@ struct ScheduleForm: View {
         }
     }
 
-    private var timingSection: some View {
-        Section {
-            DatePicker("Starts", selection: $draft.timing.start)
-            Picker("Repeat", selection: repeatChoice) {
-                Text("Never").tag(Repeat.never)
-                Divider()
-                Text("Every Hour").tag(Repeat.hour)
-                Text("Every Day").tag(Repeat.day)
-                Text("Every Week").tag(Repeat.week)
-                Text("Every Month").tag(Repeat.month)
-                Divider()
-                Text("Custom").tag(Repeat.custom)
+    @ViewBuilder private var timingRows: some View {
+        let rule = draft.timing.repeat ?? .init(.daily)
+        DatePicker("Starts:", selection: $draft.timing.start)
+        Picker("Repeat:", selection: repeatChoice) {
+            Text("Never").tag(Repeat.never)
+            Divider()
+            Text("Every Hour").tag(Repeat.hour)
+            Text("Every Day").tag(Repeat.day)
+            Text("Every Week").tag(Repeat.week)
+            Text("Every Month").tag(Repeat.month)
+            Divider()
+            Text("Custom").tag(Repeat.custom)
+        }
+        .fixedSize()
+        if draft.timing.repeat != nil {
+            if repeatChoice.wrappedValue == .custom {
+                // "Every [2] [weeks]", as in Calendar.
+                LabeledContent("Every:") {
+                    HStack {
+                        Stepper(value: self.rule(\.interval, 1), in: 1...99) { Text("\(rule.interval)").monospacedDigit() }
+                        Picker("", selection: self.rule(\.frequency, .daily)) {
+                            let one = rule.interval == 1
+                            Text(one ? "hour" : "hours").tag(ScheduleTiming.Recurrence.Frequency.hourly)
+                            Text(one ? "day" : "days").tag(ScheduleTiming.Recurrence.Frequency.daily)
+                            Text(one ? "week" : "weeks").tag(ScheduleTiming.Recurrence.Frequency.weekly)
+                            Text(one ? "month" : "months").tag(ScheduleTiming.Recurrence.Frequency.monthly)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+                if rule.frequency == .weekly { weekdays(rule) }
+                if rule.frequency == .monthly { monthly(rule) }
             }
-        } footer: {
-            if draft.timing.repeat?.frequency == .hourly {
-                Label("Every run is its own task: they take disk space and memory until they're archived or merged.",
-                      systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.secondary)
+            if rule.frequency == .hourly || draft.timing.between != nil {
+                LabeledContent("Hours:") {
+                    HStack {
+                        Toggle("Only between", isOn: Binding { draft.timing.between != nil } set: {
+                            draft.timing.between = $0 ? .init(from: .init(9), to: .init(17)) : nil
+                        })
+                        if draft.timing.between != nil {
+                            DatePicker("From", selection: time(\.from), displayedComponents: .hourAndMinute).labelsHidden()
+                            Text("and")
+                            DatePicker("To", selection: time(\.to), displayedComponents: .hourAndMinute).labelsHidden()
+                        }
+                    }
+                }
+            }
+            endRow
+            if rule.frequency == .hourly {
+                note("Every run is its own task: they take disk space and memory until they're archived or merged.")
             }
         }
     }
 
     private func rule<T>(_ keyPath: WritableKeyPath<ScheduleTiming.Recurrence, T>, _ fallback: T) -> Binding<T> {
         Binding { draft.timing.repeat?[keyPath: keyPath] ?? fallback } set: { draft.timing.repeat?[keyPath: keyPath] = $0 }
-    }
-
-    @ViewBuilder private var customSection: some View {
-        let rule = draft.timing.repeat ?? .init(.daily)
-        if repeatChoice.wrappedValue == .custom {
-            Section("Custom") {
-                Picker("Frequency", selection: self.rule(\.frequency, .daily)) {
-                    Text("Hourly").tag(ScheduleTiming.Recurrence.Frequency.hourly)
-                    Text("Daily").tag(ScheduleTiming.Recurrence.Frequency.daily)
-                    Text("Weekly").tag(ScheduleTiming.Recurrence.Frequency.weekly)
-                    Text("Monthly").tag(ScheduleTiming.Recurrence.Frequency.monthly)
-                }
-                let unit = switch rule.frequency {
-                case .hourly: rule.interval == 1 ? "hour" : "hours"
-                case .daily: rule.interval == 1 ? "day" : "days"
-                case .weekly: rule.interval == 1 ? "week" : "weeks"
-                case .monthly: rule.interval == 1 ? "month" : "months"
-                }
-                Stepper(value: self.rule(\.interval, 1), in: 1...99) {
-                    LabeledContent("Every", value: rule.interval == 1 ? unit.capitalized : "\(rule.interval) \(unit)")
-                }
-                if rule.frequency == .weekly { weekdays(rule) }
-                if rule.frequency == .monthly { monthly(rule) }
-            }
-        }
-        if rule.frequency == .hourly || draft.timing.between != nil {
-            Section {
-                Toggle("Only between", isOn: Binding { draft.timing.between != nil } set: {
-                    draft.timing.between = $0 ? .init(from: .init(9), to: .init(17)) : nil
-                })
-                if draft.timing.between != nil {
-                    DatePicker("From", selection: time(\.from), displayedComponents: .hourAndMinute)
-                    DatePicker("To", selection: time(\.to), displayedComponents: .hourAndMinute)
-                }
-            } footer: {
-                if draft.timing.between != nil {
-                    Text("Runs at other times of day are skipped.").foregroundStyle(.secondary)
-                }
-            }
-        }
     }
 
     private func time(_ keyPath: WritableKeyPath<ScheduleTiming.TimeWindow, ScheduleTiming.TimeOfDay>) -> Binding<Date> {
@@ -436,14 +438,16 @@ struct ScheduleForm: View {
         let calendar = Calendar.current
         let order = (0..<7).map { Weekday.allCases[(calendar.firstWeekday - 1 + $0) % 7] }
         let chosen = rule.weekdays.isEmpty ? [Weekday.allCases[calendar.component(.weekday, from: draft.timing.start) - 1]] : rule.weekdays
-        return LabeledContent("On") {
+        return LabeledContent("On:") {
             HStack(spacing: 4) {
                 ForEach(order, id: \.self) { day in
-                    Toggle(calendar.veryShortWeekdaySymbols[day.number - 1], isOn: Binding { chosen.contains(day) } set: { on in
+                    Toggle(isOn: Binding { chosen.contains(day) } set: { on in
                         var days = Set(chosen)
                         if on { days.insert(day) } else if days.count > 1 { days.remove(day) }
                         draft.timing.repeat?.weekdays = Weekday.allCases.filter(days.contains)
-                    })
+                    }) {
+                        Text(calendar.veryShortWeekdaySymbols[day.number - 1]).frame(minWidth: 16)
+                    }
                     .toggleStyle(.button)
                     .help(calendar.weekdaySymbols[day.number - 1])
                 }
@@ -453,108 +457,128 @@ struct ScheduleForm: View {
 
     @ViewBuilder private func monthly(_ rule: ScheduleTiming.Recurrence) -> some View {
         let calendar = Calendar.current
-        Picker("", selection: Binding { rule.ordinal == nil ? MonthMode.days : .ordinal } set: { mode in
-            if mode == .days {
-                draft.timing.repeat?.ordinal = nil
-            } else {
-                draft.timing.repeat?.monthDays = []
-                draft.timing.repeat?.ordinal = .init(.first, Weekday.allCases[calendar.component(.weekday, from: draft.timing.start) - 1])
-            }
-        }) {
-            Text("Each").tag(MonthMode.days)
-            Text("On the").tag(MonthMode.ordinal)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        if let ordinal = rule.ordinal {
-            HStack {
-                Picker("", selection: Binding { ordinal.week } set: { draft.timing.repeat?.ordinal?.week = $0 }) {
-                    Text("first").tag(ScheduleTiming.MonthOrdinal.Week.first)
-                    Text("second").tag(ScheduleTiming.MonthOrdinal.Week.second)
-                    Text("third").tag(ScheduleTiming.MonthOrdinal.Week.third)
-                    Text("fourth").tag(ScheduleTiming.MonthOrdinal.Week.fourth)
-                    Text("last").tag(ScheduleTiming.MonthOrdinal.Week.last)
-                }
-                Picker("", selection: Binding { ordinal.day } set: { draft.timing.repeat?.ordinal?.day = $0 }) {
-                    ForEach(Weekday.allCases, id: \.self) { Text(calendar.weekdaySymbols[$0.number - 1]).tag(Weekday?.some($0)) }
-                    Divider()
-                    Text("day").tag(Weekday?.none)
-                }
-            }
-            .labelsHidden()
-        } else {
-            let chosen = Set(rule.monthDays.isEmpty ? [calendar.component(.day, from: draft.timing.start)] : rule.monthDays)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(1...31, id: \.self) { day in
-                    Toggle(isOn: Binding { chosen.contains(day) } set: { on in
-                        var days = chosen
-                        if on { days.insert(day) } else if days.count > 1 { days.remove(day) }
-                        draft.timing.repeat?.monthDays = days.sorted()
-                    }) {
-                        Text("\(day)").monospacedDigit().frame(maxWidth: .infinity)
+        LabeledContent("On:") {
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("", selection: Binding { rule.ordinal == nil ? MonthMode.days : .ordinal } set: { mode in
+                    if mode == .days {
+                        draft.timing.repeat?.ordinal = nil
+                    } else {
+                        draft.timing.repeat?.monthDays = []
+                        draft.timing.repeat?.ordinal = .init(.first, Weekday.allCases[calendar.component(.weekday, from: draft.timing.start) - 1])
                     }
-                    .toggleStyle(.button)
+                }) {
+                    Text("Each").tag(MonthMode.days)
+                    Text("On the").tag(MonthMode.ordinal)
                 }
-            }
-            if chosen.contains(where: { $0 > 28 }) {
-                Text("Months without that day are skipped.").font(.callout).foregroundStyle(.secondary)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                if let ordinal = rule.ordinal {
+                    HStack {
+                        Picker("", selection: Binding { ordinal.week } set: { draft.timing.repeat?.ordinal?.week = $0 }) {
+                            Text("first").tag(ScheduleTiming.MonthOrdinal.Week.first)
+                            Text("second").tag(ScheduleTiming.MonthOrdinal.Week.second)
+                            Text("third").tag(ScheduleTiming.MonthOrdinal.Week.third)
+                            Text("fourth").tag(ScheduleTiming.MonthOrdinal.Week.fourth)
+                            Text("last").tag(ScheduleTiming.MonthOrdinal.Week.last)
+                        }
+                        Picker("", selection: Binding { ordinal.day } set: { draft.timing.repeat?.ordinal?.day = $0 }) {
+                            ForEach(Weekday.allCases, id: \.self) { Text(calendar.weekdaySymbols[$0.number - 1]).tag(Weekday?.some($0)) }
+                            Divider()
+                            Text("day").tag(Weekday?.none)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                } else {
+                    let chosen = Set(rule.monthDays.isEmpty ? [calendar.component(.day, from: draft.timing.start)] : rule.monthDays)
+                    Grid(horizontalSpacing: 4, verticalSpacing: 4) {
+                        ForEach(0..<5) { row in
+                            GridRow {
+                                ForEach(1...7, id: \.self) { column in
+                                    let day = row * 7 + column
+                                    if day <= 31 {
+                                        Toggle(isOn: Binding { chosen.contains(day) } set: { on in
+                                            var days = chosen
+                                            if on { days.insert(day) } else if days.count > 1 { days.remove(day) }
+                                            draft.timing.repeat?.monthDays = days.sorted()
+                                        }) {
+                                            Text("\(day)").monospacedDigit().frame(minWidth: 20)
+                                        }
+                                        .toggleStyle(.button)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if chosen.contains(where: { $0 > 28 }) {
+                        Text("Months without that day are skipped.").font(.callout).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }
 
-    private var endSection: some View {
+    /// "End: [After] [5] times" or "End: [On Date] [date]".
+    private var endRow: some View {
         let end: End = draft.timing.endAfter != nil ? .after : draft.timing.endOn != nil ? .on : .never
-        return Section {
-            Picker("End Repeat", selection: Binding { end } set: { choice in
-                draft.timing.endAfter = choice == .after ? 10 : nil
-                draft.timing.endOn = choice == .on ? Calendar.current.date(byAdding: .month, value: 1, to: draft.timing.start) : nil
-            }) {
-                Text("Never").tag(End.never)
-                Text("After").tag(End.after)
-                Text("On Date").tag(End.on)
-            }
-            if let count = draft.timing.endAfter {
-                Stepper(value: Binding { count } set: { draft.timing.endAfter = $0 }, in: 1...999) {
-                    LabeledContent("After", value: count == 1 ? "1 time" : "\(count) times")
+        return LabeledContent("End:") {
+            HStack {
+                Picker("", selection: Binding { end } set: { choice in
+                    draft.timing.endAfter = choice == .after ? 10 : nil
+                    draft.timing.endOn = choice == .on ? Calendar.current.date(byAdding: .month, value: 1, to: draft.timing.start) : nil
+                }) {
+                    Text("Never").tag(End.never)
+                    Text("After").tag(End.after)
+                    Text("On Date").tag(End.on)
                 }
-            }
-            if let date = draft.timing.endOn {
-                DatePicker("On", selection: Binding { date } set: { draft.timing.endOn = $0 }, displayedComponents: .date)
+                .labelsHidden()
+                .fixedSize()
+                if let count = draft.timing.endAfter {
+                    Stepper(value: Binding { count } set: { draft.timing.endAfter = $0 }, in: 1...999) {
+                        Text(count == 1 ? "1 time" : "\(count) times").monospacedDigit()
+                    }
+                }
+                if let date = draft.timing.endOn {
+                    DatePicker("On", selection: Binding { date } set: { draft.timing.endOn = $0 }, displayedComponents: .date)
+                        .labelsHidden()
+                }
             }
         }
     }
 
     // MARK: Agent
 
-    private var agentSection: some View {
+    @ViewBuilder private var agentRows: some View {
         let branchOptions = branches.contains(draft.baseBranch) ? branches : [draft.baseBranch] + branches
-        return Section {
-            Picker("Agent", selection: Binding { draft.agent } set: { agent in
-                draft.agent = agent
-                draft.model = model.project(draft.projectID)?.models[agent]
-            }) {
-                ForEach(AgentKind.allCases) { kind in
-                    let installed = model.installedAgents[kind] != nil
-                    Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
-                        .tag(kind)
-                        .disabled(!installed)
-                }
+        Picker("Agent:", selection: Binding { draft.agent } set: { agent in
+            draft.agent = agent
+            draft.model = model.project(draft.projectID)?.models[agent]
+        }) {
+            ForEach(AgentKind.allCases) { kind in
+                let installed = model.installedAgents[kind] != nil
+                Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
+                    .tag(kind)
+                    .disabled(!installed)
             }
-            ModelPicker(agent: draft.agent, selection: Binding { draft.model ?? "" } set: { draft.model = $0.isEmpty ? nil : $0 })
-            Picker("Permissions", selection: $draft.permissions) {
-                ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
-            }
-            Picker("Base branch", selection: $draft.baseBranch) {
-                ForEach(branchOptions, id: \.self) { Text($0) }
-            }
-        } header: {
-            Text("Each Run")
-        } footer: {
-            Text(draft.permissions == .manual
-                 ? "With Manual permissions, a run waits for you to allow its commands."
-                 : "Changes apply from the next run.")
-                .foregroundStyle(.secondary)
         }
+        .fixedSize()
+        LabeledContent("Model:") {
+            ModelPicker(agent: draft.agent, selection: Binding { draft.model ?? "" } set: { draft.model = $0.isEmpty ? nil : $0 })
+                .labelsHidden()
+                .fixedSize()
+        }
+        Picker("Permissions:", selection: $draft.permissions) {
+            ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
+        }
+        .fixedSize()
+        Picker("Base branch:", selection: $draft.baseBranch) {
+            ForEach(branchOptions, id: \.self) { Text($0) }
+        }
+        .fixedSize()
+        note(draft.permissions == .manual
+             ? "With Manual permissions, a run waits for you to allow its commands."
+             : "Changes apply from the next run.")
     }
 }
 
