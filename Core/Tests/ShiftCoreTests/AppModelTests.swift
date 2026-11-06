@@ -119,10 +119,15 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.project(project.id)?.color(ofTag: "foo"), .teal)
         model.removeTag(taskID: id, "bar")
         XCTAssertEqual(model.task(id)?.tags, ["foo", "baz"])
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["baz", "foo"], "no task has bar any more")
+        // The tags popover keeps an unchecked tag listed until it closes.
+        model.removeTag(taskID: id, "baz", keepUnused: true)
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["baz", "foo"])
+        model.pruneTags(projectID: project.id)
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["foo"])
         model.sendPrompt(taskID: id, text: "/tag")
         XCTAssertNil(model.task(id)?.tags)
-        // The project keeps them, in their first spelling, to pick again.
-        XCTAssertEqual(model.project(project.id)?.tagNames, ["bar", "baz", "foo"])
+        XCTAssertEqual(model.project(project.id)?.tagNames, [])
         XCTAssertNil(AppModel.command("tag", "/tags x"))
     }
 

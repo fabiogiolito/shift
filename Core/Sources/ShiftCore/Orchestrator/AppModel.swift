@@ -610,11 +610,24 @@ public final class AppModel {
         return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public func removeTag(taskID: TaskItem.ID, _ tag: String) {
+    /// A tag no task has any more leaves the project too, unless `keepUnused`: the tags popover keeps it
+    /// listed until it closes, so it can be checked again, and then calls `pruneTags`.
+    public func removeTag(taskID: TaskItem.ID, _ tag: String, keepUnused: Bool = false) {
         update(taskID) { task in
             task.tags?.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
             if task.tags?.isEmpty == true { task.tags = nil }
         }
+        if !keepUnused, let projectID = task(taskID)?.projectID { pruneTags(projectID: projectID) }
+    }
+
+    /// Forgets the tags (and their colors) no task in the project has.
+    public func pruneTags(projectID: Project.ID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let used = Set(tasks(in: projectID).flatMap { $0.tags ?? [] }.map { $0.lowercased() })
+        let unused = projects[index].tagColors.keys.filter { !used.contains($0.lowercased()) }
+        guard !unused.isEmpty else { return }
+        unused.forEach { projects[index].tagColors[$0] = nil }
+        changed()
     }
 
     /// Adds comma-separated tags, skipping ones it already has (ignoring case). An empty list clears them.
@@ -628,6 +641,7 @@ public final class AppModel {
         }
         // A new name gets a random color; one the project already knows keeps its own.
         guard let projectID = task(taskID)?.projectID, let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        if new.isEmpty { return pruneTags(projectID: projectID) }
         for tag in new where projects[index].tagKey(tag) == nil {
             projects[index].tagColors[tag] = TagColor.allCases.filter { $0 != .gray }.randomElement()
         }

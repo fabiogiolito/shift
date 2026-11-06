@@ -107,7 +107,7 @@ struct TagEditor: View {
                     Toggle(isOn: Binding {
                         task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
                     } set: {
-                        if $0 { model.addTags(taskID: taskID, name) } else { model.removeTag(taskID: taskID, name) }
+                        if $0 { model.addTags(taskID: taskID, name) } else { model.removeTag(taskID: taskID, name, keepUnused: true) }
                     }) {
                         HStack(spacing: 6) {
                             Circle().fill(project.color(ofTag: name).color).frame(width: 8, height: 8)
@@ -123,6 +123,8 @@ struct TagEditor: View {
             }
             .padding(12)
             .frame(width: 180, alignment: .leading)
+            // Unchecked tags stay listed while it is open, so they can be checked again; then the unused ones go.
+            .onDisappear { model.pruneTags(projectID: project.id) }
         }
     }
 }
