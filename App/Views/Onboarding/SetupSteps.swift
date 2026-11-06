@@ -142,6 +142,17 @@ final class SetupFlow {
         }
     }
 
+    /// What the step needs filled in before its action can run.
+    func canPerform(_ step: SetupStep) -> Bool {
+        switch step {
+        case .agent: !chosenAgents.isEmpty
+        case .gitIdentity:
+            !gitName.trimmingCharacters(in: .whitespaces).isEmpty
+                && gitEmail.wholeMatch(of: /\s*[^@\s]+@[^@\s]+\.[^@\s]+\s*/) != nil
+        default: true
+        }
+    }
+
     func skip(_ step: SetupStep) { states[step] = .skipped }
 
     func reset() {

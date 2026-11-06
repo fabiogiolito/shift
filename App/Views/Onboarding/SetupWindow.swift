@@ -71,7 +71,7 @@ struct SetupWindow: View {
                 Button("Continue") {}.disabled(true)
             } else {
                 Button(step.actionTitle) { flow.perform(step) }
-                    .disabled(step == .agent && flow.agents.isEmpty)
+                    .disabled(!flow.canPerform(step))
             }
         }
     }
