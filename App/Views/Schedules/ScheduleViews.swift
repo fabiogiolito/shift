@@ -103,6 +103,7 @@ extension View {
 
 struct ScheduleDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.textScale) private var textScale
     let scheduleID: Schedule.ID
     @Binding var selection: TaskItem.ID?
     @State private var confirmingDelete = false
@@ -112,6 +113,13 @@ struct ScheduleDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     header(schedule)
+                    // Styled like a task's prompt history.
+                    GroupBox {
+                        Text(schedule.prompt).font(.scaled(.body, textScale)).textSelection(.enabled)
+                            .padding(.leading, TaskDetailView.promptIndent)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     runs(schedule)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,8 +149,6 @@ struct ScheduleDetailView: View {
 
     private func header(_ schedule: Schedule) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(schedule.prompt).font(.title3).textSelection(.enabled)
-                .padding(.bottom, 8)
             HStack {
                 Button("Run Now") { model.runScheduleNow(schedule.id) }
                     .buttonStyle(.glassProminent)
