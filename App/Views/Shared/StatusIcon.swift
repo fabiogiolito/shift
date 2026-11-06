@@ -78,23 +78,53 @@ extension TaskStatus {
     }
 }
 
-/// A task's `/tag` tags as small capsules, on one line. Nothing when it has none.
+/// A task's `/tag` tags as small capsules in their project's colors, on one line. Nothing when it has none.
 /// ponytail: one line, tags past the row's width are clipped; a wrapping layout if tasks get many tags.
 struct TaskTags: View {
     let tags: [String]?
+    let project: Project?
     /// Given, right-clicking a tag offers to delete it.
     var onDelete: ((String) -> Void)?
+    /// Given, right-clicking a tag offers to change its color, for every task in the project.
+    var onColor: ((String, TagColor) -> Void)?
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(tags ?? [], id: \.self) { tag in
-                Text(tag).font(.caption2).fixedSize().foregroundStyle(.secondary)
+                let color = (project?.color(ofTag: tag) ?? .gray).color
+                Text(tag).font(.caption2).fixedSize().foregroundStyle(color)
                     .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(.quaternary, in: .capsule)
+                    .background(color.opacity(0.15), in: .capsule)
                     .contextMenu {
+                        if let onColor {
+                            Picker("Color", selection: Binding { project?.color(ofTag: tag) ?? .gray } set: { onColor(tag, $0) }) {
+                                ForEach(TagColor.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+                            }
+                            .pickerStyle(.menu)
+                        }
                         if let onDelete { Button("Delete Tag", role: .destructive) { onDelete(tag) } }
                     }
             }
+        }
+    }
+}
+
+extension TagColor {
+    var color: Color {
+        switch self {
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .green: .green
+        case .mint: .mint
+        case .teal: .teal
+        case .cyan: .cyan
+        case .blue: .blue
+        case .indigo: .indigo
+        case .purple: .purple
+        case .pink: .pink
+        case .brown: .brown
+        case .gray: .gray
         }
     }
 }

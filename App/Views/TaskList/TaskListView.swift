@@ -152,7 +152,9 @@ struct TaskRow: View {
             if task.description?.isEmpty == false {
                 Text(task.description ?? "").font(.subheadline).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
             }
-            if task.tags?.isEmpty == false { TaskTags(tags: task.tags) { model.removeTag(taskID: task.id, $0) }.padding(.top, 2) }
+            if task.tags?.isEmpty == false { TaskTags(tags: task.tags, project: model.project(task.projectID),
+                         onDelete: { model.removeTag(taskID: task.id, $0) },
+                         onColor: { model.setTagColor(projectID: task.projectID, $0, $1) }).padding(.top, 2) }
         }
         .padding(.vertical, 2)
         .contextMenu {

@@ -228,6 +228,15 @@ public struct BuildTarget: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// The system colors a tag can have. Unknown ones, from a newer build, read as gray.
+public enum TagColor: String, Codable, CaseIterable, Sendable {
+    case red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, brown, gray
+
+    public init(from decoder: Decoder) throws {
+        self = TagColor(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .gray
+    }
+}
+
 public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var name: String
@@ -257,6 +266,11 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var opensPullRequests: Bool
     /// No dev servers run for it, its base's or its tasks', until turned back on.
     public var serversOff: Bool
+    /// The color of each tag its tasks have, by lowercased name: one per name, shared by every task with it.
+    public var tagColors: [String: TagColor] = [:]
+
+    /// The color `tag` shows in, gray until it has one.
+    public func color(ofTag tag: String) -> TagColor { tagColors[tag.lowercased()] ?? .gray }
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
@@ -299,6 +313,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
+        tagColors = try values.decodeIfPresent([String: TagColor].self, forKey: .tagColors) ?? [:]
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
