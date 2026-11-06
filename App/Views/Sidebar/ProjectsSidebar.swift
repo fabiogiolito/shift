@@ -23,7 +23,8 @@ struct ProjectsSidebar: View {
                     Label {
                         VStack(alignment: .leading) {
                             Text(project.name)
-                            Text(subtitle(for: project)).font(.subheadline).foregroundStyle(.secondary)
+                            Text(subtitle(for: project)).font(.subheadline)
+                                .runningShimmer(model.tasks(in: project.id).contains { $0.status == .working })
                         }
                     } icon: {
                         ProjectIcon(repoPath: project.repoPath,

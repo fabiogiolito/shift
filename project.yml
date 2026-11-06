@@ -71,6 +71,7 @@ targets:
       - App/Views/Shared/MarkdownText.swift
       - App/Views/Shared/TextSize.swift
       - App/Views/Shared/EmptyState.swift
+      - App/Views/Shared/RunningShimmer.swift
       - App/Views/Shared/Shared.xcassets
       - App/Resources/AppIcon.icon
     dependencies:
