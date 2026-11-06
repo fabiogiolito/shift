@@ -30,6 +30,7 @@ struct StatusIcon: View {
         case .completed where pullRequestOpen: pullRequestIcon
         case .merged where mergedByPullRequest: pullRequestIcon
         case .completed, .conflict, .merged: Image(systemName: "checkmark.circle.fill").foregroundStyle(status.color)
+        case .archived: Image(systemName: "archivebox.circle.fill").foregroundStyle(status.color)
         }
     }
 
@@ -60,7 +61,7 @@ extension TaskStatus {
         case .blocked: .red
         case .completed: .green
         case .conflict: .orange
-        case .working, .merged: .secondary
+        case .working, .merged, .archived: .secondary
         }
     }
 
@@ -72,6 +73,7 @@ extension TaskStatus {
         case .completed: "Ready to Test"
         case .conflict: "Conflict"
         case .merged: "Merged"
+        case .archived: "Archived"
         }
     }
 }

@@ -26,7 +26,7 @@ public enum DemoProject {
         let repo = repo(root: root)
         let existing = state.projects.first { $0.repoPath == repo.path }
         // A demo from before the merged pull request task starts over too.
-        if let existing, state.tasks.contains(where: { $0.projectID == existing.id && $0.status != .merged }),
+        if let existing, state.tasks.contains(where: { $0.projectID == existing.id && !$0.status.isClosed }),
            state.tasks.contains(where: { $0.projectID == existing.id && $0.mergedPullRequest != nil }) { return }
 
         let worktrees = root.appendingPathComponent("worktrees")
@@ -90,7 +90,7 @@ public enum DemoProject {
 
     /// The task with a sample open pull request, with work it doesn't have, so it offers Push Changes.
     static let openPullRequest = "Make the text bigger"
-    /// The task merged through a pull request: in Recently Merged, with the pull request icon.
+    /// The task merged through a pull request: in Recently Closed, with the pull request icon.
     static let mergedByPullRequest = "Say hello to Shift"
 
     // JavaScript, because Next rewrites a TypeScript project's files when it starts, and that would show up as changes.

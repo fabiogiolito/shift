@@ -83,7 +83,7 @@ struct ProjectBar: View {
     }
 
     private var agentSide: some View {
-        let task = self.task.flatMap { $0.status == .merged ? nil : $0 }
+        let task = self.task.flatMap { $0.status.isClosed ? nil : $0 }
         let agent = task?.agent ?? project.defaultAgent
         let modelID = task.map { $0.model ?? "" } ?? project.defaultModel
         let permissions = task?.permissions ?? project.permissions

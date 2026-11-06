@@ -6,6 +6,8 @@ struct TaskActions {
     var output: TaskOutput?
     var renaming = false
     var confirmingDelete = false
+    /// Completed with nothing committed or uncommitted against its base: it can be archived.
+    var unchanged = false
 }
 
 /// The items of a task's More menu, also its context menu in the task list.
@@ -16,7 +18,7 @@ struct TaskActionItems: View {
     @Binding var actions: TaskActions
 
     var body: some View {
-        if task.status != .merged {
+        if !task.status.isClosed {
             // Core recreates a missing folder before the next run; until then there is nothing to open.
             let folderExists = FileManager.default.fileExists(atPath: task.worktreePath)
             Group {
@@ -43,6 +45,9 @@ struct TaskActionItems: View {
                 Button("Stop Task") { model.stop(taskID: task.id) }
             }
             Divider()
+        }
+        if actions.unchanged && !task.status.isClosed {
+            Button("Archive Task") { Task { await model.archive(taskID: task.id) } }
         }
         Button("Rename Task…") { actions.renaming = true }
         Button("Delete Task…", role: .destructive) { actions.confirmingDelete = true }

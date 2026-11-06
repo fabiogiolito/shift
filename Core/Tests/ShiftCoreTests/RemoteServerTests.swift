@@ -406,6 +406,19 @@ final class RemoteServerTests: XCTestCase {
         XCTAssertEqual(pushed, Wire.decode(TaskItem.self, from: Wire.encode(model.task(id)))) // Whole, dates to the second.
     }
 
+    func testArchivedTasksReachAnOlderPhoneAsMerged() async throws {
+        let id = try await createPausedTask().0
+        model.stop(taskID: id)
+        await model.archive(taskID: id)
+        XCTAssertEqual(model.task(id)?.status, .archived)
+        let client = Client(port: port, token: localToken)
+        let old: RemoteSnapshot = try await client.first { if case .snapshot(let snapshot) = $0 { snapshot } else { nil } }
+        XCTAssertEqual(old.tasks.first?.status, .merged)
+        try await client.send(.hello(version: Wire.version, device: "iPhone"))
+        let current: RemoteSnapshot = try await client.first { if case .snapshot(let snapshot) = $0 { snapshot } else { nil } }
+        XCTAssertEqual(current.tasks.first?.status, .archived)
+    }
+
     func testUnknownMessageIsIgnoredAndUnknownCommandIsAnswered() async throws {
         let client = try await client()
         try await client.sendRaw(#"{"fromTheFuture":{"x":1}}"#)

@@ -66,13 +66,24 @@ public struct AgentInstallation: Codable, Hashable, Sendable {
 /// The whole status vocabulary. Do not add cases without a product decision.
 public enum TaskStatus: String, Codable, Sendable {
     case working, needsInput, blocked, completed, conflict, merged
+    /// Closed without merging: it had no changes. Its worktree and branch are gone, its record stays.
+    case archived
+
+    /// A status from a newer peer decodes as merged: closed, so an older build shows it with the others
+    /// instead of failing on the whole message.
+    public init(from decoder: Decoder) throws {
+        self = TaskStatus(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .merged
+    }
+
+    /// Merged or archived: done, its worktree and branch gone. Can't be reopened.
+    public var isClosed: Bool { self == .merged || self == .archived }
 
     /// Statuses where the user is the one who has to act.
     public var needsAttention: Bool { self == .needsInput || self == .blocked || self == .conflict }
 
     /// Whether going from `old` to this is worth a notification, as the Mac sends one: a run ended, or a new conflict.
     public func notifies(from old: TaskStatus) -> Bool {
-        old == .working ? self != .working && self != .merged : self == .conflict && old != .conflict
+        old == .working ? self != .working && !isClosed : self == .conflict && old != .conflict
     }
 }
 
@@ -333,7 +344,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
 extension Project {
     /// "No tasks", "2 tasks", "1 of 2 tasks running": the project's open tasks, given all of its tasks.
     public static func summary(of tasks: [TaskItem]) -> String {
-        let open = tasks.filter { $0.status != .merged }
+        let open = tasks.filter { !$0.status.isClosed }
         let running = open.filter { $0.status == .working }.count
         let noun = open.count == 1 ? "task" : "tasks"
         if open.isEmpty { return "No tasks" }
@@ -441,6 +452,7 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var isResolvingConflict: Bool
     public var createdAt: Date
     public var workingSince: Date?
+    /// When it closed: merged or archived. Named for merging, which came first.
     public var mergedAt: Date?
     /// The project chat that started or follows this task, and hears how it goes. Not one that replaced it.
     public var chatID: ProjectChat.ID?

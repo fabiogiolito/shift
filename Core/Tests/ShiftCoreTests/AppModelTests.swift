@@ -702,6 +702,36 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.lastError)
     }
 
+    func testArchiveClosesATaskWithNoChangesKeepingItsRecord() async {
+        let id = await createCompletedTask()
+        let prompts = model.task(id)!.prompts
+        await model.archive(taskID: id)
+        await model.flush()
+
+        let task = model.task(id)!
+        XCTAssertEqual(task.status, .archived)
+        XCTAssertNotNil(task.mergedAt)
+        XCTAssertNil(task.port)
+        XCTAssertEqual(task.prompts, prompts)
+        XCTAssertTrue(servers.running.isEmpty)
+        XCTAssertTrue(git.existingBranches.isEmpty)
+        XCTAssertEqual(git.calls.last, "remove shift/3001")
+        XCTAssertFalse(git.calls.contains { $0.hasPrefix("merge") || $0.hasPrefix("push") })
+        XCTAssertNotNil(store.logs[id])
+        XCTAssertEqual(store.state.tasks.first?.status, .archived)
+        XCTAssertNil(model.lastError)
+        XCTAssertEqual(Project.summary(of: model.tasks(in: project.id)), "No tasks")
+    }
+
+    func testArchiveRefusesATaskWithChanges() async {
+        let id = await createCompletedTask()
+        git.pendingChanges = DiffSummary(files: [FileChange(path: "a.txt", kind: .modified)])
+        await model.archive(taskID: id)
+        XCTAssertEqual(status(id), .completed)
+        XCTAssertFalse(git.existingBranches.isEmpty)
+        XCTAssertNotNil(model.lastError)
+    }
+
     // MARK: Base branches
 
     func testTaskKeepsItsBaseWhenTheProjectDefaultChanges() async {
