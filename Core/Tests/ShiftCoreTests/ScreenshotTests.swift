@@ -166,6 +166,8 @@ final class ScreenshotTests: XCTestCase {
                        .completed(summary: "Done."))
         XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, screenshots: .page).contains("SHIFT_SCREENSHOT: <path>"))
         XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false).contains("SHIFT_SCREENSHOT"))
+        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, server: true).contains("shiftctl server"))
+        XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false).contains("shiftctl server"))
     }
 
     // MARK: Apps

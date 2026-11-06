@@ -116,6 +116,8 @@ public final class AppModel {
     /// Where the chats' agents reach `shiftctl`'s server, and which project each one's access is for.
     @ObservationIgnored private var controlPort: Int?
     @ObservationIgnored var controlTokens: [String: Project.ID] = [:]
+    /// The same for tasks' agents, which may only start their own task's dev server (`shiftctl server`).
+    @ObservationIgnored private var taskControlTokens: [String: TaskItem.ID] = [:]
     @ObservationIgnored private var chatRuns: [Project.ID: ChatRun] = [:]
     @ObservationIgnored private var nextTaskID = 3001
     @ObservationIgnored private var runs: [TaskItem.ID: Run] = [:]
@@ -1153,12 +1155,12 @@ public final class AppModel {
     public func restartServer(taskID: TaskItem.ID) async {
         guard services != nil, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
               !settingUp.contains(taskID) else { return }
-        guard FileManager.default.fileExists(atPath: task.worktreePath) else {
+        if !FileManager.default.fileExists(atPath: task.worktreePath) {
             // A run sets its worktree up itself before the agent starts.
             guard runs[taskID] == nil else { return }
             startRun(taskID, prompt: nil)
             await runs[taskID]?.task.value
-            return
+            guard FileManager.default.fileExists(atPath: task.worktreePath) else { return }
         }
         if let failure = await startServer(taskID) { lastError = failure }
     }
@@ -1641,6 +1643,37 @@ public final class AppModel {
         return ["SHIFT_URL": "http://127.0.0.1:\(controlPort)", "SHIFT_ACCESS": token]
     }
 
+    /// What `shiftctl server` needs to start this task's dev server, and nothing else, from the task's agent.
+    private func taskControlEnvironment(_ id: TaskItem.ID) -> [String: String] {
+        guard let controlPort else { return [:] }
+        let token = taskControlTokens.first { $0.value == id }?.key ?? UUID().uuidString
+        taskControlTokens[token] = id
+        return ["SHIFT_URL": "http://127.0.0.1:\(controlPort)", "SHIFT_ACCESS": token]
+    }
+
+    /// A task agent's `shiftctl`: `server` starts its task's dev server if it is off, and answers with its address
+    /// once it answers. Nil: the token is not a task's.
+    func handleTaskControl(token: String, arguments: [String]) async -> ControlReply? {
+        guard let id = taskControlTokens[token] else { return nil }
+        guard arguments.first == "server" else {
+            return ControlReply(ok: false, text: "shiftctl server    start this task's dev server and print its address")
+        }
+        guard let services, let task = task(id), task.status != .merged, let url = task.serverURL else {
+            return ControlReply(ok: false, text: "This task has no dev server.")
+        }
+        serverUsed[id] = .now
+        if await services.servers.isRunning(taskID: id) == false, let failure = await startServer(id) {
+            return ControlReply(ok: false, text: failure)
+        }
+        // Up to five minutes: the first start may install dependencies.
+        for _ in 0..<10 {
+            if await serverAnswers(id) { return ControlReply(ok: true, text: url.absoluteString) }
+            guard await services.servers.isRunning(taskID: id) else { break }
+        }
+        let log = await services.servers.log(taskID: id, lines: 30)
+        return ControlReply(ok: false, text: "The dev server did not come up. The end of its log:\n\(log)")
+    }
+
     private func deliverChatPending(_ projectID: Project.ID) {
         guard let channel = chatRuns[projectID]?.channel, let chat = chat(projectID: projectID) else { return }
         while let report = chatReports[projectID]?.first, channel.send(report) {
@@ -1744,9 +1777,6 @@ public final class AppModel {
                 beginWorking(id)
                 prompt = pending
             }
-            // The agent may test its work on the server.
-            await wakeServer(id)
-            try check(id, token)
             try await converse(id, token: token, prompt: prompt ?? "", promptIDs: promptIDs)
         } catch {
             // Not current any more: whoever cancelled this run has already decided the status.
@@ -1789,8 +1819,8 @@ public final class AppModel {
             try await prepare(id, project: project, port: port)
             try check(id, token)
             update(id) { $0.activity = nil }
-            await startServer(id)
-            try check(id, token)
+            // Started when the user opens it, or the agent asks for it (`shiftctl server`).
+            if !project.isApp { dormant.insert(id) }
         } catch {
             // Only undo what this attempt created: a branch that was already there is not ours to delete.
             if created {
@@ -1856,7 +1886,7 @@ public final class AppModel {
             markDelivered(id)
             let channel = ApprovalChannel()
             let request = AgentRequest(prompt: text, sessionID: task.sessionID, worktree: task.worktreeURL,
-                                       environment: task.port.map { ["PORT": String($0)] } ?? [:],
+                                       environment: task.port.map { ["PORT": String($0)].merging(taskControlEnvironment(id)) { $1 } } ?? [:],
                                        permissions: task.permissions ?? project(task.projectID)?.permissions ?? .bypass,
                                        // A fallback agent (see `adapter(for:)`) doesn't run the other one's model.
                                        model: adapter.kind == task.agent ? task.model : project(task.projectID)?.models[adapter.kind],
@@ -1921,7 +1951,7 @@ public final class AppModel {
             let settled = await settle(id, outcome)
             try check(id, token)
             // The agent may have created the project (a package.json with a dev script): serve that now.
-            if let now = self.task(id), let owner = self.project(now.projectID), serverCommands[id] != nil,
+            if let now = self.task(id), now.serverPID != nil, let owner = self.project(now.projectID), serverCommands[id] != nil,
                serverCommands[id] != ProjectSetup.serverCommand(for: owner, in: now.worktreeURL) {
                 await startServer(id)
                 try check(id, token)
@@ -1969,7 +1999,10 @@ public final class AppModel {
               let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)) else { return nil }
         let wantsBefore = diff.isEmpty && task.screenshots?.contains(where: \.isBefore) != true
         // The agent starts as soon as this returns, and the "before" has to beat its first edit.
-        if wantsBefore && !project.isApp { _ = await serverAnswers(id) }
+        if wantsBefore && !project.isApp {
+            await wakeServer(id)
+            _ = await serverAnswers(id)
+        }
         return ScreenshotTurn(diff: diff, wantsBefore: wantsBefore, isApp: project.isApp,
                               targets: project.isApp ? [] : [ScreenshotTarget(page: "/")])
     }
@@ -2010,6 +2043,7 @@ public final class AppModel {
         } else {
             guard let server = task.serverURL else { return false }
             source = Self.screenshotURL(page: target.page, server: server)
+            await wakeServer(id)
             captured = await serverAnswers(id) ? await screenshots.capture(url: source, script: target.script, to: file) : false
         }
         guard captured else {

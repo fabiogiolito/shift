@@ -36,6 +36,7 @@ extension AppModel {
     """
 
     func handleControl(token: String, arguments: [String]) async -> ControlReply {
+        if let reply = await handleTaskControl(token: token, arguments: arguments) { return reply }
         guard let projectID = controlTokens[token], project(projectID) != nil else {
             return ControlReply(ok: false, text: "Not allowed.")
         }
