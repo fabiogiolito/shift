@@ -94,18 +94,13 @@ private struct SetupStepView: View {
                 if let progress = flow.progress(of: step) {
                     Text(progress).font(.subheadline).foregroundStyle(.secondary)
                 }
-                Text(step == .packageManager ? "This project needs \(flow.packageManager)" : step.title)
-                    .font(.title2).bold()
-                Text(summary).foregroundStyle(.secondary)
+                Text(flow.title(step)).font(.title2).bold()
+                Text(flow.summary(step)).foregroundStyle(.secondary)
             }
             content
             SetupStatus(step: step)
         }
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var summary: String {
-        step == .packageManager ? "It installs its packages with \(flow.packageManager), which Node.js doesn't include." : step.summary
     }
 
     @ViewBuilder private var content: some View {

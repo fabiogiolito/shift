@@ -1,4 +1,5 @@
 import AppKit
+import UserNotifications
 
 /// What a new Mac needs for Shift, checked and installed for real. Used by the setup window and Settings › Setup.
 /// Nothing needs Homebrew. Installers that need an administrator ask with the system's password dialog; sign-ins
@@ -168,6 +169,53 @@ public enum MacSetup {
         NSWorkspace.shared.open(URL(string: "https://login.tailscale.com/admin/dns")!)
         try await wait(minutes: 15, "HTTPS certificates are off. Turn them on in Tailscale's admin console, under DNS.") {
             await isTailscaleReady()
+        }
+    }
+
+    // MARK: - Permissions
+
+    /// nil until the user has answered the system's question.
+    public static func notificationsAllowed() async -> Bool? {
+        switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
+        case .notDetermined: nil
+        case .denied: false
+        default: true
+        }
+    }
+
+    /// Asks the first time. Once turned off, macOS won't ask again: opens System Settings › Notifications instead.
+    public static func allowNotifications() async -> Bool {
+        if await notificationsAllowed() == false {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
+            return false
+        }
+        return (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+    }
+
+    /// The folder macOS asks about before an app reads anything in it (Desktop, Documents, Downloads, iCloud Drive,
+    /// another disk), if `project` is in one. The agents, Git and servers all run as Shift, so they all need it.
+    public static func protectedFolder(containing project: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL? {
+        let path = project.standardizedFileURL.path
+        let roots = ["Desktop", "Documents", "Downloads", "Library/Mobile Documents"].map { home.appendingPathComponent($0).standardizedFileURL }
+        if let root = roots.first(where: { path == $0.path || path.hasPrefix($0.path + "/") }) { return root }
+        let parts = project.standardizedFileURL.pathComponents
+        if parts.count > 2, parts[1] == "Volumes" { return URL(fileURLWithPath: "/Volumes/\(parts[2])") }
+        return nil
+    }
+
+    /// What macOS calls it in its question.
+    public static func displayName(ofProtected folder: URL) -> String {
+        folder.lastPathComponent == "Mobile Documents" ? "iCloud Drive" : folder.lastPathComponent
+    }
+
+    /// Reads the folder, which makes macOS ask the first time. If it was turned off, opens Files & Folders in System
+    /// Settings and fails.
+    public static func allowAccess(to folder: URL) async throws {
+        do {
+            _ = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        } catch {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")!)
+            throw Failure("Shift can't open \(displayName(ofProtected: folder)). Turn it on for Shift in System Settings › Privacy & Security › Files & Folders, then try again.")
         }
     }
 

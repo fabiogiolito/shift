@@ -227,7 +227,6 @@ public protocol PortAllocating: Sendable {
 // MARK: - System
 
 public protocol Notifying: Sendable {
-    func requestAuthorization() async
     func notify(title: String, body: String, taskID: Int) async
     func setBadge(count: Int) async
 }

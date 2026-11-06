@@ -19,16 +19,6 @@ public final class SystemNotifier: NSObject, Notifying, UNUserNotificationCenter
         center?.delegate = self
     }
 
-    public func requestAuthorization() async {
-        guard let center else { return log.info("No notification center outside an .app bundle") }
-        do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            log.info("Notification authorization granted: \(granted)")
-        } catch {
-            log.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
     public func notify(title: String, body: String, taskID: Int) async {
         guard let center else { return }
         let content = UNMutableNotificationContent()
