@@ -42,6 +42,11 @@ struct ChatView: View {
 
     private let bottom = "bottom"
 
+    private func scrollDown(_ proxy: ScrollViewProxy) {
+        proxy.scrollTo(bottom, anchor: .bottom)
+        DispatchQueue.main.async { proxy.scrollTo(bottom, anchor: .bottom) }
+    }
+
     var body: some View {
         let chat = model.chat(projectID: project.id)
         let replying = model.replyingChats.contains(project.id)
@@ -63,7 +68,11 @@ struct ChatView: View {
                 .padding(TaskDetailView.margin)
             }
             .defaultScrollAnchor(.bottom)
-            .onChange(of: chat?.prompts.count) { proxy.scrollTo(bottom, anchor: .bottom) }
+            // On send, and again once the bar grows its "Working…" row, after the safe area takes it in.
+            .onChange(of: chat?.prompts.count) { scrollDown(proxy) }
+            .onChange(of: replying) { if replying { scrollDown(proxy) } }
+            // Follows the reply as it arrives, unless scrolled back to read.
+            .onChange(of: turns) { if !scrolledUp { scrollDown(proxy) } }
             .onScrollGeometryChange(for: Bool.self) { geo in
                 geo.contentSize.height - geo.visibleRect.maxY > 100
             } action: { scrolledUp = $1 }
