@@ -46,6 +46,8 @@ struct TaskDetailView: View {
     @State private var screenshotsExpanded = false
     /// The window's selection, so the link to the schedule that started this task can open it.
     @AppStorage("selectedTask") private var selectedRow: TaskItem.ID?
+    /// Clicking the toolbar title scrolls this back to the top.
+    @State private var scrollPosition = ScrollPosition(edge: .top)
 
     private let apps = ExternalApps()
 
@@ -82,6 +84,7 @@ struct TaskDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Self.margin)
                     }
+                    .scrollPosition($scrollPosition)
                     .safeAreaBar(edge: .bottom) {
                         if ResponsePanel.shows(task) {
                             ResponsePanel(task: task, maxHeight: windowHeight * 0.5)
@@ -162,7 +165,10 @@ struct TaskDetailView: View {
                     .help("Back to task")
             }
         }
-        ToolbarItem { Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset) }
+        ToolbarItem {
+            Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset)
+                .onTapGesture { withAnimation(reduceMotion ? nil : .smooth) { scrollPosition.scrollTo(edge: .top) } }
+        }
             .sharedBackgroundVisibility(.hidden)
         ToolbarSpacer(.flexible)
         ToolbarItem {
@@ -215,7 +221,7 @@ struct TaskDetailView: View {
                  : "Merged into \(base). The project folder has \(checkedOut ?? "") checked out, so it doesn't show there.")
                 .foregroundStyle(.secondary)
         case .archived:
-            Text("Archived without changes. Nothing was merged.").foregroundStyle(.secondary)
+            Text("Archived. Nothing was merged; any changes stay on its branch, \(task.branch).").foregroundStyle(.secondary)
         default:
             if let line = pullRequestLine { Text(line).foregroundStyle(.secondary) }
         }
@@ -571,6 +577,7 @@ struct TaskDetailView: View {
                     Button(mergeTitle, action: merge)
                     Divider()
                     branchItems(task, project)
+                    archiveItem
                 }
                 .disabled(isMerging)
             } else {
@@ -583,6 +590,7 @@ struct TaskDetailView: View {
                     if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
                     Divider()
                     branchItems(task, project)
+                    archiveItem
                 }
                 .disabled(isMerging)
             }
@@ -592,6 +600,7 @@ struct TaskDetailView: View {
             } menu: {
                 if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
                 branchItems(task, project)
+                archiveItem
             }
         } else if task.status == .working || task.approvalRequest != nil {
             // Says "Task": beside an app's Run button there can be another Stop, for the app.
@@ -605,6 +614,13 @@ struct TaskDetailView: View {
     private func merge() {
         isMerging = true
         Task { await model.merge(taskID: taskID); isMerging = false }
+    }
+
+    /// Closing without merging, from any primary action's menu: work it has stays on its branch.
+    @ViewBuilder private var archiveItem: some View {
+        Divider()
+        Button("Archive", action: archive)
+            .help("Close this task without merging. Its changes stay on its branch; its conversation stays in Recently Closed.")
     }
 
     private func archive() {

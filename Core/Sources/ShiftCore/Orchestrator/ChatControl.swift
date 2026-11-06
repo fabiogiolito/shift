@@ -21,7 +21,7 @@ extension AppModel {
       stop <id>                stop its agent
       resume <id>              carry on with a stopped or interrupted task
       merge <id>               merge a task that isn't working into its base, and clean it up
-      archive <id>             close a task that has no changes, keeping its record; can't be reopened
+      archive <id>             close a task without merging, keeping its record and its work on its branch; can't be reopened
       delete <id>              delete it and all its work, without merging
       resolve <id>             have its agent merge the base in and resolve the conflicts
       sync <id>                merge the latest of its base into it

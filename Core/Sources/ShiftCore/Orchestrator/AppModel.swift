@@ -762,23 +762,25 @@ public final class AppModel {
         }
     }
 
-    /// Closes a task that has no changes, without merging or pushing: its agent and server stop, its worktree and
-    /// branch go, and its record and conversation stay, archived. Refused while it has changes, committed or not.
+    /// Closes a task without merging or pushing: its agent and server stop, its worktree goes, and its record and
+    /// conversation stay, archived. Work it has is committed and kept on its branch, to refer back to; with none, the branch goes too.
     public func archive(taskID: TaskItem.ID) async {
-        guard services != nil, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID) else { return }
+        guard let services, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID) else { return }
         busy.insert(taskID)
         defer { busy.remove(taskID) }
-        // Stopped first, so nothing gets written between the check and the worktree going.
-        let wasRunning = runs[taskID] != nil
+        // Stopped first, so nothing gets written between the commit and the worktree going.
         await cancelRun(taskID)
-        guard let changes = await changes(taskID: taskID), changes.files.isEmpty else {
-            lastError = "Could not archive \(task.title): it has changes. Merge or delete it instead."
-            if wasRunning {
+        let hasChanges = await changes(taskID: taskID).map { !$0.files.isEmpty } ?? true
+        if hasChanges, FileManager.default.fileExists(atPath: task.worktreePath) {
+            do {
+                try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
+            } catch {
+                lastError = "Could not archive \(task.title): \(Self.firstLine(Self.describe(error)))"
                 update(taskID) { Self.apply(Settled(status: .blocked, blockedReason: TaskItem.stoppedReason), to: &$0) }
+                return
             }
-            return
         }
-        await cleanUp(taskID)
+        await cleanUp(taskID, deletingBranch: !hasChanges)
         markClosed(taskID, as: .archived)
     }
 
@@ -2382,7 +2384,7 @@ public final class AppModel {
 
     /// Releases everything a task holds: agent, server, worktree and branch. The caller clears the record.
     /// `keepingBranchUnlessIn`: the branch is deleted only if all of its work is in that branch.
-    private func cleanUp(_ id: TaskItem.ID, keepingBranchUnlessIn base: String? = nil) async {
+    private func cleanUp(_ id: TaskItem.ID, keepingBranchUnlessIn base: String? = nil, deletingBranch: Bool = true) async {
         guard let services, let task = task(id) else { return }
         await cancelRun(id)
         serverFailures[id] = nil
@@ -2398,7 +2400,7 @@ public final class AppModel {
             await services.servers.stopOrphan(pid: pid)
         }
         guard let project = project(task.projectID) else { return }
-        var deleteBranch: String? = task.branch
+        var deleteBranch: String? = deletingBranch ? task.branch : nil
         if let base, (try? await services.git.isContained(repo: project.repoURL, branch: task.branch, in: base)) != true {
             deleteBranch = nil
             lastError = "Kept the branch \(task.branch): some of its work is not in \(base)."
