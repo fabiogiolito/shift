@@ -154,8 +154,6 @@ struct ScheduleDetailView: View {
                     .buttonStyle(.glass)
                 Button("Edit") { model.scheduleDraft = schedule }
                     .buttonStyle(.glass)
-                Button("Delete") { confirmingDelete = true }
-                    .buttonStyle(.glass)
                 Spacer()
             }
             .controlSize(.large)
