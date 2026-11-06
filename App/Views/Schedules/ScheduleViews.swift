@@ -106,6 +106,7 @@ struct ScheduleDetailView: View {
     let scheduleID: Schedule.ID
     @Binding var selection: TaskItem.ID?
     @State private var confirmingDelete = false
+    @State private var branches: [String] = []
 
     var body: some View {
         if let schedule = model.schedule(scheduleID) {
@@ -121,6 +122,8 @@ struct ScheduleDetailView: View {
                         }
                         .id(schedule.id)
                     }
+                    // Changed here, without the form; saved right away.
+                    ScheduleSettings(schedule: Binding { schedule } set: { model.saveSchedule($0) }, branches: branches)
                     runs(schedule)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -143,6 +146,7 @@ struct ScheduleDetailView: View {
                 }
             }
             .deleteScheduleConfirmation(schedule, isPresented: $confirmingDelete, model: model)
+            .task(id: schedule.projectID) { branches = await model.branches(for: schedule.projectID) }
         } else {
             EmptyState("Schedule Deleted", systemImage: "calendar")
         }
@@ -161,23 +165,8 @@ struct ScheduleDetailView: View {
             }
             .controlSize(.large)
             .buttonBorderShape(.roundedRectangle)
-            VStack(alignment: .leading, spacing: 4) {
-                Label(schedule.statusLine, systemImage: schedule.symbol)
-                Text(details(schedule))
-            }
-            .foregroundStyle(.secondary)
+            Label(schedule.statusLine, systemImage: schedule.symbol).foregroundStyle(.secondary)
         }
-    }
-
-    /// "Open a pull request when done · Claude Code, Opus · from main".
-    private func details(_ schedule: Schedule) -> String {
-        let model = schedule.model.flatMap { id in self.model.models[schedule.agent]?.first { $0.id == id }?.name ?? id }
-        let finish = schedule.finish == .review ? "Left for review when done" : "\(schedule.finish.title) when done"
-        var parts = [finish, [schedule.agent.displayName, model].compactMap { $0 }.joined(separator: ", "),
-                     "from \(schedule.baseBranch)"]
-        if schedule.keepAwake { parts.append("keeps the Mac awake") }
-        if schedule.wakeMac { parts.append("wakes the Mac") }
-        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder private func runs(_ schedule: Schedule) -> some View {
@@ -272,9 +261,6 @@ struct ScheduleForm: View {
     enum End: Hashable { case never, after, on }
     enum MonthMode: Hashable { case days, ordinal }
 
-    /// What a run does when the Mac is asleep at its time: the two settings as one choice.
-    enum Asleep: Hashable { case skip, stayAwake, wake }
-
     var body: some View {
         VStack(spacing: 0) {
             Form {
@@ -297,18 +283,19 @@ struct ScheduleForm: View {
                             }
                         }
                         .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
+                    // An editor has no text baseline: give it its first line's, so the label sits level with it.
+                    .alignmentGuide(.firstTextBaseline) { _ in 4 + NSFont.systemFont(ofSize: NSFont.systemFontSize).ascender }
                 } label: {
-                    // Level with the editor's first line: an editor has no text baseline to align to.
-                    Text("Prompt:").padding(.top, 11)
+                    Text("Prompt:")
                 }
                 divider
                 // When
                 timingRows
                 divider
-                // How each run works
+                // How each run works. Permissions, branch and sleep come from the window's bar and change on the page.
                 LabeledContent("Agent:") {
                     HStack {
-                        agentPicker.labelsHidden().fixedSize()
+                        ScheduleSettings.agentPicker($draft, model: model).labelsHidden().fixedSize()
                         ModelPicker(agent: draft.agent, selection: Binding { draft.model ?? "" } set: { draft.model = $0.isEmpty ? nil : $0 })
                             .labelsHidden()
                             .fixedSize()
@@ -322,45 +309,30 @@ struct ScheduleForm: View {
                 }
                 .fixedSize()
                 if draft.finish == .archive || draft.finish == .merge { note("Otherwise it's left for review.") }
-                divider
-                // Rarely changed
-                Picker("Permissions:", selection: $draft.permissions) {
-                    ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
-                }
-                .fixedSize()
-                if draft.permissions == .manual { note("Runs wait for you to allow their commands.") }
-                Picker("Branch:", selection: $draft.baseBranch) {
-                    ForEach(branches.contains(draft.baseBranch) ? branches : [draft.baseBranch] + branches, id: \.self) { Text($0) }
-                }
-                .fixedSize()
-                Picker("When asleep:", selection: asleep) {
-                    Text("Skip runs").tag(Asleep.skip)
-                    Text("Stay awake for runs").tag(Asleep.stayAwake)
-                    Text("Wake up for runs").tag(Asleep.wake)
-                }
-                .fixedSize()
-                if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
             }
             .formStyle(.columns)
             .padding(24)
             Divider().padding(.horizontal, 24)
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button(isNew ? "Create" : "Save") {
-                    model.saveSchedule(draft)
-                    onSave(draft)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .controlSize(.large)
-            .padding(24)
+            HStack { Spacer(); buttons }
+                .padding(24)
         }
-        .frame(width: 520)
+        .frame(width: 560)
         .task { branches = await model.branches(for: draft.projectID) }
+    }
+
+    @ViewBuilder private var buttons: some View {
+        HStack {
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Button(isNew ? "Create" : "Save") {
+                model.saveSchedule(draft)
+                onSave(draft)
+                dismiss()
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .controlSize(.large)
     }
 
     private var divider: some View { Divider().padding(.vertical, 8) }
@@ -588,28 +560,6 @@ struct ScheduleForm: View {
 
     // MARK: Agent
 
-    private var agentPicker: some View {
-        Picker("Agent", selection: Binding { draft.agent } set: { agent in
-            draft.agent = agent
-            draft.model = model.project(draft.projectID)?.models[agent]
-        }) {
-            ForEach(AgentKind.allCases) { kind in
-                let installed = model.installedAgents[kind] != nil
-                Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
-                    .tag(kind)
-                    .disabled(!installed)
-            }
-        }
-    }
-
-    private var asleep: Binding<Asleep> {
-        Binding {
-            draft.wakeMac ? .wake : draft.keepAwake ? .stayAwake : .skip
-        } set: { choice in
-            draft.keepAwake = choice == .stayAwake
-            draft.wakeMac = choice == .wake
-        }
-    }
 }
 
 extension String {
@@ -677,3 +627,105 @@ private struct SchedulePrompt: View {
             }
     }
 }
+
+/// A schedule's run settings on its page, as a box of rows like System Settings: each changes in place.
+struct ScheduleSettings: View {
+    @Environment(AppModel.self) private var model
+    @Binding var schedule: Schedule
+    let branches: [String]
+
+    /// What a run does when the Mac is asleep at its time: the two settings as one choice.
+    enum Asleep: Hashable { case skip, stayAwake, wake }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Settings").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                row("When done") {
+                    Picker("When done", selection: $schedule.finish) {
+                        ForEach([Schedule.FinishAction.review, .archive, .pullRequest, .merge], id: \.self) { Text($0.menuTitle).tag($0) }
+                    }
+                }
+                Divider()
+                row("Agent") { Self.agentPicker($schedule, model: model) }
+                Divider()
+                row("Model") {
+                    ModelPicker(agent: schedule.agent, selection: Binding { schedule.model ?? "" } set: { schedule.model = $0.isEmpty ? nil : $0 })
+                }
+                Divider()
+                row("Permissions", note: schedule.permissions == .manual ? "Runs wait for you to allow their commands." : nil) {
+                    Picker("Permissions", selection: $schedule.permissions) {
+                        ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
+                    }
+                }
+                Divider()
+                row("Branch") {
+                    Picker("Branch", selection: $schedule.baseBranch) {
+                        // The current value is always offered, so the menu is valid before branches load.
+                        ForEach(branches.contains(schedule.baseBranch) ? branches : [schedule.baseBranch] + branches, id: \.self) { Text($0) }
+                    }
+                }
+                Divider()
+                row("When the Mac is asleep",
+                    note: schedule.wakeMac ? "Shift asks for your administrator password to schedule the wakes." : nil) {
+                    Picker("When the Mac is asleep", selection: asleep) {
+                        Text("Skip runs").tag(Asleep.skip)
+                        Text("Stay awake for runs").tag(Asleep.stayAwake)
+                        Text("Wake up for runs").tag(Asleep.wake)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .background(.background, in: .rect(cornerRadius: 10))
+            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(.separator) }
+        }
+    }
+
+    private func row(_ title: String, note: String? = nil, @ViewBuilder control: () -> some View) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
+            }
+            Spacer(minLength: 16)
+            control().labelsHidden().fixedSize()
+        }
+        .padding(.vertical, 10)
+    }
+
+    static func agentPicker(_ schedule: Binding<Schedule>, model: AppModel) -> some View {
+        Picker("Agent", selection: Binding { schedule.wrappedValue.agent } set: { agent in
+            schedule.wrappedValue.agent = agent
+            schedule.wrappedValue.model = model.project(schedule.wrappedValue.projectID)?.models[agent]
+        }) {
+            ForEach(AgentKind.allCases) { kind in
+                let installed = model.installedAgents[kind] != nil
+                Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
+                    .tag(kind)
+                    .disabled(!installed)
+            }
+        }
+    }
+
+    private var asleep: Binding<Asleep> {
+        Binding {
+            schedule.wakeMac ? .wake : schedule.keepAwake ? .stayAwake : .skip
+        } set: { choice in
+            schedule.keepAwake = choice == .stayAwake
+            schedule.wakeMac = choice == .wake
+        }
+    }
+}
+
+extension Schedule.FinishAction {
+    /// In the menu: the whole rule.
+    var menuTitle: String {
+        switch self {
+        case .review: "Leave for review"
+        case .archive: "Archive if it has no changes"
+        case .pullRequest: "Open a pull request"
+        case .merge: "Merge if it merges cleanly"
+        }
+    }
+}
+
