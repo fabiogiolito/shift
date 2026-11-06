@@ -112,12 +112,15 @@ struct ScheduleDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     header(schedule)
-                    // Styled like a task's prompt history.
-                    GroupBox {
-                        SchedulePrompt(text: schedule.prompt)
-                            .padding(8)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Prompt").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        // Styled like a task's prompt history.
+                        GroupBox {
+                            SchedulePrompt(text: schedule.prompt)
+                                .padding(8)
+                        }
+                        .id(schedule.id)
                     }
-                    .id(schedule.id)
                     runs(schedule)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
