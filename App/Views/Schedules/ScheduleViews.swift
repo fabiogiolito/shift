@@ -267,6 +267,7 @@ struct ScheduleForm: View {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Title", text: $draft.title, prompt: Text("Title"))
                     .textFieldStyle(.plain)
+                    .font(.title3.weight(.semibold))
                     .padding(.vertical, 7).padding(.horizontal, 8)
                     .background(.background, in: .rect(cornerRadius: 6))
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
@@ -286,8 +287,12 @@ struct ScheduleForm: View {
                     }
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
             }
-            Divider().padding(.vertical, 20)
+            // When it runs, set apart on a light gray panel.
             timing
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quinary, in: .rect(cornerRadius: 10))
+                .padding(.top, 16)
             HStack { Spacer(); buttons }
                 .padding(.top, 24)
         }
