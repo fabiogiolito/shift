@@ -763,13 +763,15 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(Project.summary(of: model.tasks(in: project.id)), "No tasks")
     }
 
-    func testArchiveRefusesATaskWithChanges() async {
+    func testArchiveKeepsTheWorkOfATaskWithChangesOnItsBranch() async {
         let id = await createCompletedTask()
         git.pendingChanges = DiffSummary(files: [FileChange(path: "a.txt", kind: .modified)])
         await model.archive(taskID: id)
-        XCTAssertEqual(status(id), .completed)
-        XCTAssertFalse(git.existingBranches.isEmpty)
-        XCTAssertNotNil(model.lastError)
+        XCTAssertEqual(status(id), .archived)
+        XCTAssertTrue(git.existingBranches.contains("shift/\(id)"))
+        XCTAssertEqual(git.calls.suffix(2), ["commit \(id)", "remove \(id)"])
+        XCTAssertFalse(git.calls.contains { $0.hasPrefix("merge") || $0.hasPrefix("push") })
+        XCTAssertNil(model.lastError)
     }
 
     // MARK: Base branches

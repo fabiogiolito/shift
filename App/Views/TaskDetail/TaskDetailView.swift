@@ -205,7 +205,7 @@ struct TaskDetailView: View {
                  : "Merged into \(base). The project folder has \(checkedOut ?? "") checked out, so it doesn't show there.")
                 .foregroundStyle(.secondary)
         case .archived:
-            Text("Archived without changes. Nothing was merged.").foregroundStyle(.secondary)
+            Text("Archived. Nothing was merged; any changes stay on its branch, \(task.branch).").foregroundStyle(.secondary)
         default:
             if let line = pullRequestLine { Text(line).foregroundStyle(.secondary) }
         }
@@ -561,6 +561,7 @@ struct TaskDetailView: View {
                     Button(mergeTitle, action: merge)
                     Divider()
                     branchItems(task, project)
+                    archiveItem
                 }
                 .disabled(isMerging)
             } else {
@@ -573,6 +574,7 @@ struct TaskDetailView: View {
                     if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
                     Divider()
                     branchItems(task, project)
+                    archiveItem
                 }
                 .disabled(isMerging)
             }
@@ -582,6 +584,7 @@ struct TaskDetailView: View {
             } menu: {
                 if let pullRequest { Button("View Pull Request #\(pullRequest.number)") { apps.openInBrowser(pullRequest.url) } }
                 branchItems(task, project)
+                archiveItem
             }
         } else if task.status == .working || task.approvalRequest != nil {
             // Says "Task": beside an app's Run button there can be another Stop, for the app.
@@ -595,6 +598,13 @@ struct TaskDetailView: View {
     private func merge() {
         isMerging = true
         Task { await model.merge(taskID: taskID); isMerging = false }
+    }
+
+    /// Closing without merging, from any primary action's menu: work it has stays on its branch.
+    @ViewBuilder private var archiveItem: some View {
+        Divider()
+        Button("Archive", action: archive)
+            .help("Close this task without merging. Its changes stay on its branch; its conversation stays in Recently Closed.")
     }
 
     private func archive() {
