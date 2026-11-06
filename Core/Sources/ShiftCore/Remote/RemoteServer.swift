@@ -233,7 +233,10 @@ public final class RemoteServer {
         case .resolveConflict(let id): model.resolveConflict(taskID: id)
         case .conflictedFiles(let id): return .success(.files(await model.conflictedFiles(taskID: id)))
         case .pushBranch(let id): await model.pushBranch(taskID: id)
-        case .pullRequestURL(let id): return .success(.url(await model.pullRequestURL(taskID: id)))
+        case .pullRequestURL(let id):
+            // Created: the phone sees it open. Otherwise the page to open it there.
+            guard case .browser(let url)? = await model.openPullRequest(taskID: id) else { return .success(.url(nil)) }
+            return .success(.url(url))
         case .loadChanges(let id): return await model.loadChanges(taskID: id).map(RemoteResult.changes)
         case .loadDiff(let id): return await model.loadDiff(taskID: id).map(RemoteResult.diff)
         case .restartServer(let id): await model.restartServer(taskID: id)

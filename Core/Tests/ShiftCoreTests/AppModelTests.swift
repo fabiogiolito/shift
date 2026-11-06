@@ -2206,6 +2206,29 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.lastError)
     }
 
+    func testOpeningAPullRequestCreatesItWithTheGitHubCLI() async {
+        let id = await createCompletedTask()
+        guard case .created(let pullRequest)? = await model.openPullRequest(taskID: id) else { return XCTFail() }
+        XCTAssertEqual(git.calls.suffix(2), ["push shift/\(id) to origin", "create pull request shift/\(id) into main on owner/repo"])
+        XCTAssertEqual(model.pullRequests[id], pullRequest)
+        XCTAssertEqual(model.pullRequests[id]?.state, .open)
+        XCTAssertNil(model.lastError)
+    }
+
+    func testOpeningAPullRequestFallsBackToTheBrowser() async {
+        let id = await createCompletedTask()
+        let page = "https://github.com/owner/repo/compare/main...shift/\(id)?expand=1"
+        git.createPullRequestError = GitError(message: "zsh: command not found: gh")
+        guard case .browser(let url)? = await model.openPullRequest(taskID: id) else { return XCTFail() }
+        XCTAssertTrue(url.absoluteString.hasPrefix(page))
+        XCTAssertNil(model.lastError, "No gh: nothing worth saying")
+        XCTAssertNil(model.pullRequests[id])
+
+        git.createPullRequestError = GitError(message: "To get started with GitHub CLI, please run:  gh auth login")
+        guard case .browser? = await model.openPullRequest(taskID: id) else { return XCTFail() }
+        XCTAssertTrue(model.lastError?.contains("not signed in") == true)
+    }
+
     func testPullRequestURL() {
         func url(_ remote: String, title: String = "Fix A&B", body: String = "") -> String? {
             AppModel.pullRequestURL(remoteURL: remote, branch: "shift/1", base: "main", title: title, body: body)?.absoluteString

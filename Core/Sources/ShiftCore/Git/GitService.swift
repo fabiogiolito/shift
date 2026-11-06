@@ -409,6 +409,27 @@ public struct GitService: GitServicing {
         return try Self.parsePullRequests(result.output)
     }
 
+    public func createPullRequest(repo: URL, github: String, base: String, branch: String,
+                                  title: String, body: String) async throws -> PullRequest {
+        let env = ["GH_PROMPT_DISABLED": "1", "LC_ALL": "C"]
+        func gh(_ args: [String]) async throws -> CommandResult {
+            let (result, timedOut) = try await shell(args.map(Self.quoted).joined(separator: " "), repo: repo, env: env)
+            if timedOut { throw GitError(message: "GitHub took too long to answer and was stopped.") }
+            return result
+        }
+        let created = try await gh(Self.createPullRequestArguments(github: github, base: base, branch: branch, title: title, body: body))
+        // gh: "a pull request for branch … already exists": that one is picked up.
+        guard created.exitCode == 0 || created.output.contains("already exists") else { throw GitError(message: created.output) }
+        let viewed = try await gh(["gh", "pr", "view", branch, "-R", github, "--json", "number,url,state,headRefName,headRefOid"])
+        guard viewed.exitCode == 0 else { throw GitError(message: viewed.output) }
+        let json = viewed.output.components(separatedBy: "\n").last { $0.hasPrefix("{") } ?? ""
+        return try JSONDecoder().decode(PullRequest.self, from: Data(json.utf8))
+    }
+
+    static func createPullRequestArguments(github: String, base: String, branch: String, title: String, body: String) -> [String] {
+        ["gh", "pr", "create", "-R", github, "--base", base, "--head", branch, "--title", title, "--body", body]
+    }
+
     /// `gh`'s JSON (newest first) by head branch. The login shell's own output may come before it.
     static func parsePullRequests(_ output: String) throws -> [String: PullRequest] {
         let json = output.components(separatedBy: "\n").last { $0.hasPrefix("[") } ?? "[]"

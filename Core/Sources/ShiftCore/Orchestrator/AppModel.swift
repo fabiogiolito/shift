@@ -740,16 +740,25 @@ public final class AppModel {
         }
     }
 
-    /// Pushes the task's branch and returns the page that opens a pull request for it into its base,
-    /// with the task's title and what the agent said about it filled in.
-    /// Nil (and `lastError`) if the push fails or the remote is not on GitHub.
-    public func pullRequestURL(taskID: TaskItem.ID) async -> URL? {
+    /// What opening a pull request did: created it (or found an open one), or, if `gh` could not, the page
+    /// that opens one in the browser.
+    public enum PullRequestOpening: Equatable, Sendable {
+        case created(PullRequest)
+        case browser(URL)
+    }
+
+    /// Pushes the task's branch and opens a pull request for it into its base with the GitHub CLI, titled
+    /// after the task with what the agent said about it, and shows it as open right away. If `gh` is
+    /// missing, signed out or fails: GitHub's pre-filled page instead, with why in `lastError` if worth
+    /// knowing. Nil (and `lastError`) if the push fails or the remote is not on GitHub. Never opens anything.
+    public func openPullRequest(taskID: TaskItem.ID) async -> PullRequestOpening? {
         guard let services, let task = task(taskID), let project = project(task.projectID) else { return nil }
+        let base = task.base(in: project)
+        let body = [task.description, task.summary].compactMap { $0 }.joined(separator: "\n\n")
         guard let remote = await services.git.remote(repo: project.repoURL, branch: task.branch),
               let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
-              let url = Self.pullRequestURL(remoteURL: remoteURL, branch: task.branch, base: task.base(in: project),
-                                            title: task.title,
-                                            body: [task.description, task.summary].compactMap { $0 }.joined(separator: "\n\n")) else {
+              let github = Self.githubRepo(remoteURL: remoteURL),
+              let page = Self.pullRequestURL(remoteURL: remoteURL, branch: task.branch, base: base, title: task.title, body: body) else {
             lastError = "Could not open a pull request for \(task.title): the project has no GitHub remote."
             return nil
         }
@@ -760,7 +769,24 @@ public final class AppModel {
             return nil
         }
         await refreshPushState(projectID: project.id)
-        return url
+        do {
+            let pullRequest = try await services.git.createPullRequest(repo: project.repoURL, github: github, base: base,
+                                                                        branch: task.branch, title: task.title, body: body)
+            pullRequests[taskID] = pullRequest
+            return .created(pullRequest)
+        } catch {
+            if let note = Self.pullRequestFallbackNote(Self.describe(error)) { lastError = note }
+            return .browser(page)
+        }
+    }
+
+    /// Why `gh` could not open the pull request, from its output, if worth saying. Nil when it is not installed.
+    static func pullRequestFallbackNote(_ output: String) -> String? {
+        if output.contains("command not found") || output.contains("No such file") { return nil }
+        if output.contains("gh auth login") {
+            return "The GitHub CLI is not signed in, so the pull request opens in the browser. Run `gh auth login` to have Shift create them."
+        }
+        return "Could not create the pull request with the GitHub CLI (\(firstLine(output))), so it opens in the browser."
     }
 
     /// GitHub's compare page for `branch` into `base`, from an https or ssh remote URL. Nil for other hosts.
