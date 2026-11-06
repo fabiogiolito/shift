@@ -490,6 +490,21 @@ final class AgentAdapterTests: XCTestCase {
         XCTAssertTrue(claude.contains { $0.hasPrefix(OutcomeProtocol.chatInstructions) && $0.hasSuffix(context) })
     }
 
+    func testChatContextListsSchedulesAndTheTime() {
+        let project = Project(name: "Spot", repoPath: "/r", baseBranch: "main")
+        let now = Date()
+        var schedule = Schedule(projectID: project.id, title: "Nightly deps", prompt: "Update", baseBranch: "main",
+                                agent: .claudeCode, permissions: .bypass, timing: ScheduleTiming(start: now.addingTimeInterval(3600)))
+        let context = OutcomeProtocol.chatContext(tasks: [], project: project, schedules: [schedule], now: now)
+        XCTAssertTrue(context.contains("Now: "))
+        XCTAssertTrue(context.contains("time zone \(TimeZone.current.identifier)"))
+        XCTAssertTrue(context.contains("- \(schedule.id.uuidString.prefix(8)) Nightly deps: next run "))
+        schedule.paused = true
+        XCTAssertTrue(OutcomeProtocol.chatContext(tasks: [], project: project, schedules: [schedule], now: now).contains("Nightly deps: paused"))
+        XCTAssertTrue(OutcomeProtocol.chatContext(tasks: [], project: project).contains("Schedules:\nNone"))
+        XCTAssertTrue(OutcomeProtocol.chatInstructions.contains("schedule create"))
+    }
+
     // MARK: Live chat (SHIFT_LIVE_AGENT_TESTS=1)
 
     func testLiveClaudeCodeChatCommitsAndPushes() async throws { try await liveChat(ClaudeCodeAdapter()) }

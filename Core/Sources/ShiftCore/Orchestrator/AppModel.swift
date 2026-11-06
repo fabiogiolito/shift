@@ -1747,7 +1747,8 @@ public final class AppModel {
                                        environment: controlEnvironment(projectID),
                                        permissions: project.permissions, model: project.models[kind], needsDescription: false,
                                        approvals: channel, chat: true,
-                                       chatContext: OutcomeProtocol.chatContext(tasks: tasks(in: projectID), project: project))
+                                       chatContext: OutcomeProtocol.chatContext(tasks: tasks(in: projectID), project: project,
+                                                                                schedules: schedules(in: projectID)))
             var failure: String?
             events: for await event in adapter.run(request) {
                 guard isChatCurrent(projectID, token) else { return }
