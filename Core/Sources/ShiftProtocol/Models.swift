@@ -266,11 +266,22 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var opensPullRequests: Bool
     /// No dev servers run for it, its base's or its tasks', until turned back on.
     public var serversOff: Bool
-    /// The color of each tag its tasks have, by lowercased name: one per name, shared by every task with it.
+    /// Every tag the project's tasks have had, in its first spelling, with its color: one per name whatever its
+    /// case, shared by every task with it. Kept when no task has the tag any more, so it can be picked again.
     public var tagColors: [String: TagColor] = [:]
 
+    /// The key `tag` is stored under, whatever its case.
+    public func tagKey(_ tag: String) -> String? {
+        tagColors.keys.first { $0.caseInsensitiveCompare(tag) == .orderedSame }
+    }
+
     /// The color `tag` shows in, gray until it has one.
-    public func color(ofTag tag: String) -> TagColor { tagColors[tag.lowercased()] ?? .gray }
+    public func color(ofTag tag: String) -> TagColor { tagKey(tag).flatMap { tagColors[$0] } ?? .gray }
+
+    /// Every tag, sorted.
+    public var tagNames: [String] {
+        tagColors.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",

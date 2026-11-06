@@ -45,7 +45,7 @@ struct TaskListView: View {
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .toolbar {
             let pushState = model.pushStates[project.id]
-            let tagNames = Self.tagNames(all)
+            let tagNames = project.tagNames
             // Pushes the buttons to the column's trailing end, away from the project name.
             ToolbarSpacer(.flexible)
             ToolbarItem { filterMenu(tagNames) }
@@ -82,13 +82,6 @@ struct TaskListView: View {
     static func filter(_ tasks: [TaskItem], tags: Set<String>) -> [TaskItem] {
         guard !tags.isEmpty else { return tasks }
         return tasks.filter { ($0.tags ?? []).contains { tags.contains($0.lowercased()) } }
-    }
-
-    /// Every tag the tasks have, once each whatever its case, in the first spelling met, sorted.
-    static func tagNames(_ tasks: [TaskItem]) -> [String] {
-        var names: [String: String] = [:]
-        for tag in tasks.flatMap({ $0.tags ?? [] }) where names[tag.lowercased()] == nil { names[tag.lowercased()] = tag }
-        return names.values.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     /// A popover rather than a menu: it stays open, so several tags can be picked in one go.

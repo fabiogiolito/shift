@@ -628,8 +628,8 @@ public final class AppModel {
         }
         // A new name gets a random color; one the project already knows keeps its own.
         guard let projectID = task(taskID)?.projectID, let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
-        for tag in new where projects[index].tagColors[tag.lowercased()] == nil {
-            projects[index].tagColors[tag.lowercased()] = TagColor.allCases.filter { $0 != .gray }.randomElement()
+        for tag in new where projects[index].tagKey(tag) == nil {
+            projects[index].tagColors[tag] = TagColor.allCases.filter { $0 != .gray }.randomElement()
         }
         changed()
     }
@@ -637,7 +637,7 @@ public final class AppModel {
     /// Changes the color of `tag` on every task in the project that has it.
     public func setTagColor(projectID: Project.ID, _ tag: String, _ color: TagColor) {
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
-        projects[index].tagColors[tag.lowercased()] = color
+        projects[index].tagColors[projects[index].tagKey(tag) ?? tag] = color
         changed()
     }
 

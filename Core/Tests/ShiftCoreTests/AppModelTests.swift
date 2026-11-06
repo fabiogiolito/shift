@@ -121,6 +121,8 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.task(id)?.tags, ["foo", "baz"])
         model.sendPrompt(taskID: id, text: "/tag")
         XCTAssertNil(model.task(id)?.tags)
+        // The project keeps them, in their first spelling, to pick again.
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["bar", "baz", "foo"])
         XCTAssertNil(AppModel.command("tag", "/tags x"))
     }
 

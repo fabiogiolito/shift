@@ -103,7 +103,7 @@ struct TagEditor: View {
     var body: some View {
         if let task = model.task(taskID), let project = model.project(task.projectID) {
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(TaskListView.tagNames(model.tasks(in: project.id)), id: \.self) { name in
+                ForEach(project.tagNames, id: \.self) { name in
                     Toggle(isOn: Binding {
                         task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
                     } set: {
@@ -116,6 +116,7 @@ struct TagEditor: View {
                     }
                     .toggleStyle(.checkbox)
                 }
+                if !project.tagNames.isEmpty { Divider() }
                 TextField("New Tag", text: $name)
                     .onSubmit { model.addTags(taskID: taskID, name); name = "" }
                     .help("Separate several tags with commas.")
