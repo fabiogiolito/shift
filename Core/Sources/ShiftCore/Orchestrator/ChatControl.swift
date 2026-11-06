@@ -11,7 +11,7 @@ extension AppModel {
 
     nonisolated static let controlUsage = """
     shiftctl commands (quote arguments; a prompt can span lines):
-      tasks [--all]            the project's tasks, as JSON (--all: merged ones too)
+      tasks [--all]            the project's tasks, as JSON (--all: merged and archived ones too)
       task <id>                one task in full: prompts, changed files, conflicts
       log <id>                 the end of what its agent did
       create [--agent claudeCode|codex] "<prompt>"
@@ -21,6 +21,7 @@ extension AppModel {
       stop <id>                stop its agent
       resume <id>              carry on with a stopped or interrupted task
       merge <id>               merge a task that isn't working into its base, and clean it up
+      archive <id>             close a task that has no changes, keeping its record; can't be reopened
       delete <id>              delete it and all its work, without merging
       resolve <id>             have its agent merge the base in and resolve the conflicts
       sync <id>                merge the latest of its base into it
@@ -66,7 +67,7 @@ extension AppModel {
         case "help":
             return Self.controlUsage
         case "tasks":
-            return json(tasks(in: projectID).filter { rest.first == "--all" || $0.status != .merged }.map(ControlTask.init))
+            return json(tasks(in: projectID).filter { rest.first == "--all" || !$0.status.isClosed }.map(ControlTask.init))
         case "task":
             let task = try taskArgument()
             var detail = ControlTask(task)
@@ -97,12 +98,12 @@ extension AppModel {
             return "Started task \(id). Shift will tell you how it goes."
         case "follow":
             let task = try taskArgument()
-            guard task.status != .merged else { throw Refusal("Task \(task.id) is already merged.") }
+            guard !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
             follow(taskID: task.id)
             return "Following task \(task.id)."
         case "send":
             let task = try taskArgument()
-            guard task.status != .merged else { throw Refusal("Task \(task.id) is already merged.") }
+            guard !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
             let count = task.prompts.count
             sendPrompt(taskID: task.id, text: try textArgument("the text"))
             guard self.task(task.id)?.prompts.count != count else { throw Refusal("Task \(task.id) is busy. Try again in a moment.") }
@@ -120,7 +121,7 @@ extension AppModel {
         case "merge":
             let task = try taskArgument()
             // Merging stops the agent: that takes the user's "stop".
-            guard task.status != .working, task.status != .merged else {
+            guard task.status != .working, !task.status.isClosed else {
                 throw Refusal("Task \(task.id) is \(task.status.rawValue). Merge a task once it has stopped working.")
             }
             let note = await collectingError { await merge(taskID: task.id) }
@@ -134,6 +135,12 @@ extension AppModel {
             default:
                 throw Refusal(note ?? "Could not merge task \(task.id).")
             }
+        case "archive":
+            let task = try taskArgument()
+            guard !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
+            let note = await collectingError { await archive(taskID: task.id) }
+            guard self.task(task.id)?.status == .archived else { throw Refusal(note ?? "Task \(task.id) is busy. Try again in a moment.") }
+            return ["Archived task \(task.id).", note].compactMap { $0 }.joined(separator: " ")
         case "delete":
             let task = try taskArgument()
             let note = await collectingError { await delete(taskID: task.id) }
@@ -141,12 +148,12 @@ extension AppModel {
             return ["Deleted task \(task.id).", note].compactMap { $0 }.joined(separator: " ")
         case "resolve":
             let task = try taskArgument()
-            guard task.status != .working, task.status != .merged else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
+            guard task.status != .working, !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
             if task.status == .conflict { resolveConflict(taskID: task.id) } else { fixSyncConflict(taskID: task.id) }
             return "Task \(task.id) is resolving the conflicts."
         case "sync":
             let task = try taskArgument()
-            guard task.status != .working, task.status != .merged else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
+            guard task.status != .working, !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
             var conflicts: [String] = []
             let note = await collectingError { conflicts = await syncBase(taskID: task.id) }
             if let note { throw Refusal(note) }
@@ -156,7 +163,7 @@ extension AppModel {
             return "Task \(task.id) has the latest of \(baseName(task))."
         case "base":
             let task = try taskArgument()
-            guard task.status != .working, task.status != .merged else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
+            guard task.status != .working, !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
             let base = try textArgument("the branch")
             guard await branches(for: projectID).contains(base) else { throw Refusal("No branch \(base) that can be a base.") }
             let note = await collectingError { await changeBase(taskID: task.id, to: base) }
@@ -168,13 +175,13 @@ extension AppModel {
             return "Renamed task \(task.id)."
         case "push":
             let task = try taskArgument()
-            guard task.status != .merged else { throw Refusal("Task \(task.id) is already merged.") }
+            guard !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
             let note = await collectingError { await pushBranch(taskID: task.id) }
             if let note { throw Refusal(note) }
             return "Pushed \(task.branch)."
         case "pr":
             let task = try taskArgument()
-            guard task.status != .merged else { throw Refusal("Task \(task.id) is already merged.") }
+            guard !task.status.isClosed else { throw Refusal("Task \(task.id) is \(task.status.rawValue).") }
             var opening: PullRequestOpening?
             let note = await collectingError { opening = await openPullRequest(taskID: task.id) }
             switch opening {

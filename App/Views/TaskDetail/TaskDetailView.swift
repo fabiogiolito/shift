@@ -115,7 +115,10 @@ struct TaskDetailView: View {
                     try? await Task.sleep(for: .seconds(1.5))
                 } while !Task.isCancelled
             }
-            .task(id: task.status) { changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil }
+            .task(id: task.status) {
+                changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil
+                menu.unchanged = (try? changes?.get())?.files.isEmpty == true
+            }
             .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
             .taskActions(task, $menu)
             .confirmationDialog("Change the base of “\(task.title)” to \(newBase ?? "")?",
@@ -195,6 +198,8 @@ struct TaskDetailView: View {
             Text(checkedOut == nil || checkedOut == base ? "Merged into \(base)"
                  : "Merged into \(base). The project folder has \(checkedOut ?? "") checked out, so it doesn't show there.")
                 .foregroundStyle(.secondary)
+        case .archived:
+            Text("Archived without changes. Nothing was merged.").foregroundStyle(.secondary)
         default:
             if let line = pullRequestLine { Text(line).foregroundStyle(.secondary) }
         }
@@ -214,7 +219,7 @@ struct TaskDetailView: View {
     /// Every task with a port has a preview server, whether or not the project has a server command.
     @ViewBuilder private func actions(_ task: TaskItem, _ project: Project) -> some View {
         let hasPrimary = task.status == .completed || task.status == .conflict || task.status == .working || task.approvalRequest != nil
-        let canBuild = project.isApp && task.status != .merged
+        let canBuild = project.isApp && !task.status.isClosed
         if task.serverURL != nil || hasPrimary || canBuild {
             HStack {
                 primaryAction(task, project)
@@ -305,7 +310,7 @@ struct TaskDetailView: View {
 
     /// ⌘R: what the toolbar's main server or build button does, except that a running app restarts instead of stopping.
     private func previewAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
-        if project.isApp && task.status != .merged {
+        if project.isApp && !task.status.isClosed {
             guard let target = project.targets.first(where: { $0.id == suggestedTargetID }) ?? project.targets.first else { return nil }
             guard target.kind == .run else { return TitledAction(title: actionTitle(target)) { perform(target) } }
             return TitledAction(title: "Run \(target.name)") {
@@ -343,19 +348,19 @@ struct TaskDetailView: View {
     /// ⇧⌘E and ⇧⌘O, into the same folder as ⇧⌘T.
     private func editorAction(_ task: TaskItem, _ project: Project) -> TitledAction? {
         guard let editor = OpenInMenu.editor() else { return nil }
-        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        let folder = task.status.isClosed ? project.repoURL : task.worktreeURL
         return TitledAction(title: "Open in \(apps.name(of: editor))") { apps.open(folder, withApp: editor) }
     }
 
     private func finderAction(_ task: TaskItem, _ project: Project) -> () -> Void {
-        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        let folder = task.status.isClosed ? project.repoURL : task.worktreeURL
         return { apps.open(folder, in: .finder) }
     }
 
     /// ⇧⌘T. A merged task's folder is gone: its work is in the project's.
     private func terminalAction(_ task: TaskItem, _ project: Project) -> (() -> Void)? {
         guard let terminal = OpenInMenu.terminal() else { return nil }
-        let folder = task.status == .merged ? project.repoURL : task.worktreeURL
+        let folder = task.status.isClosed ? project.repoURL : task.worktreeURL
         return { apps.open(folder, withApp: terminal) }
     }
 
@@ -532,7 +537,13 @@ struct TaskDetailView: View {
 
     @ViewBuilder private func primaryAction(_ task: TaskItem, _ project: Project) -> some View {
         let pullRequest = model.pullRequests[taskID]
-        if task.status == .completed {
+        if task.status == .completed, menu.unchanged {
+            // Nothing to merge: closing it is all that's left.
+            Button("Archive", action: archive)
+                .buttonStyle(.glass)
+                .disabled(isMerging)
+                .help("Close this task without merging. It has no changes; its conversation stays in Recently Closed.")
+        } else if task.status == .completed {
             let mergeTitle = "Merge into \(task.base(in: project))"
             if let pullRequest, pullRequest.state == .open {
                 let view = { apps.openInBrowser(pullRequest.url) }
@@ -577,6 +588,11 @@ struct TaskDetailView: View {
     private func merge() {
         isMerging = true
         Task { await model.merge(taskID: taskID); isMerging = false }
+    }
+
+    private func archive() {
+        isMerging = true
+        Task { await model.archive(taskID: taskID); isMerging = false }
     }
 
     private func openPullRequest() {
@@ -821,7 +837,7 @@ struct TaskDetailView: View {
     private func headline(_ task: TaskItem) -> String? {
         switch task.status {
         case .working, .needsInput, .blocked: task.description
-        case .completed, .conflict, .merged: task.summary ?? task.description
+        case .completed, .conflict, .merged, .archived: task.summary ?? task.description
         }
     }
 
@@ -831,7 +847,7 @@ struct TaskDetailView: View {
         case .needsInput: "Answer…"
         case .blocked: "Give instructions…"
         case .completed: "Ask for changes…"
-        case .conflict, .merged: nil
+        case .conflict, .merged, .archived: nil
         }
     }
 }

@@ -23,6 +23,8 @@ public final class RemoteServer {
     @ObservationIgnored private let listener: RemoteListener
     @ObservationIgnored private var connections: Set<RemoteConnection> = []
     @ObservationIgnored private var sent = RemoteSnapshot()
+    /// Phones that said hello with Wire 2 or later. The others, until they do, get `ServerMessage.forWire1`.
+    @ObservationIgnored private var current: Set<RemoteConnection> = []
     @ObservationIgnored private var pumps: [RemoteConnection: [AgentLog: Task<Void, Never>]] = [:]
     @ObservationIgnored let keepAwake = KeepAwake()
     @ObservationIgnored private var tailnetShared = false
@@ -116,7 +118,7 @@ public final class RemoteServer {
         let now = Self.snapshot(of: model)
         let messages = now.changes(since: sent)
         sent = now
-        for connection in connections { messages.forEach(connection.post) }
+        for connection in connections { messages.forEach { post($0, to: connection) } }
         keepAwake.set(model.tasks.contains { $0.status == .working })
     }
 
@@ -143,11 +145,16 @@ public final class RemoteServer {
         seen(connection)
         connection.post(.hello(version: Wire.version))
         // Together with `connections`, on the main actor: nothing can change between this and the next sync.
-        connection.post(.snapshot(sent))
+        post(.snapshot(sent), to: connection)
+    }
+
+    private func post(_ message: ServerMessage, to connection: RemoteConnection) {
+        connection.post(current.contains(connection) ? message : message.forWire1)
     }
 
     private func closed(_ connection: RemoteConnection) {
         connections.remove(connection)
+        current.remove(connection)
         pumps.removeValue(forKey: connection)?.values.forEach { $0.cancel() }
     }
 
@@ -161,8 +168,10 @@ public final class RemoteServer {
         // A message this version doesn't know is ignored, so that a newer phone can keep talking.
         guard connections.contains(connection), let message = Wire.decode(ClientMessage.self, from: data) else { return }
         switch message {
-        case .hello(_, let device):
+        case .hello(let version, let device):
             seen(connection, name: device)
+            // It was sent the snapshot as Wire 1 before it said this.
+            if version >= 2, current.insert(connection).inserted { connection.post(.snapshot(sent)) }
         case .command(let request):
             Task { @MainActor in
                 // Unlike a message, a command has someone waiting for its reply.
@@ -249,6 +258,24 @@ public final class RemoteServer {
             return .success(.url(url))
         }
         return .success(.done)
+    }
+}
+
+extension ServerMessage {
+    /// For a phone from before Wire 2, which fails on a status it doesn't know: archived tasks as merged.
+    var forWire1: ServerMessage {
+        func old(_ task: TaskItem) -> TaskItem {
+            var task = task
+            if task.status == .archived { task.status = .merged }
+            return task
+        }
+        switch self {
+        case .snapshot(var snapshot):
+            snapshot.tasks = snapshot.tasks.map(old)
+            return .snapshot(snapshot)
+        case .task(let task): return .task(old(task))
+        default: return self
+        }
     }
 }
 
