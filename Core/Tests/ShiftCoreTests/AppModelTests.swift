@@ -90,10 +90,10 @@ final class AppModelTests: XCTestCase {
     }
 
     func testTaskCommandStartsANewTask() async {
-        XCTAssertEqual(AppModel.taskCommand(" /task  Fix the footer\n"), "Fix the footer")
-        XCTAssertEqual(AppModel.taskCommand("/task\nTwo\nlines"), "Two\nlines")
-        XCTAssertNil(AppModel.taskCommand("/tasks"))
-        XCTAssertNil(AppModel.taskCommand("Run /task later"))
+        XCTAssertEqual(AppModel.command("task", " /task  Fix the footer\n"), "Fix the footer")
+        XCTAssertEqual(AppModel.command("task", "/task\nTwo\nlines"), "Two\nlines")
+        XCTAssertNil(AppModel.command("task", "/tasks"))
+        XCTAssertNil(AppModel.command("task", "Run /task later"))
 
         let id = await createCompletedTask()
         model.sendPrompt(taskID: id, text: "/task Fix the footer")
@@ -103,6 +103,17 @@ final class AppModelTests: XCTestCase {
 
         model.sendChat(projectID: project.id, text: "/task Fix the header")
         XCTAssertEqual(model.task(id + 2)?.prompts.map(\.text), ["Fix the header"])
+    }
+
+    func testTagCommandAddsTags() async {
+        let id = await createCompletedTask()
+        model.sendPrompt(taskID: id, text: "/tag foo, bar,,")
+        model.sendPrompt(taskID: id, text: "/tag Bar, baz")
+        XCTAssertEqual(model.task(id)?.tags, ["foo", "bar", "baz"])
+        XCTAssertEqual(model.task(id)?.prompts.map(\.text), ["Do the thing"])
+        model.sendPrompt(taskID: id, text: "/tag")
+        XCTAssertNil(model.task(id)?.tags)
+        XCTAssertNil(AppModel.command("tag", "/tags x"))
     }
 
     func testCreateRunsToCompleted() async {

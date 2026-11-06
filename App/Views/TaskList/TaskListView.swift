@@ -143,8 +143,9 @@ struct TaskRow: View {
             HStack(spacing: 6) {
                 StatusIcon(status: task.status, size: 14, pullRequestOpen: model.pullRequests[task.id]?.state == .open,
                            mergedByPullRequest: task.mergedPullRequest != nil)
-                Text(task.title).lineLimit(1)
-                Spacer()
+                Text(task.title).lineLimit(1).layoutPriority(1)
+                TaskTags(tags: task.tags)
+                Spacer(minLength: 0)
                 TaskNumber(task: task)
             }
             // Always two lines tall, even before the description arrives: the list doesn't re-measure a row

@@ -77,3 +77,18 @@ extension TaskStatus {
         }
     }
 }
+
+/// A task's `/tag` tags as small capsules. Nothing when it has none.
+struct TaskTags: View {
+    let tags: [String]?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(tags ?? [], id: \.self) { tag in
+                Text(tag).font(.caption2).lineLimit(1).foregroundStyle(.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(.quaternary, in: .capsule)
+            }
+        }
+    }
+}

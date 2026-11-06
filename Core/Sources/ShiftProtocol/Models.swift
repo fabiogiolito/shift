@@ -462,6 +462,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var lastBuiltTargetID: BuildTarget.ID?
     /// Merged by merging its pull request on GitHub. Optional so state saved by earlier builds still decodes.
     public var mergedPullRequest: Int?
+    /// Set with `/tag a, b`. Optional so state saved by earlier builds still decodes.
+    public var tags: [String]?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
                 agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,
