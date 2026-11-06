@@ -243,11 +243,12 @@ struct TaskDetailView: View {
                         }
                     }
                     // The port may still come up, so the button stays.
-                    if let state = self.server, state != .up {
+                    // Stopped is the usual state now (started on demand): the button itself starts it.
+                    if let state = self.server, state != .up, state != .stopped {
                         Text(state.label).foregroundStyle(state == .notResponding ? state.color : .secondary)
                         if state != .starting {
                             Button("Log") { openWindow(id: "server-log", value: taskID) }.buttonStyle(.glass).controlSize(.small)
-                            Button(state == .stopped ? "Start" : "Restart") {
+                            Button("Restart") {
                                 self.server = .starting
                                 Task { await model.restartServer(taskID: taskID) }
                             }
