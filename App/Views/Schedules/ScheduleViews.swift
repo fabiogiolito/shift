@@ -142,11 +142,7 @@ struct ScheduleDetailView: View {
     private func header(_ schedule: Schedule) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(schedule.prompt).font(.title3).textSelection(.enabled)
-            VStack(alignment: .leading, spacing: 4) {
-                Label(schedule.statusLine, systemImage: schedule.symbol)
-                Text(details(schedule))
-            }
-            .foregroundStyle(.secondary)
+                .padding(.bottom, 8)
             HStack {
                 Button("Run Now") { model.runScheduleNow(schedule.id) }
                     .buttonStyle(.glassProminent)
@@ -160,6 +156,11 @@ struct ScheduleDetailView: View {
             }
             .controlSize(.large)
             .buttonBorderShape(.roundedRectangle)
+            VStack(alignment: .leading, spacing: 4) {
+                Label(schedule.statusLine, systemImage: schedule.symbol)
+                Text(details(schedule))
+            }
+            .foregroundStyle(.secondary)
         }
     }
 
