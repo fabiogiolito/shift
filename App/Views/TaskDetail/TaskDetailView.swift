@@ -588,7 +588,8 @@ struct TaskDetailView: View {
                 syncConflicts = await model.syncBase(taskID: taskID)
                 guard syncConflicts.isEmpty else { return }
             }
-            if let url = await model.pullRequestURL(taskID: taskID) { apps.openInBrowser(url) }
+            // Created: the button becomes View Pull Request.
+            if case .browser(let url)? = await model.openPullRequest(taskID: taskID) { apps.openInBrowser(url) }
         }
     }
 

@@ -27,7 +27,7 @@ extension AppModel {
       base <id> <branch>       move it onto another base branch
       rename <id> "<title>"    rename it
       push <id>                push its branch
-      pr <id>                  push its branch and print the page that opens a pull request
+      pr <id>                  push its branch and open a pull request, printing its URL
       project                  the project's settings, as JSON
       set <setting> "<value>"  change one: name, baseBranch, type, defaultAgent, model, serverCommand,
                                setupCommand, buildCommand, buildTargets, pushTaskBranches, takesScreenshots,
@@ -175,10 +175,13 @@ extension AppModel {
         case "pr":
             let task = try taskArgument()
             guard task.status != .merged else { throw Refusal("Task \(task.id) is already merged.") }
-            var url: URL?
-            let note = await collectingError { url = await pullRequestURL(taskID: task.id) }
-            guard let url else { throw Refusal(note ?? "Could not open a pull request.") }
-            return url.absoluteString
+            var opening: PullRequestOpening?
+            let note = await collectingError { opening = await openPullRequest(taskID: task.id) }
+            switch opening {
+            case .created(let pullRequest)?: return "Pull request #\(pullRequest.number) is open: \(pullRequest.url.absoluteString)"
+            case .browser(let url)?: return [note, "Open it here: \(url.absoluteString)"].compactMap { $0 }.joined(separator: " ")
+            case nil: throw Refusal(note ?? "Could not open a pull request.")
+            }
         case "project":
             return json(project(projectID))
         case "set":

@@ -178,6 +178,15 @@ final class MockGit: GitServicing {
         if let pullRequestError { throw pullRequestError }
         return openedPullRequests
     }
+    var createPullRequestError: Error?
+    func createPullRequest(repo: URL, github: String, base: String, branch: String, title: String, body: String) async throws -> PullRequest {
+        if let createPullRequestError { throw createPullRequestError }
+        calls.append("create pull request \(branch) into \(base) on \(github)")
+        let pullRequest = openedPullRequests[branch] ?? PullRequest(number: 12, url: URL(string: "https://github.com/\(github)/pull/12")!,
+                                                                    state: .open, headRefName: branch, headRefOid: "head")
+        openedPullRequests[branch] = pullRequest
+        return pullRequest
+    }
     func fetchPullRequest(repo: URL, number: Int, remote: String) async throws {
         calls.append("fetch pull request \(number)")
         if !fetchLeavesHeadMissing { headNeedsFetch = false }

@@ -75,6 +75,10 @@ public protocol GitServicing: Sendable {
     /// The repo's pull requests by head branch, the newest for each, from the GitHub CLI. `github` is
     /// "owner/repo". Throws if `gh` is missing, signed out or offline. Never asks for anything.
     func pullRequests(repo: URL, github: String) async throws -> [String: PullRequest]
+    /// `gh pr create` for `branch` (already pushed) into `base`, then the pull request as `gh` shows it.
+    /// An open one for the branch already is picked up instead. Never asks for anything, gives up after a
+    /// timeout. Throws `gh`'s output if it is missing, signed out or fails.
+    func createPullRequest(repo: URL, github: String, base: String, branch: String, title: String, body: String) async throws -> PullRequest
     /// Brings a pull request's head commit into the repo, also when its branch is gone from the remote.
     func fetchPullRequest(repo: URL, number: Int, remote: String) async throws
     /// Moves `branch` up to what the remote has, if that is a fast-forward; otherwise leaves it alone.

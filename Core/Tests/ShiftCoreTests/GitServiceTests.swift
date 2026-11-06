@@ -679,6 +679,11 @@ final class GitServiceTests: XCTestCase {
         XCTAssertEqual(try GitService.parsePullRequests("[]\n"), [:])
     }
 
+    func testCreatePullRequestArguments() {
+        XCTAssertEqual(GitService.createPullRequestArguments(github: "o/r", base: "main", branch: "shift/1", title: "Fix it", body: "Did it"),
+                       ["gh", "pr", "create", "-R", "o/r", "--base", "main", "--head", "shift/1", "--title", "Fix it", "--body", "Did it"])
+    }
+
     func testFastForwardFollowsTheRemoteOnly() async throws {
         let bare = root.appendingPathComponent("remote.git")
         try sh("init", "--bare", bare.path)
