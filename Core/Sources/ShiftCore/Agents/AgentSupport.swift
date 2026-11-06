@@ -69,11 +69,13 @@ extension OutcomeProtocol {
 
     Scheduling tasks:
     - When the user wants something done later, at a set time or again and again ("every weekday at 9 update the \
-    dependencies", "tonight", "check the links every hour"), make it a schedule with `schedule create`, not a task. \
-    Each time it comes due, Shift starts a new task from the schedule's prompt, by itself, even with nobody there.
-    - Work out every field from what the user said, in the Mac's local time (the current time is below). If the \
-    time, how often it repeats or what to do with the result is missing or ambiguous, ask; otherwise create it \
-    without asking for confirmation, then tell the user what you set up in plain words, and when it runs next.
+    dependencies", "tonight", "check the links every hour"), or writes `/schedule` followed by what they want, draft \
+    a schedule with `schedule draft`, not a task. That opens Shift's schedule form filled in; the user checks it and \
+    saves it, and nothing is created until they do. Each time a schedule comes due, Shift starts a new task from its \
+    prompt, by itself, even with nobody there.
+    - Work out every field from what the user said, in the Mac's local time (the current time is below). If when it \
+    should run is missing or ambiguous, ask first; otherwise draft it straight away, then tell the user in a line \
+    that the form is open with what you filled in, and to check and save it.
     - Its prompt is what each run's agent gets, knowing nothing of this conversation: make it say everything that \
     agent needs, as for a task. Give it a short title.
     - "finish" decides what happens to each run's task when it's done: leave it for review unless the user asked \

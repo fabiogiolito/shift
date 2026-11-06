@@ -12,6 +12,12 @@ struct ContentView: View {
     @State private var detailWidth: CGFloat = 0
     @State private var barHeight: CGFloat = 0
 
+    /// The project a selected row belongs to: a task's, or a schedule's.
+    private func owner(_ id: TaskItem.ID?) -> Project.ID? {
+        guard let id else { return nil }
+        return model.task(id)?.projectID ?? model.schedules.first { $0.selectionID == id }?.projectID
+    }
+
     var body: some View {
         let project = selectedProject.flatMap(model.project)
         NavigationSplitView {
@@ -49,6 +55,8 @@ struct ContentView: View {
                     ChatView(project: project).id(project.id)
                 } else if let selectedTask, let project, model.task(selectedTask)?.projectID == project.id {
                     TaskDetailView(taskID: selectedTask).id(selectedTask)
+                } else if let project, let schedule = model.schedules(in: project.id).first(where: { $0.selectionID == selectedTask }) {
+                    ScheduleDetailView(scheduleID: schedule.id, selection: $selectedTask).id(schedule.id)
                 } else {
                     EmptyState("No Task Selected", systemImage: "checklist")
                         // An empty detail column gives the toolbar nothing to anchor, and the task list's
@@ -80,18 +88,18 @@ struct ContentView: View {
         // Opens on the selected task's project; otherwise clearing a mismatched project would drop the task,
         // e.g. when a notification click reopens the window on a task in another project.
         .onAppear {
-            selectedProject = selectedProject ?? selectedTask.flatMap(model.task)?.projectID ?? model.projects.first?.id
+            selectedProject = selectedProject ?? owner(selectedTask) ?? model.projects.first?.id
         }
         .onChange(of: model.projects) {
             if selectedProject.flatMap(model.project) == nil { selectedProject = model.projects.first?.id }
         }
         // A notification click selects a task from outside; follow it to its project.
         .onChange(of: selectedTask) {
-            if let projectID = selectedTask.flatMap(model.task)?.projectID { selectedProject = projectID }
+            if let projectID = owner(selectedTask) { selectedProject = projectID }
         }
         .onChange(of: selectedProject) {
             // Every project has a chat: it stays selected.
-            if selectedTask != ChatRow.id, selectedTask.flatMap(model.task)?.projectID != selectedProject { selectedTask = nil }
+            if selectedTask != ChatRow.id, owner(selectedTask) != selectedProject { selectedTask = nil }
         }
         // ⇧⌘[ ⇧⌘] and ⌘[ ⌘]: wrap around, in the order the sidebar and the task list show.
         .focusedSceneValue(\.selectProject) { offset in
@@ -101,7 +109,7 @@ struct ContentView: View {
             selectedProject = ids[(index + offset + ids.count) % ids.count]
         }
         .focusedSceneValue(\.selectTask, project.map { project in { offset in
-            let ids = [ChatRow.id] + TaskListView.sections(model.tasks(in: project.id)).flatMap { $0.1.map(\.id) }
+            let ids = TaskListView.rowIDs(model, project: project.id)
             let index = selectedTask.flatMap(ids.firstIndex) ?? (offset > 0 ? -1 : 0)
             selectedTask = ids[(index + offset + ids.count) % ids.count]
         } })
@@ -109,6 +117,7 @@ struct ContentView: View {
         .focusedSceneValue(\.openRepository, project.map { project in {
             Task { if let url = await model.repositoryURL(projectID: project.id) { ExternalApps().openInBrowser(url) } }
         } })
+        .modifier(ScheduleFormPresenter(selectedProject: $selectedProject, selectedTask: $selectedTask))
         .alert("Something Went Wrong", isPresented: Binding(get: { model.lastError != nil },
                                                            set: { if !$0 { model.lastError = nil } })) {
             Button("OK") {}

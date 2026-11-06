@@ -321,3 +321,79 @@ public struct ScheduleTiming: Codable, Hashable, Sendable {
         return firstMatch + ((length - firstMatch) / 7) * 7
     }
 }
+
+// MARK: - Describing
+
+extension ScheduleTiming {
+    /// "Every weekday at 9:00", "Every hour from 13:00 to 17:00, 10 times", "Once on Fri 7 Nov at 9:00".
+    public func summary(calendar: Calendar = .current, locale: Locale = .current) -> String {
+        func time(_ date: Date) -> String { Self.timeString(date, calendar: calendar, locale: locale) }
+        func clock(_ time: TimeOfDay) -> String {
+            let date = calendar.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: start) ?? start
+            return Self.timeString(date, calendar: calendar, locale: locale)
+        }
+        let at = time(start)
+        guard let rule = `repeat` else {
+            let day = start.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+                .weekday(.abbreviated).day().month(.abbreviated))
+            return "Once on \(day) at \(at)"
+        }
+        let n = rule.interval
+        func every(_ one: String, _ many: String) -> String { n == 1 ? "Every \(one)" : "Every \(n) \(many)" }
+        var symbols = calendar
+        symbols.locale = locale
+        func names(_ days: [Weekday], short: Bool) -> String {
+            let list = short ? symbols.shortWeekdaySymbols : symbols.weekdaySymbols
+            return days.sorted { $0.number < $1.number }.map { list[$0.number - 1] }.formatted(.list(type: .and).locale(locale))
+        }
+        var text: String
+        switch rule.frequency {
+        case .hourly:
+            text = every("hour", "hours")
+            if n == 1, calendar.component(.minute, from: start) != 0 {
+                text += " at :" + String(format: "%02d", calendar.component(.minute, from: start))
+            }
+        case .daily:
+            text = every("day", "days") + " at \(at)"
+        case .weekly:
+            let days = rule.weekdays.isEmpty ? [Weekday.allCases[calendar.component(.weekday, from: start) - 1]] : rule.weekdays
+            let weekdays: Set<Weekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
+            if n == 1 && Set(days) == weekdays {
+                text = "Every weekday"
+            } else if n == 1 && Set(days).count == 7 {
+                text = "Every day"
+            } else if n == 1 && days.count == 1 {
+                text = "Every \(names(days, short: false))"
+            } else {
+                text = every("week", "weeks") + " on \(names(days, short: days.count > 2))"
+            }
+            text += " at \(at)"
+        case .monthly:
+            let on: String
+            if let ordinal = rule.ordinal {
+                on = "the \(ordinal.week.rawValue) \(ordinal.day.map { names([$0], short: false) } ?? "day")"
+            } else {
+                let days = rule.monthDays.isEmpty ? [calendar.component(.day, from: start)] : rule.monthDays.sorted()
+                on = "the " + days.map(Self.ordinal).formatted(.list(type: .and).locale(locale))
+            }
+            text = every("month", "months") + " on \(on) at \(at)"
+        }
+        if let between { text += " from \(clock(between.from)) to \(clock(between.to))" }
+        if let endAfter { text += endAfter == 1 ? ", once" : ", \(endAfter) times" }
+        if let endOn {
+            text += ", until " + endOn.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+                .day().month(.abbreviated))
+        }
+        return text
+    }
+
+    static func timeString(_ date: Date, calendar: Calendar, locale: Locale) -> String {
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale, calendar: calendar, timeZone: calendar.timeZone))
+    }
+
+    /// 1st, 2nd, 3rd, 4th, 11th, 21st…
+    static func ordinal(_ day: Int) -> String {
+        let suffix = (11...13).contains(day % 100) ? "th" : [1: "st", 2: "nd", 3: "rd"][day % 10] ?? "th"
+        return "\(day)\(suffix)"
+    }
+}

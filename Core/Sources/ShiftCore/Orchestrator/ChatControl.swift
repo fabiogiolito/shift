@@ -39,12 +39,12 @@ extension AppModel {
     agent, model and permissions, and apply their finish action when it's done. <id> can be its first characters.
       schedules                the project's schedules, as JSON, with when each runs next
       schedule <id>            one in full, with its runs: when due, started, task, outcome and why
-      schedule create '<json>' create one; prints its id
+      schedule draft '<json>'  open the schedule form filled in with this, for the user to check and save
       schedule edit <id> '<json>'
                                change the fields given (a JSON merge patch: null clears one); applies from the next run
       schedule pause|resume|delete <id>
       schedule run <id>        start a run now, whatever its timing
-    A schedule's JSON (only "prompt" and "timing.start" are required; the rest default to the project's):
+    A schedule's JSON (only "prompt" and "timing.start" are required, but give a "title"; the rest default to the project's):
       {"title", "prompt", "baseBranch", "agent", "model", "permissions",
        "timing": {"start": "2026-11-07T09:00" (local time; the first run, or the only one),
                   "repeat": {"frequency": "hourly|daily|weekly|monthly", "interval": 1,
@@ -259,6 +259,15 @@ extension AppModel {
             addSchedule(schedule)
             let next = schedule.nextRun().map { "Next run: \(Self.controlDateFormatter.string(from: $0))." } ?? "It has no runs to come."
             return "Created schedule \(schedule.id.uuidString). \(next)"
+        case "draft":
+            guard let defaults = newSchedule(projectID: projectID) else {
+                throw Refusal("The project no longer exists.")
+            }
+            let fields = try jsonArgument()
+            guard (fields["timing"] as? [String: Any])?["start"] != nil else { throw Refusal("Missing timing.start.") }
+            scheduleDraft = try await validSchedule(patching: defaults, with: fields)
+            return "The schedule form is open in Shift for the user, filled in. Nothing is created until they save it "
+                + "(then `schedules` lists it). It runs: \(scheduleDraft?.timing.summary() ?? "")"
         case "edit":
             let old = try scheduleArgument()
             let schedule = try await validSchedule(patching: old, with: try jsonArgument())

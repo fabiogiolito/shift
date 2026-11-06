@@ -17,17 +17,28 @@ struct TaskListView: View {
         let all = model.tasks(in: project.id)
         let tasks = Self.filter(all, tags: tagFilter)
         let sections = Self.sections(tasks)
+        let schedules = Self.schedules(model.schedules(in: project.id))
         // The list doesn't re-measure rows and headers that are inserted or moved in place (a task moving to a new
         // section came out clipped), so a change in which task sits in which section rebuilds it at the right sizes.
         // In a ZStack so the rebuild stops there: bars attached to the list itself are rebuilt with it, and the
         // new task field would lose what is being typed in it, and its focus.
         // A description or tags add lines to a row, so one arriving or going rebuilds it too.
         let key = sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined()
+            + "S:\(schedules.map(\.id))"
         ZStack {
             List(selection: $selection) {
                 ChatRow(replying: model.replyingChats.contains(project.id),
                         waiting: model.chatApprovalRequest(projectID: project.id) != nil).tag(ChatRow.id)
-                ForEach(sections, id: \.0) { section($0.0, $0.1) }
+                ForEach(sections.dropLast(), id: \.0) { section($0.0, $0.1) }
+                // Above Recently Closed: what's still to come.
+                if !schedules.isEmpty {
+                    Section {
+                        ForEach(schedules) { ScheduleRow(schedule: $0).tag($0.selectionID) }
+                    } header: {
+                        Text("Scheduled").padding(.top, 10).padding(.bottom, 4)
+                    }
+                }
+                if let closed = sections.last { section(closed.0, closed.1) }
             }
             .id(heldKey ?? key)
             .environment(\.holdTaskListLayout) { heldKey = $0 ? key : nil }
@@ -41,7 +52,7 @@ struct TaskListView: View {
             if tasks.isEmpty && !all.isEmpty {
                 EmptyState("No Matching Tasks", systemImage: "line.3.horizontal.decrease.circle",
                            description: Text("No tasks have the chosen tags."))
-            } else if tasks.isEmpty {
+            } else if tasks.isEmpty && schedules.isEmpty {
                 EmptyState("No Tasks", systemImage: "tray", description: Text("Describe a task below to start one."))
             }
         }
@@ -136,6 +147,18 @@ struct TaskListView: View {
         ]
     }
 
+    /// Soonest next run first; paused ones and those that won't run again after them.
+    static func schedules(_ schedules: [Schedule]) -> [Schedule] {
+        schedules.sorted { ($0.nextRun() ?? .distantFuture, $0.title) < ($1.nextRun() ?? .distantFuture, $1.title) }
+    }
+
+    /// Every row's selection, in the order the list shows them: the chat, tasks, schedules, closed tasks. For ⌘[ and ⌘].
+    static func rowIDs(_ model: AppModel, project: Project.ID) -> [TaskItem.ID] {
+        let sections = Self.sections(model.tasks(in: project))
+        return [ChatRow.id] + sections.dropLast().flatMap { $0.1.map(\.id) }
+            + schedules(model.schedules(in: project)).map(\.selectionID) + (sections.last?.1.map(\.id) ?? [])
+    }
+
     private func pushButton(_ state: AppModel.PushState) -> some View {
         let title = state.unpushed == 0 ? "Nothing to push"
             : "Push \(state.unpushed) \(state.unpushed == 1 ? "commit" : "commits") to "
@@ -183,7 +206,13 @@ struct TaskListView: View {
     private var newTaskField: some View {
         PromptField(placeholder: "New task", submitTitle: "Start", isNewTaskField: true,
                     draftKey: "project \(project.id)") { text, attachments in
-            if let id = model.createTask(projectID: project.id, prompt: text, attachments: attachments) { selection = id }
+            // `/schedule` alone opens the schedule form; with words, the chat drafts it, asking what it needs to know.
+            if let words = AppModel.command("schedule", text) {
+                model.sendChat(projectID: project.id, text: text)
+                if !words.isEmpty { selection = ChatRow.id }
+            } else if let id = model.createTask(projectID: project.id, prompt: text, attachments: attachments) {
+                selection = id
+            }
         }
     }
 }
@@ -207,6 +236,10 @@ struct TaskRow: View {
                            mergedByPullRequest: task.mergedPullRequest != nil)
                 Text(task.title).lineLimit(1)
                 Spacer()
+                if let schedule = task.scheduleID.flatMap(model.schedule) {
+                    Image(systemName: schedule.symbol).imageScale(.small).foregroundStyle(.secondary)
+                        .help("Started by the schedule “\(schedule.title)”")
+                }
                 TaskNumber(task: task)
             }
             // Two lines tall when there is one, nothing when not: the list rebuilds when a description arrives.

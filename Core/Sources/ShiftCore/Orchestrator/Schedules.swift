@@ -19,6 +19,46 @@ extension AppModel {
 
     // MARK: Editing
 
+    /// A blank schedule for the form: the project's agent, model, permissions and base, starting at the next full hour.
+    public func newSchedule(projectID: Project.ID, now: Date = Date()) -> Schedule? {
+        guard let project = project(projectID) else { return nil }
+        let hour = Calendar.current.dateInterval(of: .hour, for: now)?.end ?? now
+        return Schedule(projectID: projectID, title: "", prompt: "", baseBranch: project.baseBranch, agent: project.defaultAgent,
+                        model: project.models[project.defaultAgent], permissions: project.permissions,
+                        timing: ScheduleTiming(start: hour))
+    }
+
+    /// Create Schedule from This: a draft that does what the task was asked to do, with its agent, model, permissions
+    /// and base. Several prompts become one, in order, for the user to tidy up in the form.
+    public func scheduleDraft(fromTask taskID: TaskItem.ID) -> Schedule? {
+        guard let task = task(taskID), var schedule = newSchedule(projectID: task.projectID) else { return nil }
+        let prompts = task.prompts.filter { !$0.isPending }.map(\.agentText).filter { !$0.isEmpty }
+        schedule.title = task.title
+        schedule.prompt = prompts.count == 1 ? prompts[0]
+            : "Do the following, in order:\n\n" + prompts.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n\n")
+        schedule.agent = task.agent
+        schedule.model = task.model
+        schedule.permissions = task.permissions ?? schedule.permissions
+        schedule.baseBranch = project(task.projectID).map(task.base(in:)) ?? schedule.baseBranch
+        return schedule
+    }
+
+    /// What the form saves: a new schedule, or changes to one. An empty title becomes the prompt's first words.
+    public func saveSchedule(_ schedule: Schedule) {
+        var schedule = schedule
+        schedule.prompt = schedule.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        schedule.title = schedule.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if schedule.title.isEmpty { schedule.title = TaskItem.title(for: schedule.prompt) }
+        if self.schedule(schedule.id) == nil {
+            // Created now: a start in the minute before saving still runs.
+            schedule.createdAt = Date()
+            schedule.checkedUntil = schedule.createdAt.addingTimeInterval(-60)
+            addSchedule(schedule)
+        } else {
+            updateSchedule(schedule)
+        }
+    }
+
     public func addSchedule(_ schedule: Schedule) {
         schedules.append(schedule)
         schedulesChanged(edited: true)

@@ -72,6 +72,9 @@ public final class AppModel {
 
     /// Every project's schedules (docs/specs/scheduled-tasks.md). Changed through the methods in Schedules.swift.
     public internal(set) var schedules: [Schedule] = []
+    /// A schedule waiting in the schedule form for the user to check and save: new, or a copy of one being edited.
+    /// Set by `/schedule`, the project chat (`shiftctl schedule draft`) and Create Schedule from This; the form clears it.
+    public var scheduleDraft: Schedule?
     /// Kept by Schedules.swift: see AppState.
     @ObservationIgnored var lastAlive: Date?
     @ObservationIgnored var asleepSince: Date?
@@ -641,7 +644,8 @@ public final class AppModel {
     }
 
     /// What follows `/<name>` in a message, e.g. the prompt of `/task <prompt>`, or nil when the message isn't that command.
-    nonisolated static func command(_ name: String, _ text: String) -> String? {
+    /// The text after `/name` if `text` is that command, else nil.
+    public nonisolated static func command(_ name: String, _ text: String) -> String? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines), prefix = "/" + name
         guard text.hasPrefix(prefix), text.count == prefix.count || text.dropFirst(prefix.count).first!.isWhitespace else { return nil }
         return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1594,6 +1598,11 @@ public final class AppModel {
     public func sendChat(projectID: Project.ID, text: String, attachments: [String] = []) {
         if let prompt = Self.command("task", text) {
             createTask(projectID: projectID, prompt: prompt, attachments: attachments)
+            return
+        }
+        // `/schedule` alone opens an empty form; with words, the chat's agent drafts it from them.
+        if Self.command("schedule", text) == "" {
+            scheduleDraft = newSchedule(projectID: projectID)
             return
         }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)

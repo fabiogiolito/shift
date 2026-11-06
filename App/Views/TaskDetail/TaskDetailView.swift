@@ -44,6 +44,8 @@ struct TaskDetailView: View {
     /// The screenshot open in Quick Look.
     @State private var screenshotPreview: URL?
     @State private var screenshotsExpanded = false
+    /// The window's selection, so the link to the schedule that started this task can open it.
+    @AppStorage("selectedTask") private var selectedRow: TaskItem.ID?
 
     private let apps = ExternalApps()
 
@@ -185,6 +187,14 @@ struct TaskDetailView: View {
                          onColor: { model.setTagColor(projectID: project.id, $0, $1) })
             }
             statusLine(task, project)
+            if let schedule = task.scheduleID.flatMap(model.schedule) {
+                Button { selectedRow = schedule.selectionID } label: {
+                    Label("Started by the schedule “\(schedule.title)” \(Schedule.shortDate(task.createdAt).lowercasedFirst)",
+                          systemImage: schedule.symbol)
+                }
+                .buttonStyle(.link)
+                .help("Open the schedule")
+            }
             actions(task, project)
         }
     }

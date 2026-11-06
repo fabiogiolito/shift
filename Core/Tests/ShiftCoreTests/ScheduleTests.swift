@@ -541,9 +541,76 @@ final class ScheduleRunTests: XCTestCase {
         XCTAssertEqual(model.tasks.count, 1)
     }
 
+    func testChatDraftsOpenTheFormWithoutCreatingAnything() async {
+        let reply = await control("schedule", "draft", #"{"title": "Deps", "prompt": "Update", "timing": {"start": "2030-01-07T09:00", "repeat": {"frequency": "daily"}}}"#)
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertTrue(reply.text.contains("Every day at"), reply.text)
+        XCTAssertTrue(model.schedules.isEmpty)
+        let draft = try! XCTUnwrap(model.scheduleDraft)
+        XCTAssertEqual(draft.title, "Deps")
+        model.saveSchedule(draft)
+        XCTAssertEqual(model.schedules.map(\.id), [draft.id])
+        // Saved again from Edit: updated, not added.
+        var edited = draft
+        edited.title = ""
+        model.saveSchedule(edited)
+        XCTAssertEqual(model.schedules.count, 1)
+        XCTAssertEqual(model.schedules.first?.title, "Update")
+    }
+
+    func testSlashScheduleAloneOpensAnEmptyForm() {
+        model.sendChat(projectID: project.id, text: "/schedule")
+        XCTAssertEqual(model.scheduleDraft?.prompt, "")
+        XCTAssertEqual(model.scheduleDraft?.permissions, .auto)
+        XCTAssertEqual(Calendar.current.component(.minute, from: model.scheduleDraft!.timing.start), 0)
+        XCTAssertTrue(model.chat(projectID: project.id)?.prompts.isEmpty ?? true)
+    }
+
+    func testDraftFromATaskJoinsItsPrompts() async {
+        agent.scripts = [[.emit(.finished(.completed(summary: "Done")))], [.emit(.finished(.completed(summary: "Done")))]]
+        let id = model.createTask(projectID: project.id, prompt: "Make it blue")!
+        await waitFor("done") { self.model.task(id)?.status == .completed }
+        model.sendPrompt(taskID: id, text: "Darker")
+        await waitFor("done again") { self.model.task(id)?.status == .completed && self.model.task(id)?.prompts.count == 2 }
+        let draft = model.scheduleDraft(fromTask: id)!
+        XCTAssertEqual(draft.prompt, "Do the following, in order:\n\n1. Make it blue\n\n2. Darker")
+        XCTAssertEqual(draft.title, model.task(id)?.title)
+        XCTAssertEqual(draft.permissions, .auto)
+    }
+
     func testControlRefusesWithoutAStart() async {
         let reply = await control("schedule", "create", #"{"prompt": "Hi"}"#)
         XCTAssertFalse(reply.ok)
         XCTAssertEqual(reply.text, "Missing timing.start.")
+    }
+}
+
+final class ScheduleSummaryTests: XCTestCase {
+    let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Lisbon")!
+        return calendar
+    }()
+    let locale = Locale(identifier: "en_GB")
+
+    func timing(_ rule: ScheduleTiming.Recurrence?, between: (Int, Int)? = nil, endAfter: Int? = nil) -> String {
+        // Thursday 8 January 2026, 9:00.
+        let start = calendar.date(from: DateComponents(year: 2026, month: 1, day: 8, hour: 9))!
+        return ScheduleTiming(start: start, repeat: rule, between: between.map { .init(from: .init($0.0), to: .init($0.1)) },
+                              endAfter: endAfter).summary(calendar: calendar, locale: locale)
+    }
+
+    func testSummaries() {
+        XCTAssertEqual(timing(nil), "Once on Thu 8 Jan at 9:00")
+        XCTAssertEqual(timing(.init(.hourly), between: (13, 17)), "Every hour from 13:00 to 17:00")
+        XCTAssertEqual(timing(.init(.hourly, interval: 3), endAfter: 5), "Every 3 hours, 5 times")
+        XCTAssertEqual(timing(.init(.daily)), "Every day at 9:00")
+        XCTAssertEqual(timing(.init(.weekly)), "Every Thursday at 9:00")
+        XCTAssertEqual(timing(.init(.weekly, weekdays: [.friday, .monday, .tuesday, .wednesday, .thursday])), "Every weekday at 9:00")
+        XCTAssertEqual(timing(.init(.weekly, interval: 2, weekdays: [.tuesday, .thursday])), "Every 2 weeks on Tuesday and Thursday at 9:00")
+        XCTAssertEqual(timing(.init(.monthly)), "Every month on the 8th at 9:00")
+        XCTAssertEqual(timing(.init(.monthly, monthDays: [22, 1, 3])), "Every month on the 1st, 3rd and 22nd at 9:00")
+        XCTAssertEqual(timing(.init(.monthly, ordinal: .init(.last, .friday))), "Every month on the last Friday at 9:00")
+        XCTAssertEqual(timing(.init(.monthly, interval: 3, ordinal: .init(.first))), "Every 3 months on the first day at 9:00")
     }
 }

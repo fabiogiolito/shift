@@ -50,6 +50,8 @@ struct TaskActionItems: View {
         if actions.unchanged && !task.status.isClosed {
             Button("Archive Task") { Task { await model.archive(taskID: task.id) } }
         }
+        Button("Create Schedule from This…") { model.scheduleDraft = model.scheduleDraft(fromTask: task.id) }
+        Divider()
         Button("Tags…") { actions.editingTags = true }
         Button("Rename Task…") { actions.renaming = true }
         Button("Delete Task…", role: .destructive) { actions.confirmingDelete = true }

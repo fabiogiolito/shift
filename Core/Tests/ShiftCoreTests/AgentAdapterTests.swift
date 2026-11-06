@@ -502,7 +502,7 @@ final class AgentAdapterTests: XCTestCase {
         schedule.paused = true
         XCTAssertTrue(OutcomeProtocol.chatContext(tasks: [], project: project, schedules: [schedule], now: now).contains("Nightly deps: paused"))
         XCTAssertTrue(OutcomeProtocol.chatContext(tasks: [], project: project).contains("Schedules:\nNone"))
-        XCTAssertTrue(OutcomeProtocol.chatInstructions.contains("schedule create"))
+        XCTAssertTrue(OutcomeProtocol.chatInstructions.contains("schedule draft"))
     }
 
     // MARK: Live chat (SHIFT_LIVE_AGENT_TESTS=1)
