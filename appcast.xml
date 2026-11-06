@@ -334,5 +334,21 @@
 - Messages stay wrapped to their width when you expand steps]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.9/Shift-0.2.9.zip" sparkle:edSignature="vOzF1iRV7GDYwZdp+KvdCyVkeD3ufxJiuqmHeRfUvCtzIgmi6zJYDSvMiWuH62gpSETkCP/ObTqYL/jT/q6yDw==" length="4779393" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.10</title>
+      <pubDate>Fri, 06 Nov 2026 17:00:50 +0000</pubDate>
+      <sparkle:version>27</sparkle:version>
+      <sparkle:shortVersionString>0.2.10</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- A new setup assistant opens on first launch and installs what's missing, such as Node.js, Claude Code or Codex, the GitHub CLI and Git settings, and signs you in
+- Tag tasks with `/tag` or from a task's menu, give each tag a color, and filter the task list by tag
+- Archive a finished task that has no changes, without merging it. Merged and archived tasks both appear under Recently Closed
+- Pull requests now open with the GitHub CLI when it's available, and fall back to GitHub's pre-filled page in the browser
+- Task dev servers start only when you need them: when you open a task, when screenshots need one, or when the agent asks for one
+- Chat follows new messages as they come in, and a button takes you back to the newest message when you've scrolled up
+- Install and connect Tailscale from Settings › Setup, which now updates as you fix each item
+- Shift explains notification and folder access before macOS asks for permission]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.10/Shift-0.2.10.zip" sparkle:edSignature="kc9Me+NbNlqSurwzOe/u1TGc/jC0r2HHGcbOTRfuVDyZbeRgmAy3fyIM+qneOzibFezegJr/UQjwI+ao0kWuAA==" length="5044293" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
