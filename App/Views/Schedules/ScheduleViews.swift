@@ -264,6 +264,11 @@ struct ScheduleForm: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // A sheet has no title bar: say what it is, since several places open it.
+            Text(isNew ? "New Schedule" : "Edit Schedule")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.horizontal, .top], 24)
             Form {
                 // What
                 TextField("Name:", text: $draft.title, prompt: Text("Named after the prompt"))
