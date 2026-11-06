@@ -47,7 +47,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "Each agent needs your account. Signing in opens Terminal."
         case .gitIdentity: "Every commit is signed with a name and email."
         case .github: "Lets Shift open pull requests, follow them, and push your branches."
-        case .node: "Runs most web projects' dev servers, and installs Codex."
+        case .node: "Most web projects need it to run."
         case .packageManager: "It installs its packages with a package manager Node.js doesn't include."
         case .xcode: "It builds a native app, which needs Xcode."
         }
@@ -109,7 +109,7 @@ enum SetupState: Hashable {
 
 extension AgentKind {
     var tagline: String {
-        self == .claudeCode ? "Anthropic's agent. Installs on its own, no Node.js needed." : "OpenAI's agent. Installs with npm."
+        self == .claudeCode ? "Anthropic's coding agent." : "OpenAI's coding agent."
     }
 }
 
