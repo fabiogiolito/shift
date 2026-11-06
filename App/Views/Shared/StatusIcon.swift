@@ -87,18 +87,18 @@ struct TaskTags: View {
     var onDelete: ((String) -> Void)?
     /// Given, right-clicking a tag offers to change its color, for every task in the project.
     var onColor: ((String, TagColor) -> Void)?
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(tags ?? [], id: \.self) { tag in
-                let color = (project?.color(ofTag: tag) ?? .gray).color
-                Text(tag).font(.caption2).fixedSize().foregroundStyle(color)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(color.opacity(0.15), in: .capsule)
+                TagCapsule(name: tag, color: project?.color(ofTag: tag) ?? .gray)
                     .contextMenu {
                         if let onColor {
                             Picker("Color", selection: Binding { project?.color(ofTag: tag) ?? .gray } set: { onColor(tag, $0) }) {
-                                ForEach(TagColor.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+                                ForEach(TagColor.allCases, id: \.self) { color in
+                                    preview(color).accessibilityLabel(color.rawValue.capitalized).tag(color)
+                                }
                             }
                             .pickerStyle(.menu)
                         }
@@ -106,6 +106,28 @@ struct TaskTags: View {
                     }
             }
         }
+    }
+
+    /// Menus drop custom colors and backgrounds, so each option is a picture of the tag in that color.
+    private func preview(_ color: TagColor) -> Image {
+        let renderer = ImageRenderer(content: TagCapsule(name: color.rawValue.capitalized, color: color, font: .body)
+            .environment(\.colorScheme, colorScheme))
+        renderer.scale = 2
+        return renderer.cgImage.map { Image(decorative: $0, scale: 2) } ?? Image(systemName: "circle.fill")
+    }
+}
+
+/// One tag. Its text is the color mixed toward the label color, so light colors like yellow stay readable.
+struct TagCapsule: View {
+    let name: String
+    let color: TagColor
+    var font: Font = .caption2
+
+    var body: some View {
+        Text(name).font(font).fontWeight(.medium).fixedSize()
+            .foregroundStyle(color.color.mix(with: .primary, by: 0.45))
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(color.color.opacity(0.22), in: .capsule)
     }
 }
 
