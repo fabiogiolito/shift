@@ -159,13 +159,13 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(task.worktreePath, ShiftPaths.worktree(project: project, taskID: 3001,
                                                               root: temp.appendingPathComponent("worktrees")).path)
         XCTAssertEqual(task.port, 3001)
-        XCTAssertEqual(task.serverPID, servers.running[3001])
+        XCTAssertNil(task.serverPID, "started when opened, or when the agent asks")
         XCTAssertEqual(task.sessionID, "s1")
         XCTAssertEqual(task.summary, "Gap is 4px")
         XCTAssertNil(task.activity)
         XCTAssertNil(task.workingSince)
         XCTAssertEqual(git.calls, ["create shift/3001 from main", "commit 3001"])
-        XCTAssertEqual(servers.starts, [.init(taskID: 3001, command: "pnpm dev", port: 3001)])
+        XCTAssertTrue(servers.starts.isEmpty)
         XCTAssertEqual(agent.requests.count, 1)
         XCTAssertNil(agent.requests[0].sessionID)
         XCTAssertEqual(agent.requests[0].prompt, "Set the gap to 4px. Thanks!")
@@ -212,9 +212,9 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(agent.requests[1].prompt, "The first")
         XCTAssertEqual(model.task(id)?.prompts.map(\.text), ["Add an empty state", "The first"])
         XCTAssertEqual(notifier.notifications.map(\.body), ["Add an empty state needs your attention.", "Add an empty state is ready for review."])
-        // Same worktree and server throughout.
+        // Same worktree throughout, and no server: nothing asked for one.
         XCTAssertEqual(git.calls.filter { $0.hasPrefix("create") }.count, 1)
-        XCTAssertEqual(servers.starts.count, 1)
+        XCTAssertTrue(servers.starts.isEmpty)
     }
 
     func testOptionsAreSetWithAQuestionAndClearedByTheAnswer() async {
@@ -306,7 +306,7 @@ final class AppModelTests: XCTestCase {
         gate.open()
         await waitForStatus(id, .completed)
         XCTAssertEqual(store.output(id), "$ pnpm install\nDone in 2s\n")
-        XCTAssertEqual(servers.starts.count, 1)
+        XCTAssertTrue(servers.starts.isEmpty)
         XCTAssertEqual(agent.requests.count, 1)
         XCTAssertNil(model.task(id)?.activity)
 
@@ -524,6 +524,8 @@ final class AppModelTests: XCTestCase {
         servers.logs[3001] = "zsh: command not found: pnpm"
         let id = model.createTask(projectID: project.id, prompt: "Do it")!
         await waitForStatus(id, .completed)
+        await model.restartServer(taskID: id)
+        XCTAssertEqual(model.task(id)?.status, .completed)
         XCTAssertNil(model.task(id)?.serverPID)
         XCTAssertEqual(store.output(id), "Dev server failed to start: pnpm: command not found\n")
         let running = await model.isServerRunning(taskID: id)
@@ -541,6 +543,7 @@ final class AppModelTests: XCTestCase {
 
     func testServerThatDiesIsReportedNotRunning() async {
         let id = await createCompletedTask()
+        await model.restartServer(taskID: id)
         let running = await model.isServerRunning(taskID: id)
         XCTAssertTrue(running)
         servers.crash(taskID: id)
@@ -550,6 +553,7 @@ final class AppModelTests: XCTestCase {
 
     func testServerThatRunsButDoesNotAnswerIsReported() async {
         let id = await createCompletedTask()
+        await model.restartServer(taskID: id)
         let answering = await model.isServerAnswering(taskID: id)
         XCTAssertTrue(answering)
         ports.silent = [model.task(id)!.port!]
@@ -951,6 +955,7 @@ final class AppModelTests: XCTestCase {
 
     func testMergeFailureLeavesStatusAndReportsError() async {
         let id = await createCompletedTask()
+        await model.restartServer(taskID: id)
         git.mergeError = MockError("base has uncommitted changes")
         await model.merge(taskID: id)
 
@@ -1003,7 +1008,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(notifier.notifications.isEmpty)
         XCTAssertEqual(store.state.tasks.first?.status, .blocked)
         // Stopping keeps the task's resources: it can be restarted.
-        XCTAssertNotNil(servers.running[id])
+        XCTAssertTrue(git.existingBranches.contains("shift/\(id)"))
     }
 
     func testStoppedTaskRestartsWithAPrompt() async {
@@ -1057,7 +1062,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(git.calls, ["create shift/3001 from main", "remove shift/3001",
                                    "create shift/3001 from main", "commit 3001"])
         XCTAssertEqual(agent.requests.map(\.prompt), ["Do it\n\nGo on"])
-        XCTAssertNotNil(servers.running[id])
+        XCTAssertNotNil(model.task(id)?.port)
     }
 
     // MARK: Delete
@@ -1128,8 +1133,8 @@ final class AppModelTests: XCTestCase {
 
         model.sendPrompt(taskID: 2001, text: "Continue")
         await waitForStatus(2001, .completed)
-        XCTAssertEqual(servers.starts, [.init(taskID: 2001, command: "pnpm dev", port: 2001)], "The agent's run starts it")
-        XCTAssertEqual(model.task(2001)?.serverPID, servers.running[2001])
+        XCTAssertTrue(servers.starts.isEmpty, "The agent's run doesn't start it either")
+        XCTAssertNil(model.task(2001)?.serverPID)
         XCTAssertEqual(agent.requests.first?.sessionID, "s9")
         XCTAssertEqual(agent.requests.first?.prompt, "Continue")
         XCTAssertFalse(git.calls.contains { $0.hasPrefix("create") })
@@ -1384,6 +1389,7 @@ final class AppModelTests: XCTestCase {
     func testATaskServerThatLosesItsPortMovesToAFreeOne() async throws {
         model.baseServerPoll = .milliseconds(1)
         let id = await createCompletedTask()
+        await model.restartServer(taskID: id)
         let port = try XCTUnwrap(model.task(id)?.port)
         let starts = servers.starts.count
 
@@ -1437,6 +1443,7 @@ final class AppModelTests: XCTestCase {
     func testProjectWithoutServerCommandStillGetsAServer() async {
         useNoServerCommand()
         let id = await createCompletedTask()
+        await model.restartServer(taskID: id)
         XCTAssertEqual(servers.starts, [.init(taskID: id, command: ProjectSetup.serverCommand(for: project), port: id)])
         XCTAssertEqual(servers.starts[0].command, ProjectSetup.staticServer)
         XCTAssertEqual(model.task(id)?.serverPID, servers.running[id])
@@ -1445,6 +1452,9 @@ final class AppModelTests: XCTestCase {
     func testServerSwitchesToTheDevScriptTheAgentCreated() async throws {
         useNoServerCommand()
         let (id, gate) = await createPausedTask()
+        XCTAssertTrue(servers.starts.isEmpty)
+        // Started (by the user, or the agent) while the agent works.
+        await model.restartServer(taskID: id)
         XCTAssertEqual(servers.starts.map(\.command), [ProjectSetup.staticServer])
 
         // The agent scaffolds a Next.js app in the empty folder, without installing it.
@@ -1700,7 +1710,7 @@ final class AppModelTests: XCTestCase {
         await waitForStatus(2001, .completed)
         XCTAssertEqual(Array(git.calls.prefix(2)), ["add shift/2001", "exclude gone"])
         XCTAssertEqual(servers.runs.count, 1)
-        XCTAssertEqual(servers.starts.count, 1)
+        XCTAssertTrue(servers.starts.isEmpty)
         XCTAssertEqual(agent.requests.first?.sessionID, "s9", "the branch still has the work: same session")
         XCTAssertEqual(agent.requests.first?.worktree.path, temp.path + "/gone")
     }
@@ -1975,8 +1985,9 @@ final class AppModelTests: XCTestCase {
 
     func testRestartServer() async {
         let id = await createCompletedTask()
+        XCTAssertTrue(servers.starts.isEmpty)
         await model.restartServer(taskID: id)
-        XCTAssertEqual(servers.starts.count, 2)
+        XCTAssertEqual(servers.starts.count, 1)
         XCTAssertEqual(model.task(id)?.serverPID, servers.running[id])
 
         servers.startError = MockError("port in use")
@@ -2622,7 +2633,7 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(notifier.notifications.count, notified, "No notification when a reply ends, even a failed one.")
         XCTAssertEqual(model.attentionCount, 1)
         XCTAssertEqual(git.calls.filter { $0.contains(temp.lastPathComponent) }, [], "It never touches git.")
-        XCTAssertEqual(servers.starts.count, 1, "Only the task's server.")
+        XCTAssertTrue(servers.starts.isEmpty, "No servers: nothing asked for one.")
     }
 }
 

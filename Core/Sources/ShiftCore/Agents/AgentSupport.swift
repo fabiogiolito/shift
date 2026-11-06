@@ -16,8 +16,10 @@ extension OutcomeProtocol {
     /// `firstTurn`: the task has no title or description of its own yet (new, or created before agents wrote them).
     /// `description`: the one it has, for the agent to build on; a new session has no memory of writing it.
     /// `screenshots`: how this turn's are taken, and what the agent has to do for them.
-    static func instructions(firstTurn: Bool, description: String? = nil, screenshots: ScreenshotRequest? = nil) -> String {
-        var text = outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
+    /// `server`: the task has a dev server, which the agent starts with `shiftctl server` if it needs it.
+    static func instructions(firstTurn: Bool, description: String? = nil, screenshots: ScreenshotRequest? = nil,
+                             server: Bool = false) -> String {
+        var text = (server ? devServer + "\n\n" : "") + outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
         switch screenshots {
         case .page: text += "\n\n" + namePage
         case .app(let wantsBefore): text += "\n\n" + shootApp(wantsBefore: wantsBefore)
@@ -186,11 +188,17 @@ extension OutcomeProtocol {
         """
     }
 
+    static let devServer = """
+    The project's dev server is off until something needs it. If you need it running, for example to check your \
+    work in a browser, run `\(ShiftPaths.controlScript.path) server`: it starts it and prints its address once it \
+    answers. Never start a dev server yourself. Don't start it at all if you don't need it.
+    """
+
     static let outcome = """
     You are running unattended inside a task-management app. Nobody can answer questions while you \
     work. Only ask a question when you truly cannot proceed without a decision from the user. When the work is done, commit it with git. \
     Your turn ending means the task is finished: never end it while a command or subagent you started is still running in the background; \
-    wait for it and use its result first. The app runs the project's dev server itself, so do not start one.
+    wait for it and use its result first.
 
     End your final message with exactly one of these blocks, as the last thing you write:
 

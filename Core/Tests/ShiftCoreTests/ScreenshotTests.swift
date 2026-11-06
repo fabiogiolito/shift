@@ -7,6 +7,7 @@ final class ScreenshotTests: XCTestCase {
     var git: MockGit!
     var agent: MockAgent!
     var shots: MockScreenshots!
+    var servers: MockServers!
     var model: AppModel!
     var project: Project!
     var temp: URL!
@@ -28,7 +29,8 @@ final class ScreenshotTests: XCTestCase {
     func startModel() async {
         let store = MockStore()
         store.state = AppState(projects: [project])
-        model = AppModel(services: Services(git: git, agents: [.claudeCode: agent], servers: MockServers(), ports: MockPorts(),
+        servers = MockServers()
+        model = AppModel(services: Services(git: git, agents: [.claudeCode: agent], servers: servers, ports: MockPorts(),
                                             notifier: MockNotifier(), store: store, screenshots: shots),
                          worktrees: temp.appendingPathComponent("worktrees"))
         await model.start()
@@ -56,6 +58,7 @@ final class ScreenshotTests: XCTestCase {
 
     func testFirstPromptTakesABeforeAndAnAfterOfTheNamedPage() async {
         let id = await firstTurn(page: "/pricing", changes: change, captures: 1)
+        XCTAssertEqual(servers.starts.count, 1, "Started for the before, once the agent named a page")
         XCTAssertEqual(agent.requests[0].screenshots, .page)
         XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [true, false])
         XCTAssertEqual(shots.captured.map(\.path), ["/pricing", "/pricing"])
@@ -93,6 +96,7 @@ final class ScreenshotTests: XCTestCase {
     func testNothingVisibleTakesNoScreenshots() async {
         let id = await firstTurn(page: nil, changes: change)
         XCTAssertNil(model.task(id)?.screenshots)
+        XCTAssertTrue(servers.starts.isEmpty, "Nothing to show: no server")
     }
 
     func testAPageNamedAfterTheFirstEditGetsNoBefore() async {
@@ -166,6 +170,8 @@ final class ScreenshotTests: XCTestCase {
                        .completed(summary: "Done."))
         XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, screenshots: .page).contains("SHIFT_SCREENSHOT: <path>"))
         XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false).contains("SHIFT_SCREENSHOT"))
+        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, server: true).contains("shiftctl server"))
+        XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false).contains("shiftctl server"))
     }
 
     // MARK: Apps
