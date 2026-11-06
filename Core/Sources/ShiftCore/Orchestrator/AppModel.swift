@@ -612,7 +612,7 @@ public final class AppModel {
 
     public func removeTag(taskID: TaskItem.ID, _ tag: String) {
         update(taskID) { task in
-            task.tags?.removeAll { $0 == tag }
+            task.tags?.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
             if task.tags?.isEmpty == true { task.tags = nil }
         }
     }

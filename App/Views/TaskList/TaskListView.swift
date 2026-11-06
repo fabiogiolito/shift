@@ -103,7 +103,7 @@ struct TaskListView: View {
         .popover(isPresented: $showingFilter, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 if names.isEmpty {
-                    Text("Use `/tag` command to add a tag to a task.").foregroundStyle(.secondary)
+                    Text("*No tags.*\nRight click a task to tag it.").foregroundStyle(.secondary)
                         .frame(width: 200, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(names, id: \.self) { name in

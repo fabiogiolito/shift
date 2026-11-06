@@ -5,6 +5,7 @@ import ShiftCore
 struct TaskActions {
     var output: TaskOutput?
     var renaming = false
+    var addingTag = false
     var confirmingDelete = false
     /// Completed with nothing committed or uncommitted against its base: it can be archived.
     var unchanged = false
@@ -49,6 +50,21 @@ struct TaskActionItems: View {
         if actions.unchanged && !task.status.isClosed {
             Button("Archive Task") { Task { await model.archive(taskID: task.id) } }
         }
+        Menu("Tags") {
+            ForEach(TaskListView.tagNames(model.tasks(in: project.id)), id: \.self) { name in
+                Toggle(isOn: Binding {
+                    task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
+                } set: {
+                    if $0 { model.addTags(taskID: task.id, name) } else { model.removeTag(taskID: task.id, name) }
+                }) {
+                    Label { Text(name) } icon: {
+                        menuImage(Circle().fill(project.color(ofTag: name).color).frame(width: 9, height: 9))
+                    }
+                }
+            }
+            Divider()
+            Button("New Tag…") { actions.addingTag = true }
+        }
         Button("Rename Task…") { actions.renaming = true }
         Button("Delete Task…", role: .destructive) { actions.confirmingDelete = true }
     }
@@ -78,10 +94,31 @@ private struct TaskActionsPresenter: ViewModifier {
                 }
             }
             .renameTaskAlert(task, isPresented: $actions.renaming)
+            .modifier(NewTagAlert(task: task, isPresented: $actions.addingTag))
             .confirmationDialog("Delete “\(task.title)”?", isPresented: $actions.confirmingDelete) {
                 Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: taskID) } }
             } message: {
                 Text("Its changes are discarded without merging.")
+            }
+    }
+}
+
+/// Asks for one or more comma-separated tags to add to `task`.
+private struct NewTagAlert: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+    @Binding var isPresented: Bool
+    @State private var name = ""
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: isPresented) { if isPresented { name = "" } }
+            .alert("New Tag", isPresented: $isPresented) {
+                TextField("Name", text: $name)
+                Button("Add") { model.addTags(taskID: task.id, name) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Separate several tags with commas.")
             }
     }
 }
