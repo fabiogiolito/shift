@@ -57,7 +57,7 @@ struct TaskDetailView: View {
     static let toolbarInset: CGFloat = 8
     private static let chevronWidth: CGFloat = 10
     /// Where a prompt's text starts, with or without a chevron.
-    static let promptIndent: CGFloat = 17
+    private static let promptIndent: CGFloat = 17
 
     var body: some View {
         if let task = model.task(taskID), let project = model.project(task.projectID) {

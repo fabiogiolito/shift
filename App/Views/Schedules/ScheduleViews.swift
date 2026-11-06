@@ -115,7 +115,6 @@ struct ScheduleDetailView: View {
                     // Styled like a task's prompt history.
                     GroupBox {
                         SchedulePrompt(text: schedule.prompt)
-                            .padding(.leading, TaskDetailView.promptIndent)
                             .padding(8)
                     }
                     .id(schedule.id)
