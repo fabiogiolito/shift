@@ -98,7 +98,7 @@ public enum MacSetup {
 
     /// Opens Terminal with the sign-in command, then waits for it.
     public static func signIn(_ agent: AgentKind) async throws {
-        openInTerminal(agent == .claudeCode ? "claude auth login" : "codex login")
+        openInTerminal(path(of: agent.executableName) + (agent == .claudeCode ? " auth login" : " login"))
         try await wait(minutes: 15, "Sign-in didn't finish.") { await isSignedIn(agent) }
     }
 
@@ -120,7 +120,8 @@ public enum MacSetup {
             try await installPackage(from: url)
             AgentEnvironment.reload()
         }
-        openInTerminal("gh auth login --web --git-protocol https && gh auth setup-git")
+        let gh = path(of: "gh")
+        openInTerminal("\(gh) auth login --web --git-protocol https && \(gh) auth setup-git")
         try await wait(minutes: 15, "GitHub sign-in didn't finish.") { await isGitHubConnected() }
     }
 
@@ -146,7 +147,7 @@ public enum MacSetup {
     /// Terminal with `agent` asked to fix `problem`, for "Help Me Fix This".
     public static func askForHelp(_ agent: AgentKind, with problem: String) {
         let prompt = "I'm setting up Shift on this Mac and this step failed: \(problem) Please help me fix it."
-        openInTerminal("\(agent.executableName) \(shellQuoted(prompt))")
+        openInTerminal("\(path(of: agent.executableName)) \(shellQuoted(prompt))")
     }
 
     /// Runs `command` in a new Terminal window, in a login shell.
@@ -163,6 +164,14 @@ public enum MacSetup {
     }
 
     // MARK: - Helpers
+
+    /// The tool's full path on Shift's PATH, quoted, for Terminal: a new Mac's shell doesn't have ~/.local/bin, where
+    /// Claude Code and Codex are installed. The bare name when it isn't found.
+    static func path(of tool: String) -> String {
+        let directories = (AgentEnvironment.loginShell["PATH"] ?? "").split(separator: ":")
+        let found = directories.map { "\($0)/\(tool)" }.first(where: FileManager.default.isExecutableFile(atPath:))
+        return found.map(shellQuoted) ?? tool
+    }
 
     private static let xcode = "/Applications/Xcode.app"
     /// Where Shift installs npm tools: its bin is on Shift's PATH, and no administrator is needed.

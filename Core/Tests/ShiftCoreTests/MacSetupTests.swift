@@ -20,6 +20,11 @@ final class MacSetupTests: XCTestCase {
         XCTAssertTrue(MacSetup.needsXcode(folder))
     }
 
+    func testToolPathForTerminal() {
+        XCTAssertEqual(MacSetup.path(of: "git"), "'/usr/bin/git'")
+        XCTAssertEqual(MacSetup.path(of: "no-such-tool-here"), "no-such-tool-here")
+    }
+
     func testShellQuoting() {
         XCTAssertEqual(MacSetup.shellQuoted("it's"), #"'it'\''s'"#)
     }
