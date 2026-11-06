@@ -128,6 +128,16 @@ final class AppModelTests: XCTestCase {
         model.sendPrompt(taskID: id, text: "/tag")
         XCTAssertNil(model.task(id)?.tags)
         XCTAssertEqual(model.project(project.id)?.tagNames, [])
+
+        // Shared by two tasks: deleting takes it off both and out of the project.
+        let other = await createCompletedTask()
+        model.addTags(taskID: id, "shared")
+        model.addTags(taskID: other, "Shared")
+        XCTAssertTrue(model.tagIsShared(taskID: id, "SHARED"))
+        model.deleteTag(projectID: project.id, "shared")
+        XCTAssertNil(model.task(id)?.tags)
+        XCTAssertNil(model.task(other)?.tags)
+        XCTAssertEqual(model.project(project.id)?.tagNames, [])
         XCTAssertNil(AppModel.command("tag", "/tags x"))
     }
 

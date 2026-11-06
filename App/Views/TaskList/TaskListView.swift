@@ -73,6 +73,8 @@ struct TaskListView: View {
                 ToolbarItem { pushButton(pushState) }
             }
         }
+        // A tag that leaves the project leaves the filter too, or the list would stay filtered by a tag it no longer offers.
+        .onChange(of: project.tagNames) { tagFilter.formIntersection(project.tagNames.map { $0.lowercased() }) }
         // Commits may have been made or pushed outside Shift while the user was away.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in activations += 1 }
         .task(id: "\(project.id)|\(model.bases(of: project.id))|\(activations)") {
@@ -212,7 +214,9 @@ struct TaskRow: View {
                 Text(task.description ?? "").font(.subheadline).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
             }
             if task.tags?.isEmpty == false { TaskTags(tags: task.tags, project: model.project(task.projectID),
-                         onDelete: { model.removeTag(taskID: task.id, $0) },
+                         onRemove: { model.removeTag(taskID: task.id, $0) },
+                         onDelete: { model.deleteTag(projectID: task.projectID, $0) },
+                         isShared: { model.tagIsShared(taskID: task.id, $0) },
                          onColor: { model.setTagColor(projectID: task.projectID, $0, $1) }).padding(.top, 2) }
         }
         .padding(.vertical, 2)

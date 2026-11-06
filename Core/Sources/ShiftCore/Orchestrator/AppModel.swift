@@ -620,6 +620,22 @@ public final class AppModel {
         if !keepUnused, let projectID = task(taskID)?.projectID { pruneTags(projectID: projectID) }
     }
 
+    /// Whether a task in the project other than `taskID` has `tag`.
+    public func tagIsShared(taskID: TaskItem.ID, _ tag: String) -> Bool {
+        guard let projectID = task(taskID)?.projectID else { return false }
+        return tasks(in: projectID).contains { other in
+            other.id != taskID && other.tags?.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } == true
+        }
+    }
+
+    /// Takes `tag` off every task in the project, and forgets it and its color.
+    public func deleteTag(projectID: Project.ID, _ tag: String) {
+        for task in tasks(in: projectID) where task.tags?.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) == true {
+            removeTag(taskID: task.id, tag, keepUnused: true)
+        }
+        pruneTags(projectID: projectID)
+    }
+
     /// Forgets the tags (and their colors) no task in the project has.
     public func pruneTags(projectID: Project.ID) {
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }

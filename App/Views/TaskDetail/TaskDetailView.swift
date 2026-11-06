@@ -179,7 +179,9 @@ struct TaskDetailView: View {
                 Text(headline).font(.title3).textSelection(.enabled)
             }
             if task.tags?.isEmpty == false {
-                TaskTags(tags: task.tags, project: project, onDelete: { model.removeTag(taskID: task.id, $0) },
+                TaskTags(tags: task.tags, project: project, onRemove: { model.removeTag(taskID: task.id, $0) },
+                         onDelete: { model.deleteTag(projectID: project.id, $0) },
+                         isShared: { model.tagIsShared(taskID: task.id, $0) },
                          onColor: { model.setTagColor(projectID: project.id, $0, $1) })
             }
             statusLine(task, project)

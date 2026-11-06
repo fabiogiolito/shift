@@ -83,10 +83,16 @@ extension TaskStatus {
 struct TaskTags: View {
     let tags: [String]?
     let project: Project?
-    /// Given, right-clicking a tag offers to delete it.
+    /// Given, right-clicking a tag offers to remove it from this task.
+    var onRemove: ((String) -> Void)?
+    /// Given, right-clicking a tag that `isShared` also offers to delete it from every task in the project.
     var onDelete: ((String) -> Void)?
+    /// Whether another task in the project has the tag.
+    var isShared: (String) -> Bool = { _ in false }
     /// Given, right-clicking a tag offers to change its color, for every task in the project.
     var onColor: ((String, TagColor) -> Void)?
+    @State private var deleting: String?
+
     var body: some View {
         HStack(spacing: 4) {
             ForEach(tags ?? [], id: \.self) { tag in
@@ -99,9 +105,15 @@ struct TaskTags: View {
                             }
                             .pickerStyle(.menu)
                         }
-                        if let onDelete { Button("Delete Tag", role: .destructive) { onDelete(tag) } }
+                        if let onRemove { Button("Remove Tag") { onRemove(tag) } }
+                        if onDelete != nil, isShared(tag) { Button("Delete Tag…", role: .destructive) { deleting = tag } }
                     }
             }
+        }
+        .confirmationDialog("Delete “\(deleting ?? "")”?", isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } }) {
+            Button("Delete Tag", role: .destructive) { if let deleting { onDelete?(deleting) } }
+        } message: {
+            Text("It is removed from every task in the project.")
         }
     }
 
