@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 import ShiftProtocol
 
 struct StatusIcon: View {
@@ -87,8 +90,6 @@ struct TaskTags: View {
     var onDelete: ((String) -> Void)?
     /// Given, right-clicking a tag offers to change its color, for every task in the project.
     var onColor: ((String, TagColor) -> Void)?
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         HStack(spacing: 4) {
             ForEach(tags ?? [], id: \.self) { tag in
@@ -97,7 +98,7 @@ struct TaskTags: View {
                         if let onColor {
                             Picker("Color", selection: Binding { project?.color(ofTag: tag) ?? .gray } set: { onColor(tag, $0) }) {
                                 ForEach(TagColor.allCases, id: \.self) { color in
-                                    preview(color).accessibilityLabel(color.rawValue.capitalized).tag(color)
+                                    Label { Text(color.rawValue.capitalized) } icon: { tagDot(color) }.tag(color)
                                 }
                             }
                             .pickerStyle(.menu)
@@ -108,23 +109,21 @@ struct TaskTags: View {
         }
     }
 
-    /// Menus drop custom colors and backgrounds, so each option is a picture of the tag in that color.
-    private func preview(_ color: TagColor) -> Image {
-        menuImage(TagCapsule(name: color.rawValue.capitalized, color: color, font: .body).environment(\.colorScheme, colorScheme))
-    }
 }
 
-/// `view` as a picture, for menus, which drop custom colors from their items.
-/// An `NSImage`, not a template: menus show it as drawn (a `CGImage`-backed one came out blank in them).
-@MainActor func menuImage(_ view: some View) -> Image {
-    let renderer = ImageRenderer(content: view)
-    renderer.scale = 2
+/// A dot in `color`, for menus: they show an AppKit image as drawn (as Finder's tag menus do), where
+/// SwiftUI-styled views and rendered pictures come out uncolored or blank.
+func tagDot(_ color: TagColor) -> Image {
     #if os(macOS)
-    guard let image = renderer.nsImage else { return Image(systemName: "circle.fill") }
+    let image = NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
+        NSColor(color.color).setFill()
+        NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+        return true
+    }
     image.isTemplate = false
     return Image(nsImage: image)
     #else
-    return renderer.uiImage.map { Image(uiImage: $0.withRenderingMode(.alwaysOriginal)) } ?? Image(systemName: "circle.fill")
+    return Image(systemName: "circle.fill")
     #endif
 }
 

@@ -14,7 +14,6 @@ struct TaskActions {
 /// The items of a task's More menu, also its context menu in the task list.
 struct TaskActionItems: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.colorScheme) private var colorScheme
     let task: TaskItem
     let project: Project
     @Binding var actions: TaskActions
@@ -53,21 +52,12 @@ struct TaskActionItems: View {
         }
         Menu("Tags") {
             ForEach(TaskListView.tagNames(model.tasks(in: project.id)), id: \.self) { name in
-                let on = task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
-                Button {
-                    if on { model.removeTag(taskID: task.id, name) } else { model.addTags(taskID: task.id, name) }
-                } label: {
-                    // Menus drop item icons and colors, so the checkbox, dot and name are one picture,
-                    // like the tag filter's rows.
-                    menuImage(HStack(spacing: 6) {
-                        Image(systemName: on ? "checkmark.square.fill" : "square")
-                            .foregroundStyle(on ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        Circle().fill(project.color(ofTag: name).color).frame(width: 8, height: 8)
-                        Text(name)
-                    }
-                    .font(.body)
-                    .environment(\.colorScheme, colorScheme))
-                    .accessibilityLabel(on ? "\(name), on" : name)
+                Toggle(isOn: Binding {
+                    task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
+                } set: {
+                    if $0 { model.addTags(taskID: task.id, name) } else { model.removeTag(taskID: task.id, name) }
+                }) {
+                    Label { Text(name) } icon: { tagDot(project.color(ofTag: name)) }
                 }
             }
             Divider()
