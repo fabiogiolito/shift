@@ -272,16 +272,48 @@ struct ScheduleForm: View {
     enum End: Hashable { case never, after, on }
     enum MonthMode: Hashable { case days, ordinal }
 
+    /// What a run does when the Mac is asleep at its time: the two settings as one choice.
+    enum Asleep: Hashable { case skip, stayAwake, wake }
+
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                TextField("Title:", text: $draft.title, prompt: Text("Named after the prompt if empty"))
-                TextField("Prompt:", text: $draft.prompt, prompt: Text("What each run's agent should do"), axis: .vertical)
-                    .lineLimit(4...10)
-                note("Every run is a new task with this prompt. Its agent knows nothing else, so say everything it needs.")
+                // What
+                TextField("Name:", text: $draft.title, prompt: Text("Named after the prompt"))
+                // A text editor, not a field: Return adds a line here instead of pressing Save.
+                LabeledContent {
+                    TextEditor(text: $draft.prompt)
+                        .font(.body)
+                        .scrollContentBackground(.hidden)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 1)
+                        .frame(height: 110)
+                        .background(.background, in: .rect(cornerRadius: 6))
+                        .overlay(alignment: .topLeading) {
+                            if draft.prompt.isEmpty {
+                                Text("Everything each run's agent needs to know").foregroundStyle(.placeholder)
+                                    .padding(.vertical, 4).padding(.horizontal, 6)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
+                } label: {
+                    // Level with the editor's first line: an editor has no text baseline to align to.
+                    Text("Prompt:").padding(.top, 11)
+                }
                 divider
+                // When
                 timingRows
                 divider
+                // How each run works
+                LabeledContent("Agent:") {
+                    HStack {
+                        agentPicker.labelsHidden().fixedSize()
+                        ModelPicker(agent: draft.agent, selection: Binding { draft.model ?? "" } set: { draft.model = $0.isEmpty ? nil : $0 })
+                            .labelsHidden()
+                            .fixedSize()
+                    }
+                }
                 Picker("When done:", selection: $draft.finish) {
                     Text("Leave for review").tag(Schedule.FinishAction.review)
                     Text("Archive if it has no changes").tag(Schedule.FinishAction.archive)
@@ -290,17 +322,24 @@ struct ScheduleForm: View {
                 }
                 .fixedSize()
                 if draft.finish == .archive || draft.finish == .merge { note("Otherwise it's left for review.") }
-                agentRows
                 divider
-                LabeledContent("Mac:") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Keep awake while a run is coming", isOn: $draft.keepAwake)
-                        Toggle("Wake for runs", isOn: $draft.wakeMac)
-                    }
+                // Rarely changed
+                Picker("Permissions:", selection: $draft.permissions) {
+                    ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
                 }
-                note(draft.wakeMac
-                     ? "Shift asks for your administrator password to schedule the wakes. A closed MacBook without an external display may not fully wake."
-                     : "Runs missed while the Mac sleeps or Shift is closed aren't caught up.")
+                .fixedSize()
+                if draft.permissions == .manual { note("Runs wait for you to allow their commands.") }
+                Picker("Branch:", selection: $draft.baseBranch) {
+                    ForEach(branches.contains(draft.baseBranch) ? branches : [draft.baseBranch] + branches, id: \.self) { Text($0) }
+                }
+                .fixedSize()
+                Picker("When asleep:", selection: asleep) {
+                    Text("Skip runs").tag(Asleep.skip)
+                    Text("Stay awake for runs").tag(Asleep.stayAwake)
+                    Text("Wake up for runs").tag(Asleep.wake)
+                }
+                .fixedSize()
+                if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
             }
             .formStyle(.columns)
             .padding(24)
@@ -320,7 +359,7 @@ struct ScheduleForm: View {
             .controlSize(.large)
             .padding(24)
         }
-        .frame(width: 560)
+        .frame(width: 520)
         .task { branches = await model.branches(for: draft.projectID) }
     }
 
@@ -378,6 +417,9 @@ struct ScheduleForm: View {
             Text("Custom").tag(Repeat.custom)
         }
         .fixedSize()
+        if draft.timing.repeat?.frequency == .hourly {
+            note("Every run is a new task, and each one takes disk space until it's archived or merged.")
+        }
         if draft.timing.repeat != nil {
             if repeatChoice.wrappedValue == .custom {
                 // "Every [2] [weeks]", as in Calendar.
@@ -413,9 +455,6 @@ struct ScheduleForm: View {
                 }
             }
             endRow
-            if rule.frequency == .hourly {
-                note("Every run is its own task: they take disk space and memory until they're archived or merged.")
-            }
         }
     }
 
@@ -549,9 +588,8 @@ struct ScheduleForm: View {
 
     // MARK: Agent
 
-    @ViewBuilder private var agentRows: some View {
-        let branchOptions = branches.contains(draft.baseBranch) ? branches : [draft.baseBranch] + branches
-        Picker("Agent:", selection: Binding { draft.agent } set: { agent in
+    private var agentPicker: some View {
+        Picker("Agent", selection: Binding { draft.agent } set: { agent in
             draft.agent = agent
             draft.model = model.project(draft.projectID)?.models[agent]
         }) {
@@ -562,23 +600,15 @@ struct ScheduleForm: View {
                     .disabled(!installed)
             }
         }
-        .fixedSize()
-        LabeledContent("Model:") {
-            ModelPicker(agent: draft.agent, selection: Binding { draft.model ?? "" } set: { draft.model = $0.isEmpty ? nil : $0 })
-                .labelsHidden()
-                .fixedSize()
+    }
+
+    private var asleep: Binding<Asleep> {
+        Binding {
+            draft.wakeMac ? .wake : draft.keepAwake ? .stayAwake : .skip
+        } set: { choice in
+            draft.keepAwake = choice == .stayAwake
+            draft.wakeMac = choice == .wake
         }
-        Picker("Permissions:", selection: $draft.permissions) {
-            ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
-        }
-        .fixedSize()
-        Picker("Base branch:", selection: $draft.baseBranch) {
-            ForEach(branchOptions, id: \.self) { Text($0) }
-        }
-        .fixedSize()
-        note(draft.permissions == .manual
-             ? "With Manual permissions, a run waits for you to allow its commands."
-             : "Changes apply from the next run.")
     }
 }
 
