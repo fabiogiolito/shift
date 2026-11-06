@@ -46,13 +46,9 @@ struct TaskListView: View {
         .toolbar {
             let pushState = model.pushStates[project.id]
             let tagNames = Self.tagNames(all)
-            if !project.isApp || pushState != nil || !tagNames.isEmpty || !tagFilter.isEmpty {
-                // Pushes the buttons to the column's trailing end, away from the project name.
-                ToolbarSpacer(.flexible)
-            }
-            if !tagNames.isEmpty || !tagFilter.isEmpty {
-                ToolbarItem { filterMenu(tagNames) }
-            }
+            // Pushes the buttons to the column's trailing end, away from the project name.
+            ToolbarSpacer(.flexible)
+            ToolbarItem { filterMenu(tagNames) }
             if !project.isApp {
                 ToolbarItem {
                     let opening = model.openingBase.contains(project.id)
@@ -106,6 +102,10 @@ struct TaskListView: View {
         .help(active ? "Showing some tasks by tag" : "Filter tasks by tag")
         .popover(isPresented: $showingFilter, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
+                if names.isEmpty {
+                    Text("Use `/tag` command to add a tag to a task.").foregroundStyle(.secondary)
+                        .frame(width: 200, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(names, id: \.self) { name in
                     Toggle(isOn: Binding { tagFilter.contains(name.lowercased()) } set: {
                         if $0 { tagFilter.insert(name.lowercased()) } else { tagFilter.remove(name.lowercased()) }
