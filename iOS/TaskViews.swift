@@ -151,6 +151,7 @@ private struct ChatView: View {
     let project: Project
     @State private var stream: LogStream?
     @State private var confirmingNew = false
+    @State private var scroll = ScrollPosition(edge: .bottom)
 
     var body: some View {
         let chat = model.chat(projectID: project.id)
@@ -175,6 +176,10 @@ private struct ChatView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .defaultScrollAnchor(.bottom)
+        .scrollPosition($scroll)
+        // On send, the new message and "Working…" in view.
+        .onChange(of: chat?.prompts.count) { withAnimation { scroll.scrollTo(edge: .bottom) } }
+        .onChange(of: replying) { if replying { withAnimation { scroll.scrollTo(edge: .bottom) } } }
         .scrollDismissesKeyboard(.interactively)
         .overlay {
             if chat == nil {
