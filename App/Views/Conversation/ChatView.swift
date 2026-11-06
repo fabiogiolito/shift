@@ -37,6 +37,8 @@ struct ChatView: View {
     /// What the project's folder has checked out, which is what the agent works on.
     @State private var branch: String?
     @State private var confirmingNew = false
+    /// Scrolled back from the newest message: shows the button that jumps down.
+    @State private var scrolledUp = false
 
     private let bottom = "bottom"
 
@@ -62,6 +64,23 @@ struct ChatView: View {
             }
             .defaultScrollAnchor(.bottom)
             .onChange(of: chat?.prompts.count) { proxy.scrollTo(bottom, anchor: .bottom) }
+            .onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentSize.height - geo.visibleRect.maxY > 100
+            } action: { scrolledUp = $1 }
+            .overlay(alignment: .bottom) {
+                if scrolledUp {
+                    Button("Scroll to Bottom", systemImage: "arrow.down") {
+                        withAnimation { proxy.scrollTo(bottom, anchor: .bottom) }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .padding(.bottom, 8)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.default, value: scrolledUp)
             .overlay {
                 if chat == nil {
                     EmptyState("Chat About \(project.name)", systemImage: "bubble.left.and.text.bubble.right",
