@@ -3,12 +3,22 @@ import ShiftCore
 
 /// Shift's own settings (⌘,), for every project. Each project's are in Project Settings (⇧⌘,).
 struct SettingsView: View {
+    @AppStorage("settingsTab") private var tab = "general"
+
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GeneralSettingsView()
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag("general")
+            #if DEBUG
+            // Phase 1 of onboarding: fake states only, so not in release builds yet.
+            SetupSettingsView()
+                .tabItem { Label("Setup", systemImage: "checklist") }
+                .tag("setup")
+            #endif
             PairedDevicesView()
                 .tabItem { Label("Paired Devices", systemImage: "iphone") }
+                .tag("devices")
         }
     }
 }
