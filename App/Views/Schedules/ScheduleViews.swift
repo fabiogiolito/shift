@@ -109,6 +109,41 @@ struct ScheduleDetailView: View {
     @State private var confirmingDelete = false
     @State private var branches: [String] = []
 
+    /// What each run's agent works with, as menus like the window's footer, changed in place.
+    private func runSettings(_ schedule: Binding<Schedule>) -> some View {
+        let value = schedule.wrappedValue
+        return HStack(spacing: 16) {
+            Menu {
+                ScheduleSettings.agentPicker(schedule, model: model).pickerStyle(.inline)
+            } label: {
+                Label(value.agent.displayName, image: value.agent.icon)
+            }
+            .help("Agent")
+            Menu {
+                ModelPicker(agent: value.agent, selection: Binding { value.model ?? "" } set: {
+                    schedule.wrappedValue.model = $0.isEmpty ? nil : $0
+                })
+                .pickerStyle(.inline)
+            } label: {
+                Label(model.modelName(value.model ?? "", for: value.agent), systemImage: "cpu")
+            }
+            .help("Model")
+            Menu {
+                Picker("Permissions", selection: schedule.permissions) {
+                    ForEach(AgentPermissions.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(value.permissions.displayName, systemImage: value.permissions.symbol)
+            }
+            .help(value.permissions == .manual ? "Runs wait for you to allow their commands" : "Permissions")
+        }
+        .menuStyle(.borderlessButton)
+        .labelStyle(.titleAndIcon)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+    }
+
     var body: some View {
         if let schedule = model.schedule(scheduleID) {
             ScrollView {
@@ -122,6 +157,7 @@ struct ScheduleDetailView: View {
                                 .padding(8)
                         }
                         .id(schedule.id)
+                        runSettings(Binding { schedule } set: { model.saveSchedule($0) })
                     }
                     // Changed here, without the form; saved right away.
                     ScheduleSettings(schedule: Binding { schedule } set: { model.saveSchedule($0) }, branches: branches)
@@ -653,12 +689,6 @@ struct ScheduleSettings: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Settings").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             VStack(spacing: 0) {
-                row("Permissions", note: schedule.permissions == .manual ? "Runs wait for you to allow their commands." : nil) {
-                    Picker("Permissions", selection: $schedule.permissions) {
-                        ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
-                    }
-                }
-                Divider()
                 row("Branch") {
                     Picker("Branch", selection: $schedule.baseBranch) {
                         // The current value is always offered, so the menu is valid before branches load.
