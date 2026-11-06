@@ -103,7 +103,6 @@ extension View {
 
 struct ScheduleDetailView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.textScale) private var textScale
     let scheduleID: Schedule.ID
     @Binding var selection: TaskItem.ID?
     @State private var confirmingDelete = false
@@ -115,11 +114,11 @@ struct ScheduleDetailView: View {
                     header(schedule)
                     // Styled like a task's prompt history.
                     GroupBox {
-                        Text(schedule.prompt).font(.scaled(.body, textScale)).textSelection(.enabled)
+                        SchedulePrompt(text: schedule.prompt)
                             .padding(.leading, TaskDetailView.promptIndent)
                             .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .id(schedule.id)
                     runs(schedule)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -582,5 +581,45 @@ struct ScheduleFormPresenter: ViewModifier {
                 selectedTask = saved.selectionID
             }
         }
+    }
+}
+
+/// A schedule's prompt, cut to five lines until clicked. Clicking again folds it back.
+private struct SchedulePrompt: View {
+    let text: String
+    @Environment(\.textScale) private var textScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded = false
+    @State private var fullHeight: CGFloat = 0
+    @State private var shownHeight: CGFloat = 0
+    private static let lines = 5
+
+    var body: some View {
+        let isLong = fullHeight > shownHeight + 1 || isExpanded
+        Text(text).font(.scaled(.body, textScale))
+            .lineLimit(isExpanded ? nil : Self.lines)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
+            // The whole text, unlimited and hidden, to tell whether five lines cut it.
+            .background(alignment: .top) {
+                Text(text).font(.scaled(.body, textScale)).fixedSize(horizontal: false, vertical: true).hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+            }
+            .contentShape(.rect)
+            .onTapGesture {
+                guard isLong else { return }
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { isExpanded.toggle() }
+            }
+            // Toggles on click, so its text can't be selected: Copy is in its context menu, as for a task's prompts.
+            .help(isLong ? (isExpanded ? "Click to show less" : "Click to show all") : "")
+            .accessibilityAddTraits(isLong ? .isButton : [])
+            .accessibilityValue(isLong ? (isExpanded ? "Expanded" : "Collapsed") : "")
+            .accessibilityAction { if isLong { isExpanded.toggle() } }
+            .contextMenu {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+            }
     }
 }
