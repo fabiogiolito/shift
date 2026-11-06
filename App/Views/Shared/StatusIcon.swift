@@ -78,14 +78,15 @@ extension TaskStatus {
     }
 }
 
-/// A task's `/tag` tags as small capsules. Nothing when it has none.
+/// A task's `/tag` tags as small capsules, on one line. Nothing when it has none.
+/// ponytail: one line, tags past the row's width are clipped; a wrapping layout if tasks get many tags.
 struct TaskTags: View {
     let tags: [String]?
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(tags ?? [], id: \.self) { tag in
-                Text(tag).font(.caption2).lineLimit(1).foregroundStyle(.secondary)
+                Text(tag).font(.caption2).fixedSize().foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(.quaternary, in: .capsule)
             }

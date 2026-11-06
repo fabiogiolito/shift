@@ -21,7 +21,8 @@ struct TaskListView: View {
                         waiting: model.chatApprovalRequest(projectID: project.id) != nil).tag(ChatRow.id)
                 ForEach(sections, id: \.0) { section($0.0, $0.1) }
             }
-            .id(sections.map { "\($0.0):\($0.1.map(\.id))" }.joined())
+            // Tags add a line to a row, so adding or clearing them rebuilds it too.
+            .id(sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.tags?.isEmpty == false)" })" }.joined())
         }
         // Sidebar style keeps section headers from pinning below the toolbar, so the toolbar's edge line
         // lines up with the detail column's. Its sidebar background is dropped: this is the content column.
@@ -143,14 +144,14 @@ struct TaskRow: View {
             HStack(spacing: 6) {
                 StatusIcon(status: task.status, size: 14, pullRequestOpen: model.pullRequests[task.id]?.state == .open,
                            mergedByPullRequest: task.mergedPullRequest != nil)
-                Text(task.title).lineLimit(1).layoutPriority(1)
-                TaskTags(tags: task.tags)
-                Spacer(minLength: 0)
+                Text(task.title).lineLimit(1)
+                Spacer()
                 TaskNumber(task: task)
             }
             // Always two lines tall, even before the description arrives: the list doesn't re-measure a row
             // whose content changes in place, so a fixed height keeps every row sized right.
             Text(task.description ?? "").font(.subheadline).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
+            if task.tags?.isEmpty == false { TaskTags(tags: task.tags).padding(.top, 2) }
         }
         .padding(.vertical, 2)
         .contextMenu {
