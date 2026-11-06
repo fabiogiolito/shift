@@ -65,7 +65,7 @@ struct ChatView: View {
             .defaultScrollAnchor(.bottom)
             .onChange(of: chat?.prompts.count) { proxy.scrollTo(bottom, anchor: .bottom) }
             .onScrollGeometryChange(for: Bool.self) { geo in
-                geo.contentOffset.y + geo.containerSize.height - geo.contentInsets.bottom < geo.contentSize.height - 40
+                geo.contentSize.height - geo.visibleRect.maxY > 100
             } action: { scrolledUp = $1 }
             .overlay(alignment: .bottom) {
                 if scrolledUp {
