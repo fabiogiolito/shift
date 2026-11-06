@@ -267,7 +267,7 @@ struct ScheduleForm: View {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Title", text: $draft.title, prompt: Text("Title"))
                     .textFieldStyle(.plain)
-                    .font(.title3.weight(.semibold))
+                    .font(.title3)
                     .padding(.vertical, 7).padding(.horizontal, 8)
                     .background(.background, in: .rect(cornerRadius: 6))
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
