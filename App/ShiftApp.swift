@@ -21,6 +21,7 @@ struct ShiftApp: App {
             }
             .frame(minWidth: 960, minHeight: 600)
             .environment(delegate.model)
+            .environment(delegate.setupFlow)
             .environment(\.textScale, textScale)
             .background {
                 // ⌘= too, the key under + without Shift, as in Safari and Xcode.
@@ -38,9 +39,7 @@ struct ShiftApp: App {
                 #endif
                 ready = true
                 delegate.applyScreenshotSize()
-                #if DEBUG
-                delegate.openSetupForScreenshot()
-                #endif
+                await delegate.openSetupIfNeeded()
             }
         }
         .commands {
@@ -49,9 +48,6 @@ struct ShiftApp: App {
             ProjectSettingsCommand()
             ShortcutCommands()
             TextSizeCommands()
-            #if DEBUG
-            TestOnboardingCommand(flow: delegate.setupFlow)
-            #endif
             #if UPDATER
             if let updater = delegate.updater {
                 CommandGroup(after: .appInfo) {
@@ -77,21 +73,13 @@ struct ShiftApp: App {
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
 
-        #if DEBUG
-        // Phase 1 of onboarding: visuals only, opened from Help › Test Onboarding.
+        // At first launch with what's missing, from Settings › Setup, and when a new project needs something.
         Window("Set Up Shift", id: SetupWindow.id) {
             SetupWindow().environment(delegate.setupFlow)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
-
-        Window("Onboarding Debug", id: SetupDebugControls.id) {
-            SetupDebugControls().environment(delegate.setupFlow)
-        }
-        .windowResizability(.contentSize)
-        .restorationBehavior(.disabled)
-        #endif
 
         Settings {
             SettingsView().environment(delegate.model).environment(delegate.setupFlow)
@@ -103,33 +91,12 @@ struct ShiftApp: App {
 private struct OpenWindowHandoff: View {
     let delegate: AppDelegate
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Color.clear.onAppear {
-            delegate.openWindow = openWindow
-            delegate.openSettings = openSettings
-        }
+        Color.clear.onAppear { delegate.openWindow = openWindow }
     }
 }
 
-#if DEBUG
-/// Help › Test Onboarding: the setup window from the start, with fake states.
-private struct TestOnboardingCommand: Commands {
-    let flow: SetupFlow
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some Commands {
-        CommandGroup(after: .help) {
-            Button("Test Onboarding") {
-                flow.reset()
-                openWindow(id: SetupWindow.id)
-                openWindow(id: SetupDebugControls.id)
-            }
-        }
-    }
-}
-#endif
 
 /// ⌘N starts a task, not a window. Its own `Commands` so the focused value is read here, not in the app's body:
 /// the value is a closure, new on every update of the field, and read in the body it re-created the whole window
@@ -283,8 +250,7 @@ extension FocusedValues {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var openWindow: OpenWindowAction?
-    var openSettings: OpenSettingsAction?
-    let setupFlow = SetupFlow()
+    lazy var setupFlow = SetupFlow(model: model)
     #if UPDATER
     /// Release builds only (see project.yml). Checks the feed in `SUFeedURL` in the background.
     let updater: SPUStandardUpdaterController? = ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] != nil
@@ -326,20 +292,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrame(NSRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
     }
 
-    #if DEBUG
-    /// SHIFT_ONBOARDING=github:failed opens the setup window at that step and state; `settings` opens Settings, for screenshots.
-    func openSetupForScreenshot() {
-        guard let spec = ProcessInfo.processInfo.environment["SHIFT_ONBOARDING"] else { return }
-        if spec == "settings" {
-            setupFlow.chosenAgents = [.claudeCode]
-            setupFlow.states = [.commandLineTools: .done, .node: .done, .agent: .done, .gitIdentity: .done, .github: .skipped]
-            openSettings?()
-        } else {
-            setupFlow.apply(debugSpec: spec)
-            openWindow?(id: SetupWindow.id)
-        }
+    /// Opens the setup window when this Mac is missing something Shift needs. Not for sample data.
+    func openSetupIfNeeded() async {
+        guard ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == nil else { return }
+        await setupFlow.refresh()
+        guard setupFlow.needsSetup else { return }
+        setupFlow.startFirstLaunch()
+        openWindow?(id: SetupWindow.id)
     }
-    #endif
 
     /// Tasks keep running when the window is closed.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

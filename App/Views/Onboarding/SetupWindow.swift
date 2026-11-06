@@ -1,7 +1,8 @@
 import SwiftUI
 import ShiftCore
 
-/// The setup assistant: one step at a time, then "You're ready". Phase 1 opens only from Help › Test Onboarding.
+/// The setup assistant: one step at a time, then "You're ready". Opens at first launch with what's missing, from
+/// Settings › Setup for one item, and when an added project needs something.
 /// Laid out like macOS's own setup panels: left-aligned, fixed size, actions at the bottom right.
 struct SetupWindow: View {
     static let id = "setup"
@@ -90,7 +91,9 @@ private struct SetupStepView: View {
                 .foregroundStyle(.tint)
                 .frame(height: 40)
             VStack(alignment: .leading, spacing: 4) {
-                Text(progress).font(.subheadline).foregroundStyle(.secondary)
+                if let progress = flow.progress(of: step) {
+                    Text(progress).font(.subheadline).foregroundStyle(.secondary)
+                }
                 Text(step == .packageManager ? "This project needs \(flow.packageManager)" : step.title)
                     .font(.title2).bold()
                 Text(summary).foregroundStyle(.secondary)
@@ -99,11 +102,6 @@ private struct SetupStepView: View {
             SetupStatus(step: step)
         }
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var progress: String {
-        guard let index = SetupStep.firstLaunch.firstIndex(of: step) else { return "Project setup" }
-        return "Step \(index + 1) of \(SetupStep.firstLaunch.count)"
     }
 
     private var summary: String {
@@ -117,7 +115,9 @@ private struct SetupStepView: View {
             GroupBox {
                 ForEach(AgentKind.allCases) { kind in
                     if kind != AgentKind.allCases.first { Divider() }
-                    AgentChoiceRow(kind: kind, isSelected: flow.agents.contains(kind)) { flow.toggle(kind) }
+                    AgentChoiceRow(kind: kind, isSelected: flow.chosenAgents.contains(kind), state: flow.installed[kind] ?? .notDone) {
+                        flow.toggle(kind)
+                    }
                 }
             }
         case .signIn:
@@ -127,8 +127,8 @@ private struct SetupStepView: View {
                     HStack {
                         Label(kind.displayName, image: kind.icon)
                         Spacer()
-                        SetupStateLabel(step: step, state: flow.state(step)) {
-                            Button("Sign In") { flow.perform(step) }
+                        SetupStateLabel(step: step, state: flow.signedIn[kind] ?? .notDone) {
+                            Button("Sign In") { flow.signIn(kind) }
                         }
                     }
                     .padding(4)
@@ -152,9 +152,11 @@ private struct SetupStepView: View {
     }
 }
 
+/// Ticked to install. An installed agent shows that instead; a running or failed install, how it's going.
 private struct AgentChoiceRow: View {
     let kind: AgentKind
     let isSelected: Bool
+    let state: SetupState
     let select: () -> Void
 
     var body: some View {
@@ -175,14 +177,19 @@ private struct AgentChoiceRow: View {
                     Text(kind.tagline).font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
-                    .imageScale(.large)
+                if state == .notDone {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                        .imageScale(.large)
+                } else {
+                    SetupStateLabel(step: .agent, state: state) { EmptyView() }
+                }
             }
             .padding(4)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .disabled(state == .done || state == .working)
     }
 }
 
@@ -200,7 +207,9 @@ private struct SetupStatus: View {
         case .failed(let error):
             VStack(alignment: .leading, spacing: 6) {
                 Label(error, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
-                Button("Help Me Fix This") {}.buttonStyle(.link)
+                if flow.helper != nil {
+                    Button("Help Me Fix This") { flow.askForHelp(with: step) }.buttonStyle(.link)
+                }
             }
         case .skipped:
             if let warning = step.skipWarning {
@@ -259,60 +268,3 @@ private struct ReadyView: View {
         }
     }
 }
-
-#if DEBUG
-/// Its own window beside the setup window, so the setup window looks as it will ship.
-/// Switches the step's fake state and jumps between steps. Debug builds only.
-struct SetupDebugControls: View {
-    static let id = "setup-debug"
-    @Environment(SetupFlow.self) private var flow
-
-    var body: some View {
-        HStack {
-            if case .step(let step) = flow.page {
-                Picker("State", selection: stateBinding(step)) {
-                    Text("Not Done").tag("notDone")
-                    Text("Working").tag("working")
-                    Text("Done").tag("done")
-                    Text("Failed").tag("failed")
-                    Text("Skipped").tag("skipped")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-            Spacer()
-            Menu("Go To") {
-                ForEach(SetupStep.firstLaunch) { step in Button(step.title) { flow.page = .step(step) } }
-                Button("You're ready") { flow.page = .ready }
-                Divider()
-                ForEach(SetupStep.projectSteps) { step in Button(step.title) { flow.page = .step(step) } }
-                Divider()
-                Button("Start Over") { flow.reset() }
-            }
-            .fixedSize()
-        }
-        .padding(12)
-        .frame(width: 520)
-    }
-
-    private func stateBinding(_ step: SetupStep) -> Binding<String> {
-        Binding {
-            switch flow.state(step) {
-            case .notDone: "notDone"
-            case .working: "working"
-            case .done: "done"
-            case .failed: "failed"
-            case .skipped: "skipped"
-            }
-        } set: { tag in
-            flow.states[step] = switch tag {
-            case "working": .working
-            case "done": .done
-            case "failed": .failed(step.sampleError)
-            case "skipped": .skipped
-            default: .notDone
-            }
-        }
-    }
-}
-#endif

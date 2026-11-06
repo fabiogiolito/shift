@@ -2,8 +2,7 @@ import SwiftUI
 import ShiftCore
 
 /// Everything Shift needs on a Mac, in one place: the setup window and Settings › Setup both draw from these.
-/// Phase 1 is visuals only: `SetupFlow` holds fake states and its actions only move them. Phase 2 attaches the real
-/// check and action to each step here.
+/// `SetupFlow` runs each step's real check and action, through `MacSetup`.
 enum SetupStep: String, CaseIterable, Identifiable {
     case commandLineTools, node, agent, signIn, gitIdentity, github
     /// Asked when a project that needs them is added, not at first launch.
@@ -80,22 +79,11 @@ enum SetupStep: String, CaseIterable, Identifiable {
         }
     }
 
-    /// For Settings, when it isn't done.
-    var missingTitle: String {
-        switch self {
-        case .signIn: "Not signed in"
-        case .gitIdentity: "Not set"
-        case .github: "Not connected"
-        default: "Not installed"
-        }
-    }
-
-    var canSkip: Bool { [.gitIdentity, .github, .packageManager, .xcode].contains(self) }
+    var canSkip: Bool { [.github, .packageManager, .xcode].contains(self) }
 
     /// What won't work if it's skipped.
     var skipWarning: String? {
         switch self {
-        case .gitIdentity: "Commits will be signed with a name made from your Mac's name. You can set yours later in Settings."
         case .github: "Shift can't open pull requests or follow them, and pushing may fail. You can connect GitHub later in Settings."
         case .packageManager: "The project's dev server won't start until it's installed."
         case .xcode: "The project can't be built or run until Xcode is installed."
@@ -114,34 +102,132 @@ extension AgentKind {
     }
 }
 
-/// The setup window's place and each step's state. Phase 1: fake states; nothing is checked, installed or changed.
+/// The setup window's place and each step's state, from real checks (`MacSetup`). Settings › Setup shows the same.
 @MainActor @Observable
 final class SetupFlow {
     enum Page: Hashable { case step(SetupStep), ready }
 
-    var page: Page = .step(.commandLineTools)
-    var states: [SetupStep: SetupState] = [:]
-    var chosenAgents: Set<AgentKind> = [.claudeCode]
+    private let model: AppModel
+    var page: Page = .ready
+    /// The steps this run of the window walks through: what was missing when it opened.
+    private(set) var steps: [SetupStep] = []
+    /// First launch ends with "You're ready"; a fix from Settings or a project's steps just close.
+    private(set) var endsReady = false
+    private var isProjectSetup = false
+    private var states: [SetupStep: SetupState] = [:]
+    private(set) var installed: [AgentKind: SetupState] = [:]
+    private(set) var signedIn: [AgentKind: SetupState] = [:]
+    /// Agents to install: not installed yet, and ticked.
+    var chosenAgents: Set<AgentKind> = []
     var gitName = ""
     var gitEmail = ""
-    var packageManager = "pnpm"
+    var packageManager = "npm"
 
-    var agents: [AgentKind] { AgentKind.allCases.filter(chosenAgents.contains) }
+    init(model: AppModel) { self.model = model }
+
+    /// Installed agents, the ones to sign in.
+    var agents: [AgentKind] { AgentKind.allCases.filter { installed[$0] == .done } }
 
     func toggle(_ agent: AgentKind) {
         if chosenAgents.contains(agent) { chosenAgents.remove(agent) } else { chosenAgents.insert(agent) }
     }
 
-    func state(_ step: SetupStep) -> SetupState { states[step] ?? .notDone }
-
-    /// Phase 1: a short fake run that always succeeds.
-    func perform(_ step: SetupStep) {
-        states[step] = .working
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            if states[step] == .working { states[step] = .done }
+    func state(_ step: SetupStep) -> SetupState {
+        switch step {
+        case .agent:
+            chosenAgents.isEmpty ? (agents.isEmpty ? .notDone : .done) : Self.combined(chosenAgents.map { installed[$0] ?? .notDone })
+        // One signed-in agent is enough; the other can be signed in from Settings.
+        case .signIn:
+            agents.contains { signedIn[$0] == .done } ? .done : Self.combined(agents.map { signedIn[$0] ?? .notDone })
+        default: states[step] ?? .notDone
         }
     }
+
+    /// Any first-launch step still to do: the window opens at launch.
+    var needsSetup: Bool {
+        SetupStep.firstLaunch.contains { [.notDone, .working].contains(state($0)) || state($0).isFailed }
+    }
+
+    /// "Step 2 of 5" on first launch, "Project setup" for a project's steps.
+    func progress(of step: SetupStep) -> String? {
+        if isProjectSetup { return "Project setup" }
+        guard endsReady, let index = steps.firstIndex(of: step) else { return nil }
+        return "Step \(index + 1) of \(steps.count)"
+    }
+
+    // MARK: Opening
+
+    func startFirstLaunch() {
+        start(SetupStep.firstLaunch.filter { state($0) != .done }, endsReady: true)
+    }
+
+    func start(_ steps: [SetupStep], endsReady: Bool = false, isProjectSetup: Bool = false) {
+        self.steps = steps
+        self.endsReady = endsReady
+        self.isProjectSetup = isProjectSetup
+        page = steps.first.map(Page.step) ?? .ready
+    }
+
+    /// What a project added from `folder` needs that this Mac doesn't have.
+    func projectSteps(for folder: URL) async -> [SetupStep] {
+        var needed: [SetupStep] = []
+        if let manager = MacSetup.packageManager(of: folder) {
+            if !(await MacSetup.hasNode()) { needed.append(.node); states[.node] = .notDone }
+            if manager != "npm", !(await MacSetup.hasPackageManager(manager)) {
+                packageManager = manager
+                states[.packageManager] = .notDone
+                needed.append(.packageManager)
+            }
+        }
+        if MacSetup.needsXcode(folder), !(await MacSetup.hasXcode()) {
+            states[.xcode] = .notDone
+            needed.append(.xcode)
+        }
+        return needed
+    }
+
+    /// Where Continue and Back go.
+    func move(by offset: Int) -> Page? {
+        let pages = steps.map(Page.step) + (endsReady ? [.ready] : [])
+        guard let index = pages.firstIndex(of: page), pages.indices.contains(index + offset) else { return nil }
+        return pages[index + offset]
+    }
+
+    // MARK: Checks
+
+    /// Checks everything at once. Leaves steps that are running alone.
+    func refresh() async {
+        async let tools = MacSetup.hasCommandLineTools()
+        async let node = MacSetup.hasNode()
+        async let identity = MacSetup.gitIdentity()
+        async let github = MacSetup.isGitHubConnected()
+        var agentsFound: [AgentKind: Bool] = [:]
+        var agentsSignedIn: [AgentKind: Bool] = [:]
+        for agent in AgentKind.allCases {
+            agentsFound[agent] = await MacSetup.isInstalled(agent)
+            if agentsFound[agent] == true { agentsSignedIn[agent] = await MacSetup.isSignedIn(agent) }
+        }
+        let (hasTools, hasNode, (name, email), hasGitHub) = await (tools, node, identity, github)
+
+        set(.commandLineTools, done: hasTools)
+        set(.node, done: hasNode)
+        set(.gitIdentity, done: !name.isEmpty && !email.isEmpty)
+        set(.github, done: hasGitHub)
+        for agent in AgentKind.allCases {
+            if installed[agent] != .working { installed[agent] = agentsFound[agent] == true ? .done : .notDone }
+            if signedIn[agent] != .working { signedIn[agent] = agentsSignedIn[agent] == true ? .done : .notDone }
+        }
+        chosenAgents = agents.isEmpty ? [.claudeCode] : []
+        if gitName.isEmpty { gitName = name.isEmpty ? NSFullUserName() : name }
+        if gitEmail.isEmpty { gitEmail = email }
+    }
+
+    private func set(_ step: SetupStep, done: Bool) {
+        guard states[step] != .working else { return }
+        states[step] = done ? .done : step.canSkip && skipped.contains(step.rawValue) ? .skipped : .notDone
+    }
+
+    // MARK: Actions
 
     /// What the step needs filled in before its action can run.
     func canPerform(_ step: SetupStep) -> Bool {
@@ -154,52 +240,94 @@ final class SetupFlow {
         }
     }
 
-    func skip(_ step: SetupStep) { states[step] = .skipped }
-
-    func reset() {
-        page = .step(.commandLineTools)
-        states = [:]
-    }
-
-    /// Where Continue and Back go. Project steps stand alone: Continue closes the window.
-    func move(by offset: Int) -> Page? {
-        let pages = SetupStep.firstLaunch.map(Page.step) + [.ready]
-        guard let index = pages.firstIndex(of: page), pages.indices.contains(index + offset) else { return nil }
-        return pages[index + offset]
-    }
-}
-
-#if DEBUG
-extension SetupStep {
-    var sampleError: String {
-        switch self {
-        case .commandLineTools: "The installer quit before finishing."
-        case .agent: "The download failed: no internet connection."
-        case .signIn: "Sign-in was cancelled in Terminal."
-        case .gitIdentity: "Couldn't write ~/.gitconfig: permission denied."
-        case .github: "GitHub sign-in timed out."
-        case .node: "The download failed: no internet connection."
-        case .packageManager: "Corepack couldn't install pnpm."
-        case .xcode: "The Xcode license hasn't been accepted."
+    func perform(_ step: SetupStep) {
+        switch step {
+        case .agent: installAgents()
+        case .signIn: agents.filter { signedIn[$0] != .done }.forEach(signIn)
+        default:
+            states[step] = .working
+            Task {
+                do {
+                    try await action(step)
+                    states[step] = .done
+                    skipped.remove(step.rawValue)
+                } catch {
+                    states[step] = .failed(error.localizedDescription)
+                }
+                await model.reloadEnvironment()
+            }
         }
     }
-}
 
-extension SetupFlow {
-    /// SHIFT_ONBOARDING=github:failed opens the window there, for screenshots. `ready` is the last screen.
-    func apply(debugSpec spec: String) {
-        let parts = spec.split(separator: ":").map(String.init)
-        if parts.first == "ready" { page = .ready; return }
-        guard let step = parts.first.flatMap(SetupStep.init(rawValue:)) else { return }
-        page = .step(step)
-        chosenAgents = step == .signIn ? Set(AgentKind.allCases) : [.claudeCode]
-        switch parts.count > 1 ? parts[1] : "" {
-        case "working": states[step] = .working
-        case "done": states[step] = .done
-        case "failed": states[step] = .failed(step.sampleError)
-        case "skipped": states[step] = .skipped
-        default: break
+    private func action(_ step: SetupStep) async throws {
+        switch step {
+        case .commandLineTools: try await MacSetup.installCommandLineTools()
+        case .node: try await MacSetup.installNode()
+        case .gitIdentity:
+            try await MacSetup.setGitIdentity(name: gitName.trimmingCharacters(in: .whitespaces),
+                                              email: gitEmail.trimmingCharacters(in: .whitespaces))
+        case .github: try await MacSetup.connectGitHub()
+        case .packageManager: try await MacSetup.installPackageManager(packageManager)
+        case .xcode: try await MacSetup.installXcode()
+        case .agent, .signIn: break
         }
     }
+
+    /// One after the other; stops at the first that fails.
+    private func installAgents() {
+        let queue = AgentKind.allCases.filter { chosenAgents.contains($0) && installed[$0] != .done }
+        Task {
+            for agent in queue {
+                installed[agent] = .working
+                do {
+                    try await MacSetup.install(agent)
+                    installed[agent] = .done
+                    chosenAgents.remove(agent)
+                    signedIn[agent] = await MacSetup.isSignedIn(agent) ? .done : .notDone
+                } catch {
+                    installed[agent] = .failed(error.localizedDescription)
+                    break
+                }
+            }
+            await model.reloadEnvironment()
+        }
+    }
+
+    func signIn(_ agent: AgentKind) {
+        signedIn[agent] = .working
+        Task {
+            do {
+                try await MacSetup.signIn(agent)
+                signedIn[agent] = .done
+            } catch {
+                signedIn[agent] = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    func skip(_ step: SetupStep) {
+        states[step] = .skipped
+        // Not asked again at launch. A project's steps are asked again for the next project.
+        if SetupStep.firstLaunch.contains(step) { skipped.insert(step.rawValue) }
+    }
+
+    /// An installed, signed-in agent that can help when a step fails.
+    var helper: AgentKind? { agents.first { signedIn[$0] == .done } }
+
+    func askForHelp(with step: SetupStep) {
+        guard let helper, case .failed(let error) = state(step) else { return }
+        MacSetup.askForHelp(helper, with: "\(step.title): \(error)")
+    }
+
+    private var skipped: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "setupSkipped") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "setupSkipped") }
+    }
+
+    private static func combined(_ states: [SetupState]) -> SetupState {
+        if states.isEmpty { return .notDone }
+        if states.contains(.working) { return .working }
+        if let failed = states.first(where: \.isFailed) { return failed }
+        return states.allSatisfy { $0 == .done } ? .done : .notDone
+    }
 }
-#endif

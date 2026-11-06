@@ -10,12 +10,9 @@ struct SettingsView: View {
             GeneralSettingsView()
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag("general")
-            #if DEBUG
-            // Phase 1 of onboarding: fake states only, so not in release builds yet.
             SetupSettingsView()
                 .tabItem { Label("Setup", systemImage: "checklist") }
                 .tag("setup")
-            #endif
             PairedDevicesView()
                 .tabItem { Label("Devices", systemImage: "iphone") }
                 .tag("devices")

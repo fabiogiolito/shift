@@ -5,6 +5,7 @@ import ShiftCore
 struct ProjectsSidebar: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(SetupFlow.self) private var setup
     @Binding var selection: Project.ID?
     @State private var search = ""
     @FocusState private var searchFocused: Bool
@@ -112,8 +113,15 @@ struct ProjectsSidebar: View {
             let known = Set(model.projects.map(\.id))
             guard let project = await model.addProject(at: url, initializingGit: initializingGit) else { return }
             selection = project.id
-            // A new project opens its settings, so permissions and commands can be reviewed first.
-            if !known.contains(project.id) { settingsProject = project }
+            // A new project opens its settings, so permissions and commands can be reviewed first, and the setup
+            // window if it needs something this Mac doesn't have.
+            guard !known.contains(project.id) else { return }
+            settingsProject = project
+            let steps = await setup.projectSteps(for: url)
+            if !steps.isEmpty {
+                setup.start(steps, isProjectSetup: true)
+                openWindow(id: SetupWindow.id)
+            }
         }
     }
 }
