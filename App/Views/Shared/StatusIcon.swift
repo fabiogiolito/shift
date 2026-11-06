@@ -110,11 +110,15 @@ struct TaskTags: View {
 
     /// Menus drop custom colors and backgrounds, so each option is a picture of the tag in that color.
     private func preview(_ color: TagColor) -> Image {
-        let renderer = ImageRenderer(content: TagCapsule(name: color.rawValue.capitalized, color: color, font: .body)
-            .environment(\.colorScheme, colorScheme))
-        renderer.scale = 2
-        return renderer.cgImage.map { Image(decorative: $0, scale: 2) } ?? Image(systemName: "circle.fill")
+        menuImage(TagCapsule(name: color.rawValue.capitalized, color: color, font: .body).environment(\.colorScheme, colorScheme))
     }
+}
+
+/// `view` as a picture, for menus, which drop custom colors from their items.
+@MainActor func menuImage(_ view: some View) -> Image {
+    let renderer = ImageRenderer(content: view)
+    renderer.scale = 2
+    return renderer.cgImage.map { Image(decorative: $0, scale: 2) } ?? Image(systemName: "circle.fill")
 }
 
 /// One tag. Its text is the color mixed toward the label color, so light colors like yellow stay readable.

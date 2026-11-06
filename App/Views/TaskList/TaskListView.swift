@@ -7,13 +7,13 @@ struct TaskListView: View {
     let project: Project
     @Binding var selection: TaskItem.ID?
     @State private var activations = 0
-    /// Lowercased tag names to show tasks with; empty with `showUntagged` off shows every task.
+    /// Lowercased tag names to show tasks with; empty shows every task.
     @State private var tagFilter: Set<String> = []
-    @State private var showUntagged = false
+    @State private var showingFilter = false
 
     var body: some View {
         let all = model.tasks(in: project.id)
-        let tasks = Self.filter(all, tags: tagFilter, untagged: showUntagged)
+        let tasks = Self.filter(all, tags: tagFilter)
         let sections = Self.sections(tasks)
         // The list doesn't re-measure rows and headers that are inserted or moved in place (a task moving to a new
         // section came out clipped), so a change in which task sits in which section rebuilds it at the right sizes.
@@ -46,12 +46,12 @@ struct TaskListView: View {
         .toolbar {
             let pushState = model.pushStates[project.id]
             let tagNames = Self.tagNames(all)
-            if !tagNames.isEmpty || !tagFilter.isEmpty || showUntagged {
-                ToolbarItem { filterMenu(tagNames) }
-            }
-            if !project.isApp || pushState != nil || !tagNames.isEmpty {
+            if !project.isApp || pushState != nil || !tagNames.isEmpty || !tagFilter.isEmpty {
                 // Pushes the buttons to the column's trailing end, away from the project name.
                 ToolbarSpacer(.flexible)
+            }
+            if !tagNames.isEmpty || !tagFilter.isEmpty {
+                ToolbarItem { filterMenu(tagNames) }
             }
             if !project.isApp {
                 ToolbarItem {
@@ -82,13 +82,10 @@ struct TaskListView: View {
         }
     }
 
-    /// Tasks with any of `tags` (lowercased), and those with none when `untagged`. Nothing chosen: all of them.
-    static func filter(_ tasks: [TaskItem], tags: Set<String>, untagged: Bool) -> [TaskItem] {
-        guard !tags.isEmpty || untagged else { return tasks }
-        return tasks.filter { task in
-            let own = (task.tags ?? []).map { $0.lowercased() }
-            return own.isEmpty ? untagged : own.contains(where: tags.contains)
-        }
+    /// Tasks with any of `tags` (lowercased). Nothing chosen: all of them.
+    static func filter(_ tasks: [TaskItem], tags: Set<String>) -> [TaskItem] {
+        guard !tags.isEmpty else { return tasks }
+        return tasks.filter { ($0.tags ?? []).contains { tags.contains($0.lowercased()) } }
     }
 
     /// Every tag the tasks have, once each whatever its case, in the first spelling met, sorted.
@@ -98,29 +95,36 @@ struct TaskListView: View {
         return names.values.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
+    /// A popover rather than a menu: it stays open, so several tags can be picked in one go.
     private func filterMenu(_ names: [String]) -> some View {
-        let active = !tagFilter.isEmpty || showUntagged
-        return Menu {
-            ForEach(names, id: \.self) { name in
-                Toggle(isOn: Binding { tagFilter.contains(name.lowercased()) } set: {
-                    if $0 { tagFilter.insert(name.lowercased()) } else { tagFilter.remove(name.lowercased()) }
-                }) {
-                    Label { Text(name) } icon: {
-                        Image(systemName: "circle.fill").foregroundStyle(project.color(ofTag: name).color)
-                    }
-                }
-            }
-            Divider()
-            Toggle("No Tags", isOn: $showUntagged)
-            if active {
-                Divider()
-                Button("Show All Tasks") { tagFilter = []; showUntagged = false }
-            }
+        let active = !tagFilter.isEmpty
+        return Button {
+            showingFilter.toggle()
         } label: {
             Image(systemName: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
         }
-        .menuIndicator(.hidden)
         .help(active ? "Showing some tasks by tag" : "Filter tasks by tag")
+        .popover(isPresented: $showingFilter, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(names, id: \.self) { name in
+                    Toggle(isOn: Binding { tagFilter.contains(name.lowercased()) } set: {
+                        if $0 { tagFilter.insert(name.lowercased()) } else { tagFilter.remove(name.lowercased()) }
+                    }) {
+                        HStack(spacing: 6) {
+                            Circle().fill(project.color(ofTag: name).color).frame(width: 8, height: 8)
+                            Text(name)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                }
+                if active {
+                    Divider()
+                    Button("Clear") { tagFilter = [] }
+                }
+            }
+            .padding(12)
+            .frame(minWidth: 140, alignment: .leading)
+        }
     }
 
     /// The list's sections in order. Also gives ⌘[ and ⌘] the order to step through.
