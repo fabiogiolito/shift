@@ -7,9 +7,13 @@ struct TaskListView: View {
     let project: Project
     @Binding var selection: TaskItem.ID?
     @State private var activations = 0
+    /// Lowercased tag names to show tasks with; empty with `showUntagged` off shows every task.
+    @State private var tagFilter: Set<String> = []
+    @State private var showUntagged = false
 
     var body: some View {
-        let tasks = model.tasks(in: project.id)
+        let all = model.tasks(in: project.id)
+        let tasks = Self.filter(all, tags: tagFilter, untagged: showUntagged)
         let sections = Self.sections(tasks)
         // The list doesn't re-measure rows and headers that are inserted or moved in place (a task moving to a new
         // section came out clipped), so a change in which task sits in which section rebuilds it at the right sizes.
@@ -30,7 +34,10 @@ struct TaskListView: View {
         .scrollContentBackground(.hidden)
         .scrollEdgeEffectStyle(.hard, for: .top)
         .overlay {
-            if tasks.isEmpty {
+            if tasks.isEmpty && !all.isEmpty {
+                EmptyState("No Matching Tasks", systemImage: "line.3.horizontal.decrease.circle",
+                           description: Text("No tasks have the chosen tags."))
+            } else if tasks.isEmpty {
                 EmptyState("No Tasks", systemImage: "tray", description: Text("Describe a task below to start one."))
             }
         }
@@ -38,7 +45,11 @@ struct TaskListView: View {
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .toolbar {
             let pushState = model.pushStates[project.id]
-            if !project.isApp || pushState != nil {
+            let tagNames = Self.tagNames(all)
+            if !tagNames.isEmpty || !tagFilter.isEmpty || showUntagged {
+                ToolbarItem { filterMenu(tagNames) }
+            }
+            if !project.isApp || pushState != nil || !tagNames.isEmpty {
                 // Pushes the buttons to the column's trailing end, away from the project name.
                 ToolbarSpacer(.flexible)
             }
@@ -69,6 +80,47 @@ struct TaskListView: View {
             // Likely back from the browser, where a pull request was opened or merged.
             await model.refreshPullRequests(projectID: project.id)
         }
+    }
+
+    /// Tasks with any of `tags` (lowercased), and those with none when `untagged`. Nothing chosen: all of them.
+    static func filter(_ tasks: [TaskItem], tags: Set<String>, untagged: Bool) -> [TaskItem] {
+        guard !tags.isEmpty || untagged else { return tasks }
+        return tasks.filter { task in
+            let own = (task.tags ?? []).map { $0.lowercased() }
+            return own.isEmpty ? untagged : own.contains(where: tags.contains)
+        }
+    }
+
+    /// Every tag the tasks have, once each whatever its case, in the first spelling met, sorted.
+    static func tagNames(_ tasks: [TaskItem]) -> [String] {
+        var names: [String: String] = [:]
+        for tag in tasks.flatMap({ $0.tags ?? [] }) where names[tag.lowercased()] == nil { names[tag.lowercased()] = tag }
+        return names.values.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    private func filterMenu(_ names: [String]) -> some View {
+        let active = !tagFilter.isEmpty || showUntagged
+        return Menu {
+            ForEach(names, id: \.self) { name in
+                Toggle(isOn: Binding { tagFilter.contains(name.lowercased()) } set: {
+                    if $0 { tagFilter.insert(name.lowercased()) } else { tagFilter.remove(name.lowercased()) }
+                }) {
+                    Label { Text(name) } icon: {
+                        Image(systemName: "circle.fill").foregroundStyle(project.color(ofTag: name).color)
+                    }
+                }
+            }
+            Divider()
+            Toggle("No Tags", isOn: $showUntagged)
+            if active {
+                Divider()
+                Button("Show All Tasks") { tagFilter = []; showUntagged = false }
+            }
+        } label: {
+            Image(systemName: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+        }
+        .menuIndicator(.hidden)
+        .help(active ? "Showing some tasks by tag" : "Filter tasks by tag")
     }
 
     /// The list's sections in order. Also gives ⌘[ and ⌘] the order to step through.
