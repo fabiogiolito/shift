@@ -2,7 +2,8 @@ import CoreImage.CIFilterBuiltins
 import ShiftCore
 import SwiftUI
 
-/// Pairs phones and revokes them. Anyone with a code can start agents on this Mac, so it's only shown on request.
+/// Pairs phones and revokes them. Anyone with a code can start agents on this Mac, so it's only shown here, at once
+/// when no phone is paired yet, and revoked when the tab closes unused.
 struct PairedDevicesView: View {
     @Environment(AppModel.self) private var model
     @State private var code: (device: RemoteDevice, pairing: Pairing)?
@@ -46,6 +47,9 @@ struct PairedDevicesView: View {
         .onChange(of: model.remoteDevices) {
             // The phone connected: its code has done its job.
             if let id = code?.device.id, model.remoteDevices.first(where: { $0.id == id })?.lastSeen != nil { code = nil }
+        }
+        .task {
+            if code == nil, !model.remoteDevices.contains(where: { $0.lastSeen != nil }) { pair() }
         }
         .onDisappear(perform: cancelCode)
     }

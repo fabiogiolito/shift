@@ -327,8 +327,22 @@ enum AgentEnvironment {
         "/usr/local/bin",
     ]
 
-    /// The user's login-shell environment. A GUI app does not inherit it. Resolved once.
-    static let loginShell: [String: String] = {
+    /// The user's login-shell environment. A GUI app does not inherit it. Resolved at launch, and again by `reload()`
+    /// after setup installs a tool, so it's found without relaunching.
+    static var loginShell: [String: String] {
+        lock.lock(); defer { lock.unlock() }
+        return resolved
+    }
+
+    static func reload() {
+        let fresh = resolve()
+        lock.lock(); resolved = fresh; lock.unlock()
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var resolved = resolve()
+
+    private static func resolve() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         let shell = env["SHELL"] ?? "/bin/zsh"
         let marker = "__SHIFT_ENV__"
@@ -343,7 +357,7 @@ enum AgentEnvironment {
         path += fallbackDirectories.filter { !path.contains($0) }
         env["PATH"] = path.joined(separator: ":")
         return env
-    }()
+    }
 
     static func detect(_ kind: AgentKind) -> AgentInstallation? {
         let name = kind.executableName

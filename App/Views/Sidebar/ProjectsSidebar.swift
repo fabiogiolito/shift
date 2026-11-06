@@ -5,6 +5,7 @@ import ShiftCore
 struct ProjectsSidebar: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(SetupFlow.self) private var setup
     @Binding var selection: Project.ID?
     @State private var search = ""
     @FocusState private var searchFocused: Bool
@@ -78,6 +79,7 @@ struct ProjectsSidebar: View {
             geo.contentOffset.y + geo.containerSize.height - geo.contentInsets.bottom < geo.contentSize.height - 1
         } action: { scrolledUnderBar = $1 }
         .sheet(item: $settingsProject) { ProjectSettingsView(projectID: $0.id) }
+        .onReceive(NotificationCenter.default.publisher(for: .addProject)) { _ in addProject() }
         .confirmationDialog("Remove “\(removingProject?.name ?? "")”?",
                             isPresented: Binding(get: { removingProject != nil }, set: { if !$0 { removingProject = nil } }),
                             presenting: removingProject) { project in
@@ -112,8 +114,20 @@ struct ProjectsSidebar: View {
             let known = Set(model.projects.map(\.id))
             guard let project = await model.addProject(at: url, initializingGit: initializingGit) else { return }
             selection = project.id
-            // A new project opens its settings, so permissions and commands can be reviewed first.
-            if !known.contains(project.id) { settingsProject = project }
+            // A new project opens its settings, so permissions and commands can be reviewed first, and the setup
+            // window if it needs something this Mac doesn't have.
+            guard !known.contains(project.id) else { return }
+            settingsProject = project
+            let steps = await setup.projectSteps(for: url)
+            if !steps.isEmpty {
+                setup.start(steps, isProjectSetup: true)
+                openWindow(id: SetupWindow.id)
+            }
         }
     }
+}
+
+extension Notification.Name {
+    /// Opens the folder picker to add a project, from outside the sidebar (the setup window's Add Project).
+    static let addProject = Notification.Name("addProject")
 }

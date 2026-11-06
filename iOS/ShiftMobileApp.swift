@@ -82,7 +82,7 @@ private struct PairingView: View {
         NavigationStack {
             Form {
                 Section {
-                    Label("On your Mac, open Shift and choose Shift > Paired Devices > Pair iPhone.", systemImage: "1.circle")
+                    Label("On your Mac, open Shift and choose Shift > Settings > Devices > Pair iPhone.", systemImage: "1.circle")
                     Label("Point this iPhone's Camera at the code, and open the link it finds.", systemImage: "2.circle")
                     Label("Both need Tailscale, signed in to the same account.", systemImage: "3.circle")
                 }

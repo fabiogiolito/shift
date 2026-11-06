@@ -21,6 +21,7 @@ struct ShiftApp: App {
             }
             .frame(minWidth: 960, minHeight: 600)
             .environment(delegate.model)
+            .environment(delegate.setupFlow)
             .environment(\.textScale, textScale)
             .background {
                 // ⌘= too, the key under + without Shift, as in Safari and Xcode.
@@ -38,6 +39,7 @@ struct ShiftApp: App {
                 #endif
                 ready = true
                 delegate.applyScreenshotSize()
+                await delegate.openSetupIfNeeded()
             }
         }
         .commands {
@@ -71,8 +73,16 @@ struct ShiftApp: App {
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
 
+        // At first launch with what's missing, from Settings › Setup, and when a new project needs something.
+        Window("Set Up Shift", id: SetupWindow.id) {
+            SetupWindow().environment(delegate.setupFlow)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+
         Settings {
-            SettingsView().environment(delegate.model)
+            SettingsView().environment(delegate.model).environment(delegate.setupFlow)
         }
     }
 }
@@ -86,6 +96,7 @@ private struct OpenWindowHandoff: View {
         Color.clear.onAppear { delegate.openWindow = openWindow }
     }
 }
+
 
 /// ⌘N starts a task, not a window. Its own `Commands` so the focused value is read here, not in the app's body:
 /// the value is a closure, new on every update of the field, and read in the body it re-created the whole window
@@ -239,6 +250,7 @@ extension FocusedValues {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var openWindow: OpenWindowAction?
+    lazy var setupFlow = SetupFlow(model: model)
     #if UPDATER
     /// Release builds only (see project.yml). Checks the feed in `SUFeedURL` in the background.
     let updater: SPUStandardUpdaterController? = ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] != nil
@@ -278,6 +290,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let size = ProcessInfo.processInfo.environment["SHIFT_WINDOW_SIZE"]?.split(separator: "x").compactMap { Double($0) }
         guard let size, size.count == 2, let window = NSApp.windows.first(where: \.isVisible) else { return }
         window.setFrame(NSRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
+    }
+
+    /// Opens the setup window when this Mac is missing something Shift needs. Not for sample data.
+    func openSetupIfNeeded() async {
+        guard ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == nil else { return }
+        await setupFlow.refresh()
+        guard setupFlow.needsSetup else { return }
+        setupFlow.startFirstLaunch()
+        openWindow?(id: SetupWindow.id)
     }
 
     /// Tasks keep running when the window is closed.

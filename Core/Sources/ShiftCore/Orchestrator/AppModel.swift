@@ -1520,6 +1520,17 @@ public final class AppModel {
 
     // MARK: - Project chat
 
+    /// After setup installs an agent or a tool: resolves the login shell's PATH again and finds the agents, so they
+    /// work without relaunching.
+    public func reloadEnvironment() async {
+        await Task.detached { AgentEnvironment.reload() }.value
+        guard let services else { return }
+        for kind in AgentKind.allCases {
+            installedAgents[kind] = await services.agents[kind]?.detect()
+            if models[kind] == nil { models[kind] = await services.agents[kind]?.models() }
+        }
+    }
+
     public func chat(projectID: Project.ID) -> ProjectChat? {
         chats.first { $0.projectID == projectID }
     }
