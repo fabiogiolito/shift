@@ -94,7 +94,7 @@ extension View {
         confirmationDialog("Delete “\(schedule.title)”?", isPresented: isPresented) {
             Button("Delete Schedule", role: .destructive) { model.deleteSchedule(schedule.id) }
         } message: {
-            Text("It won't run again. The tasks its runs started stay.")
+            Text("It won't run again. Tasks it already started won't be deleted.")
         }
     }
 }
