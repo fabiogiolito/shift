@@ -324,7 +324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let spec = ProcessInfo.processInfo.environment["SHIFT_ONBOARDING"] else { return }
         if spec == "settings" {
             setupFlow.installBoth = false
-            setupFlow.states = [.commandLineTools: .done, .agent: .done, .gitIdentity: .done, .github: .skipped]
+            setupFlow.states = [.commandLineTools: .done, .node: .done, .agent: .done, .gitIdentity: .done, .github: .skipped]
             openSettings?()
         } else {
             setupFlow.apply(debugSpec: spec)

@@ -11,6 +11,7 @@ struct SetupSettingsView: View {
         Form {
             Section {
                 row("Command Line Tools", systemImage: SetupStep.commandLineTools.symbol, step: .commandLineTools)
+                row("Node.js", systemImage: SetupStep.node.symbol, step: .node)
                 ForEach(AgentKind.allCases) { kind in
                     row(kind.displayName, image: kind.icon, step: .agent,
                         state: flow.agents.contains(kind) ? flow.state(.agent) : .notDone)

@@ -58,7 +58,6 @@ struct SetupWindow: View {
 private struct SetupStepView: View {
     let step: SetupStep
     @Environment(SetupFlow.self) private var flow
-    @State private var showsManual = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -67,7 +66,7 @@ private struct SetupStepView: View {
                     .font(.system(size: 44))
                     .foregroundStyle(.tint)
                     .frame(height: 56)
-                Text(step.title).font(.title).bold()
+                Text(step == .packageManager ? "This project needs \(flow.packageManager)" : step.title).font(.title).bold()
                 Text(summary)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -76,25 +75,13 @@ private struct SetupStepView: View {
             content
 
             SetupStatus(step: step)
-
-            if let manual = flow.state(step) == .done ? nil
-                : step.manualSteps(agents: flow.agents, packageManager: flow.packageManager) {
-                DisclosureGroup("Do it yourself", isExpanded: $showsManual) {
-                    Text(manual)
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
-                }
-                .frame(maxWidth: 420)
-            }
         }
         .padding(.horizontal, 48)
         .padding(.top, 40)
     }
 
     private var summary: String {
-        step == .node ? "It runs its dev server with Node.js and \(flow.packageManager)." : step.summary
+        step == .packageManager ? "It installs its packages with \(flow.packageManager), which Node.js doesn't include." : step.summary
     }
 
     @ViewBuilder private var content: some View {
