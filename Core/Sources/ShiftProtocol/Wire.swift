@@ -7,7 +7,8 @@ import Foundation
 
 public enum Wire {
     /// Say what you speak; never refuse a peer over it. Bump it when a peer may want to adapt to the difference.
-    public static let version = 1
+    /// 2: knows the `archived` task status. A Mac sends a peer that hasn't said so archived tasks as merged.
+    public static let version = 2
     public static let socketPath = "/ws"
     /// POST an image's bytes here, `?name=photo.jpg`. The reply is `AttachmentUploaded`.
     public static let attachmentsPath = "/attachments"

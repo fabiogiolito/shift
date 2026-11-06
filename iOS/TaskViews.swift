@@ -74,16 +74,17 @@ struct TaskListView: View {
 
     var body: some View {
         let tasks = model.tasks(in: projectID).sorted { $0.id > $1.id }
-        let active = tasks.filter { $0.status != .merged }, merged = tasks.filter { $0.status == .merged }
+        let active = tasks.filter { !$0.status.isClosed }
+        let closed = tasks.filter(\.status.isClosed).sorted { ($0.mergedAt ?? .distantPast) > ($1.mergedAt ?? .distantPast) }
         let project = model.state.projects.first { $0.id == projectID }
         List {
             if let project { Section { ChatRow(project: project) } }
             if !active.isEmpty {
                 Section { ForEach(active) { TaskRow(task: $0) } }
             }
-            if !merged.isEmpty {
-                Section("Merged") {
-                    ForEach(merged) { TaskRow(task: $0) }
+            if !closed.isEmpty {
+                Section("Closed") {
+                    ForEach(closed) { TaskRow(task: $0) }
                 }
             }
         }
@@ -292,7 +293,7 @@ struct TaskDetailView: View {
                 if ResponsePanel.shows(task) {
                     ResponsePanel(task: task, maxHeight: height * 0.5)
                         .id([task.question, task.blockedReason])
-                } else if task.status != .merged {
+                } else if !task.status.isClosed {
                     PromptBar { await model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
                 }
             }
@@ -350,6 +351,8 @@ private struct TaskStatusView: View {
                     .foregroundStyle(.secondary)
             } else if task.status == .conflict {
                 Label("It doesn't merge cleanly into its base.", systemImage: "checkmark.circle.fill").foregroundStyle(.orange)
+            } else if task.status == .archived {
+                Text("Archived without changes. Nothing was merged.").foregroundStyle(.secondary)
             } else if task.status == .merged, let project = model.state.projects.first(where: { $0.id == task.projectID }) {
                 Text("Merged into \(task.base(in: project))").foregroundStyle(.secondary)
             }

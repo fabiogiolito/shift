@@ -279,7 +279,7 @@ public final class AppModel {
             await remote?.start()
         }
 
-        for task in tasks where task.status != .merged {
+        for task in tasks where !task.status.isClosed {
             await reconcile(task.id)
         }
         // Its base may have gained code while Shift was closed (a pull request merged, a commit by hand).
@@ -420,7 +420,7 @@ public final class AppModel {
         }
         // Back on: each task's server starts once the task is opened.
         if !project.serversOff && old.serversOff {
-            for task in tasks(in: project.id) where task.status != .merged && task.serverPID == nil { dormant.insert(task.id) }
+            for task in tasks(in: project.id) where !task.status.isClosed && task.serverPID == nil { dormant.insert(task.id) }
         }
         // Now an app: its tasks are tested by building, so their dev servers and ports go. A running app goes
         // when the project stops being one, but not on any other change to its settings.
@@ -480,7 +480,7 @@ public final class AppModel {
     // ponytail: reads the repo folder, so it speaks for the checked-out branch, which is the base in practice.
     public func emptyBaseWarning(projectID: Project.ID) -> String? {
         guard let project = project(projectID),
-              let other = tasks(in: projectID).last(where: { $0.status != .merged }) else { return nil }
+              let other = tasks(in: projectID).last(where: { !$0.status.isClosed }) else { return nil }
         let files = (try? FileManager.default.contentsOfDirectory(atPath: project.repoPath)) ?? []
         guard !files.contains(where: { $0 != ".git" && $0 != ".DS_Store" }) else { return nil }
         return "\(project.baseBranch) is empty, so a new task starts without the work in “\(other.title)”. "
@@ -573,7 +573,7 @@ public final class AppModel {
             return
         }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard services != nil, let task = task(taskID), task.status != .merged,
+        guard services != nil, let task = task(taskID), !task.status.isClosed,
               !busy.contains(taskID), !text.isEmpty || !attachments.isEmpty else { return }
         guard runs[taskID]?.active == true else {
             let prompt = Prompt(text: text, attachments: attachments)
@@ -616,7 +616,7 @@ public final class AppModel {
     }
 
     public func merge(taskID: TaskItem.ID) async {
-        guard let services, let task = task(taskID), task.status != .merged,
+        guard let services, let task = task(taskID), !task.status.isClosed,
               let project = project(task.projectID), !busy.contains(taskID) else { return }
         busy.insert(taskID)
         defer { busy.remove(taskID) }
@@ -654,6 +654,26 @@ public final class AppModel {
                 update(taskID) { Self.apply(Settled(status: .blocked, blockedReason: TaskItem.stoppedReason), to: &$0) }
             }
         }
+    }
+
+    /// Closes a task that has no changes, without merging or pushing: its agent and server stop, its worktree and
+    /// branch go, and its record and conversation stay, archived. Refused while it has changes, committed or not.
+    public func archive(taskID: TaskItem.ID) async {
+        guard services != nil, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID) else { return }
+        busy.insert(taskID)
+        defer { busy.remove(taskID) }
+        // Stopped first, so nothing gets written between the check and the worktree going.
+        let wasRunning = runs[taskID] != nil
+        await cancelRun(taskID)
+        guard let changes = await changes(taskID: taskID), changes.files.isEmpty else {
+            lastError = "Could not archive \(task.title): it has changes. Merge or delete it instead."
+            if wasRunning {
+                update(taskID) { Self.apply(Settled(status: .blocked, blockedReason: TaskItem.stoppedReason), to: &$0) }
+            }
+            return
+        }
+        await cleanUp(taskID)
+        markClosed(taskID, as: .archived)
     }
 
     /// The project's base for new tasks, then every other base its tasks have (merged ones included).
@@ -781,7 +801,7 @@ public final class AppModel {
     /// is done, unless it has work that was not in it: that stays, and can go into a new pull request.
     public func refreshPullRequests(projectID: Project.ID) async {
         guard let services, let project = project(projectID), !refreshingPullRequests.contains(projectID),
-              tasks(in: projectID).contains(where: { $0.status != .merged }),
+              tasks(in: projectID).contains(where: { !$0.status.isClosed }),
               let remote = await services.git.remote(repo: project.repoURL, branch: project.baseBranch),
               let remoteURL = await services.git.remoteURL(repo: project.repoURL, remote: remote),
               let github = Self.githubRepo(remoteURL: remoteURL) else { return }
@@ -792,7 +812,7 @@ public final class AppModel {
 
         var newlyMergedBases: Set<String> = []
         for id in tasks(in: projectID).map(\.id) {
-            guard let task = task(id), task.status != .merged else { continue }
+            guard let task = task(id), !task.status.isClosed else { continue }
             guard var pullRequest = found[task.branch],
                   await services.git.branchExists(repo: project.repoURL, branch: task.branch) else {
                 pullRequests[id] = nil
@@ -879,7 +899,7 @@ public final class AppModel {
         // already running on the folder, and some servers ignore PORT.
         // ponytail: only the last 30 lines of output are read; the project's command should honor $PORT.
         let log = await services.servers.log(taskID: id, lines: 30)
-        let others = Set(tasks.filter { $0.status != .merged }.compactMap(\.port))
+        let others = Set(tasks.filter { !$0.status.isClosed }.compactMap(\.port))
             .union(basePorts.filter { $0.key != projectID }.values)
         for match in log.matches(of: #/https?://(?:localhost|127\.0\.0\.1):(\d+)/#).reversed() {
             guard let logged = Int(match.1), !others.contains(logged), await isListening(logged) else { continue }
@@ -918,7 +938,7 @@ public final class AppModel {
             lastError = "The folder for \(project.name) no longer exists: \(project.repoPath)"
             return
         }
-        let reserved = Set(tasks.filter { $0.status != .merged }.compactMap(\.port))
+        let reserved = Set(tasks.filter { !$0.status.isClosed }.compactMap(\.port))
             .union(basePorts.filter { $0.key != projectID }.values)
         let port = await services.ports.allocate(preferred: basePorts[projectID] ?? 3000, reserved: reserved)
         do {
@@ -995,7 +1015,7 @@ public final class AppModel {
     /// The agent for the task's next prompt. Sessions don't carry over between agents, so it starts a new one
     /// with the task's prompts replayed; the model becomes the project's for that agent. Not while it's working.
     public func setAgent(taskID: TaskItem.ID, to agent: AgentKind) {
-        guard let task = task(taskID), task.agent != agent, task.status != .merged, installedAgents[agent] != nil,
+        guard let task = task(taskID), task.agent != agent, !task.status.isClosed, installedAgents[agent] != nil,
               !busy.contains(taskID), !settingUp.contains(taskID), runs[taskID]?.active != true else { return }
         update(taskID) {
             $0.agent = agent
@@ -1017,7 +1037,7 @@ public final class AppModel {
     /// Points the task at another base: its own commits move onto `base` (a rebase), so merging brings
     /// only its work. If they conflict there, the agent moves them. Not while the agent is working.
     public func changeBase(taskID: TaskItem.ID, to base: String) async {
-        guard let services, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
+        guard let services, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
               !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID),
               base != task.branch else { return }
         let old = task.base(in: project)
@@ -1059,7 +1079,7 @@ public final class AppModel {
     /// conflicting files are returned, for the user to undo or hand to `fixSyncConflict`. Not while the agent works.
     @discardableResult
     public func syncBase(taskID: TaskItem.ID) async -> [String] {
-        guard let services, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
+        guard let services, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
               !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID) else { return [] }
         let base = task.base(in: project)
         if let missing = await missingBase(task, project) {
@@ -1091,7 +1111,7 @@ public final class AppModel {
 
     /// Hands a re-sync that conflicted to the agent, which merges the base in and resolves it.
     public func fixSyncConflict(taskID: TaskItem.ID) {
-        guard services != nil, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
+        guard services != nil, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
               runs[taskID]?.active != true, let project = project(task.projectID) else { return }
         beginWorking(taskID)
         update(taskID) { $0.isResolvingConflict = true }
@@ -1141,7 +1161,7 @@ public final class AppModel {
         busy.insert(taskID)
         defer { busy.remove(taskID) }
         // Resources first, the record last: if the app dies halfway the task is still there to retry.
-        if task.status != .merged { await cleanUp(taskID) }
+        if !task.status.isClosed { await cleanUp(taskID) }
         for shot in self.task(taskID)?.screenshots ?? [] { try? FileManager.default.removeItem(at: shot.url) }
         tasks.removeAll { $0.id == taskID }
         changed()
@@ -1151,7 +1171,7 @@ public final class AppModel {
     /// Restarts the dev server. If the worktree folder is gone it is recreated first, and the
     /// project's setup command run in it again.
     public func restartServer(taskID: TaskItem.ID) async {
-        guard services != nil, let task = task(taskID), task.status != .merged, !busy.contains(taskID),
+        guard services != nil, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
               !settingUp.contains(taskID) else { return }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
             // A run sets its worktree up itself before the agent starts.
@@ -1190,7 +1210,7 @@ public final class AppModel {
     /// line of the output, if that is the path of a .app. An iOS app is run on a simulator right here instead.
     public func build(taskID: TaskItem.ID, target targetID: BuildTarget.ID) async -> URL? {
         let key = BuildKey(taskID: taskID, targetID: targetID)
-        guard let services, let task = task(taskID), task.status != .merged, let project = project(task.projectID),
+        guard let services, let task = task(taskID), !task.status.isClosed, let project = project(task.projectID),
               project.isApp, builds[key] != .building,
               let chosen = project.targets.first(where: { $0.id == targetID }), chosen.kind != .run else { return nil }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
@@ -1279,7 +1299,7 @@ public final class AppModel {
     // ponytail: macOS only hook (CoreFoundation's home override), fine while Shift is a Mac app.
     public func runApp(taskID: TaskItem.ID, target targetID: BuildTarget.ID) async {
         let key = BuildKey(taskID: taskID, targetID: targetID)
-        guard let services, let task = task(taskID), task.status != .merged, let project = project(task.projectID),
+        guard let services, let task = task(taskID), !task.status.isClosed, let project = project(task.projectID),
               let target = project.targets.first(where: { $0.id == targetID }), target.kind == .run else { return }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
             builds[key] = .failed("The task's folder is recreated the next time the agent runs.")
@@ -1290,7 +1310,7 @@ public final class AppModel {
             + "export SHIFT_TARGET=\(ProjectSetup.quoted(target.name)); \(target.command)"
         do {
             let pid = try await services.servers.start(taskID: taskID, command: command, directory: task.worktreeURL, port: 0)
-            guard self.task(taskID)?.status != .merged else {
+            guard self.task(taskID)?.status.isClosed != true else {
                 await services.servers.stop(taskID: taskID)
                 return
             }
@@ -1781,7 +1801,7 @@ public final class AppModel {
             if createdBranch && task.sessionID != nil { update(id) { $0.sessionID = nil } }
             var port = task.port
             if port == nil && !project.isApp {
-                let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port)).union(basePorts.values)
+                let reserved = Set(tasks.filter { $0.id != id && !$0.status.isClosed }.compactMap(\.port)).union(basePorts.values)
                 port = await services.ports.allocate(preferred: id, reserved: reserved)
                 try check(id, token)
                 update(id) { $0.port = port }
@@ -2206,10 +2226,12 @@ public final class AppModel {
         }
     }
 
-    private func markMerged(_ id: TaskItem.ID) {
+    private func markMerged(_ id: TaskItem.ID) { markClosed(id, as: .merged) }
+
+    private func markClosed(_ id: TaskItem.ID, as status: TaskStatus) {
         pullRequests[id] = nil
         update(id) {
-            Self.apply(Settled(status: .merged), to: &$0)
+            Self.apply(Settled(status: status), to: &$0)
             $0.port = nil
             $0.serverPID = nil
             $0.mergedAt = Date()
@@ -2233,9 +2255,9 @@ public final class AppModel {
             await services.tailscale?.unserve(port: port)
         }
         // A task from before every task had a server has no port yet.
-        let reserved = Set(tasks.filter { $0.id != id && $0.status != .merged }.compactMap(\.port)).union(basePorts.values)
+        let reserved = Set(tasks.filter { $0.id != id && !$0.status.isClosed }.compactMap(\.port)).union(basePorts.values)
         let port = await services.ports.allocate(preferred: task.port ?? id, reserved: reserved)
-        guard let now = self.task(id), now.status != .merged else { return nil }
+        guard let now = self.task(id), !now.status.isClosed else { return nil }
         if port != now.port { update(id) { $0.port = port } }
         let command = ProjectSetup.serverCommand(for: project, in: task.worktreeURL)
         serverCommands[id] = command
@@ -2244,7 +2266,7 @@ public final class AppModel {
             let pid = try await services.servers.start(taskID: id, command: install.map { "\($0) && \(command)" } ?? command,
                                                        directory: task.worktreeURL, port: port)
             // Merged or deleted while the server was starting: it must not outlive the task.
-            guard let now = self.task(id), now.status != .merged else {
+            guard let now = self.task(id), !now.status.isClosed else {
                 await services.servers.stop(taskID: id)
                 return nil
             }
@@ -2329,7 +2351,7 @@ public final class AppModel {
         func idle(_ id: Int) -> Bool {
             serverUsed[id] ?? .distantPast < Date.now.addingTimeInterval(-TimeInterval(ttl) * 60 + serverIdleSlack)
         }
-        for task in tasks where task.status != .merged {
+        for task in tasks where !task.status.isClosed {
             guard let pid = task.serverPID, runs[task.id] == nil, !settingUp.contains(task.id), !busy.contains(task.id),
                   project(task.projectID)?.isApp == false, idle(task.id) else { continue }
             if let port = task.port, await services.ports.hasClients(port, besides: pid) {
@@ -2403,7 +2425,7 @@ public final class AppModel {
             if !chatMemory.isEmpty { chatMemory = [:] }
             return
         }
-        let worktrees = tasks.filter { $0.status != .merged }.map { ($0.worktreePath, $0.id) }
+        let worktrees = tasks.filter { !$0.status.isClosed }.map { ($0.worktreePath, $0.id) }
         let chats = projects.filter { chatRuns[$0.id] != nil }.map { ($0.repoPath, $0.id) }
         let bases = Set(baseGroups.values)
         let (taskUse, chatUse) = await Task.detached {

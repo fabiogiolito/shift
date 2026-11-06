@@ -12,6 +12,13 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(TaskStatus.conflict.notifies(from: .conflict))
     }
 
+    func testUnknownStatusDecodesAsClosed() throws {
+        let decoded = try JSONDecoder().decode([TaskStatus].self, from: Data(#"["archived", "scheduled", "working"]"#.utf8))
+        XCTAssertEqual(decoded, [.archived, .merged, .working])
+        XCTAssertTrue(decoded[1].isClosed)
+        XCTAssertEqual(String(data: try JSONEncoder().encode(TaskStatus.archived), encoding: .utf8), #""archived""#)
+    }
+
     func testAppStateRoundTrips() throws {
         let project = Project(name: "Spot", repoPath: "/tmp/spot", baseBranch: "main")
         let task = TaskItem(id: 3001, projectID: project.id, title: "Gap", agent: .codex,

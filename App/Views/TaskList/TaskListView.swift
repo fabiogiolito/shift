@@ -75,7 +75,7 @@ struct TaskListView: View {
         [
             ("Review", tasks.filter { $0.status == .completed || $0.status == .conflict }),
             ("Tasks", tasks.filter { [.working, .needsInput, .blocked].contains($0.status) }),
-            ("Recently Merged", Array(tasks.filter { $0.status == .merged }
+            ("Recently Closed", Array(tasks.filter { $0.status.isClosed }
                 .sorted { ($0.mergedAt ?? .distantPast) > ($1.mergedAt ?? .distantPast) }.prefix(10))),
         ]
     }
@@ -158,6 +158,11 @@ struct TaskRow: View {
             }
         }
         .taskActions(task, $actions)
+        // ponytail: one diff per finished task in the list, for its context menu; cache in AppModel if lists grow long.
+        .task(id: task.status) {
+            let changes = task.status == .completed ? await model.changes(taskID: task.id) : nil
+            actions.unchanged = changes?.files.isEmpty == true
+        }
     }
 }
 

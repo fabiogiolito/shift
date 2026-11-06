@@ -483,7 +483,7 @@ final class AgentAdapterTests: XCTestCase {
         XCTAssertTrue(context.contains("(merged 1970-01-01) Merged \(OutcomeProtocol.chatMergedLimit): branch"))
         XCTAssertFalse(context.contains("Merged 0:"))
         XCTAssertFalse(context.contains("/w/4001"))
-        XCTAssertTrue(context.contains("1 older merged tasks"))
+        XCTAssertTrue(context.contains("1 older closed tasks"))
 
         let request = AgentRequest(prompt: "Hi", worktree: URL(fileURLWithPath: "/w"), chat: true, chatContext: context)
         let claude = ClaudeCodeAdapter.arguments(for: request)
