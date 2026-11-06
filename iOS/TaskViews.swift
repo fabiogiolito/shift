@@ -152,6 +152,8 @@ private struct ChatView: View {
     @State private var stream: LogStream?
     @State private var confirmingNew = false
     @State private var scroll = ScrollPosition(edge: .bottom)
+    /// Scrolled back from the newest message: new ones don't pull the view down.
+    @State private var scrolledUp = false
 
     var body: some View {
         let chat = model.chat(projectID: project.id)
@@ -180,6 +182,11 @@ private struct ChatView: View {
         // On send, the new message and "Working…" in view.
         .onChange(of: chat?.prompts.count) { withAnimation { scroll.scrollTo(edge: .bottom) } }
         .onChange(of: replying) { if replying { withAnimation { scroll.scrollTo(edge: .bottom) } } }
+        // Follows the reply as it arrives, unless scrolled back to read.
+        .onChange(of: stream?.turns) { if !scrolledUp { scroll.scrollTo(edge: .bottom) } }
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY > 100
+        } action: { scrolledUp = $1 }
         .scrollDismissesKeyboard(.interactively)
         .overlay {
             if chat == nil {

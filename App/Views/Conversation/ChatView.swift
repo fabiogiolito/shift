@@ -71,6 +71,8 @@ struct ChatView: View {
             // On send, and again once the bar grows its "Working…" row, after the safe area takes it in.
             .onChange(of: chat?.prompts.count) { scrollDown(proxy) }
             .onChange(of: replying) { if replying { scrollDown(proxy) } }
+            // Follows the reply as it arrives, unless scrolled back to read.
+            .onChange(of: turns) { if !scrolledUp { scrollDown(proxy) } }
             .onScrollGeometryChange(for: Bool.self) { geo in
                 geo.contentSize.height - geo.visibleRect.maxY > 100
             } action: { scrolledUp = $1 }
