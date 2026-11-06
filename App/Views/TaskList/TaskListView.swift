@@ -119,7 +119,7 @@ struct TaskListView: View {
                 }
                 if active {
                     Divider()
-                    Button("Clear") { tagFilter = [] }
+                    Button("Clear") { tagFilter = []; showingFilter = false }.buttonStyle(.plain)
                 }
             }
             .padding(12)
