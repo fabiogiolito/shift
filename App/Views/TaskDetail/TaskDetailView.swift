@@ -120,7 +120,7 @@ struct TaskDetailView: View {
                 menu.unchanged = (try? changes?.get())?.files.isEmpty == true
             }
             .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
-            .taskActions(task, $menu)
+            .taskActions(task, $menu, tagsHere: false)
             .confirmationDialog("Change the base of “\(task.title)” to \(newBase ?? "")?",
                                 isPresented: Binding(get: { newBase != nil }, set: { if !$0 { newBase = nil } })) {
                 Button("Change Base") {
@@ -177,6 +177,12 @@ struct TaskDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             if let headline = headline(task) {
                 Text(headline).font(.title3).textSelection(.enabled)
+            }
+            if task.tags?.isEmpty == false {
+                TaskTags(tags: task.tags, project: project, onRemove: { model.removeTag(taskID: task.id, $0) },
+                         onDelete: { model.deleteTag(projectID: project.id, $0) },
+                         isShared: { model.tagIsShared(taskID: task.id, $0) },
+                         onColor: { model.setTagColor(projectID: project.id, $0, $1) })
             }
             statusLine(task, project)
             actions(task, project)
@@ -820,6 +826,7 @@ struct TaskDetailView: View {
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
+        .popover(isPresented: $menu.editingTags, arrowEdge: .bottom) { TagEditor(taskID: task.id) }
     }
 
     // MARK: Helpers

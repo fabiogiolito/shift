@@ -566,10 +566,14 @@ public final class AppModel {
     /// Follow-up instructions, an answer to a question, or instructions for a blocked task.
     /// While the agent works they go into its running session as soon as it can take them, and are
     /// `isPending` until then.
-    /// `/task <prompt>` starts a new task in the same project instead.
+    /// `/task <prompt>` starts a new task in the same project instead. `/tag a, b` adds tags to the task; `/tag` alone clears them.
     public func sendPrompt(taskID: TaskItem.ID, text: String, attachments: [String] = []) {
-        if let prompt = Self.taskCommand(text), let task = task(taskID) {
+        if let prompt = Self.command("task", text), let task = task(taskID) {
             createTask(projectID: task.projectID, prompt: prompt, attachments: attachments)
+            return
+        }
+        if let list = Self.command("tag", text) {
+            addTags(taskID: taskID, list)
             return
         }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -599,11 +603,72 @@ public final class AppModel {
         deliverPending(taskID)
     }
 
-    /// The prompt of a `/task <prompt>` message, or nil when the message isn't one.
-    nonisolated static func taskCommand(_ text: String) -> String? {
-        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard text.hasPrefix("/task"), text.count == 5 || text.dropFirst(5).first!.isWhitespace else { return nil }
-        return String(text.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+    /// What follows `/<name>` in a message, e.g. the prompt of `/task <prompt>`, or nil when the message isn't that command.
+    nonisolated static func command(_ name: String, _ text: String) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines), prefix = "/" + name
+        guard text.hasPrefix(prefix), text.count == prefix.count || text.dropFirst(prefix.count).first!.isWhitespace else { return nil }
+        return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// A tag no task has any more leaves the project too, unless `keepUnused`: the tags popover keeps it
+    /// listed until it closes, so it can be checked again, and then calls `pruneTags`.
+    public func removeTag(taskID: TaskItem.ID, _ tag: String, keepUnused: Bool = false) {
+        update(taskID) { task in
+            task.tags?.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+            if task.tags?.isEmpty == true { task.tags = nil }
+        }
+        if !keepUnused, let projectID = task(taskID)?.projectID { pruneTags(projectID: projectID) }
+    }
+
+    /// Whether a task in the project other than `taskID` has `tag`.
+    public func tagIsShared(taskID: TaskItem.ID, _ tag: String) -> Bool {
+        guard let projectID = task(taskID)?.projectID else { return false }
+        return tasks(in: projectID).contains { other in
+            other.id != taskID && other.tags?.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } == true
+        }
+    }
+
+    /// Takes `tag` off every task in the project, and forgets it and its color.
+    public func deleteTag(projectID: Project.ID, _ tag: String) {
+        for task in tasks(in: projectID) where task.tags?.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) == true {
+            removeTag(taskID: task.id, tag, keepUnused: true)
+        }
+        pruneTags(projectID: projectID)
+    }
+
+    /// Forgets the tags (and their colors) no task in the project has.
+    public func pruneTags(projectID: Project.ID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let used = Set(tasks(in: projectID).flatMap { $0.tags ?? [] }.map { $0.lowercased() })
+        let unused = projects[index].tagColors.keys.filter { !used.contains($0.lowercased()) }
+        guard !unused.isEmpty else { return }
+        unused.forEach { projects[index].tagColors[$0] = nil }
+        changed()
+    }
+
+    /// Adds comma-separated tags, skipping ones it already has (ignoring case). An empty list clears them.
+    public func addTags(taskID: TaskItem.ID, _ list: String) {
+        let new = list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        update(taskID) { task in
+            guard !new.isEmpty else { task.tags = nil; return }
+            var tags = task.tags ?? []
+            for tag in new where !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) { tags.append(tag) }
+            task.tags = tags
+        }
+        // A new name gets a random color; one the project already knows keeps its own.
+        guard let projectID = task(taskID)?.projectID, let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        if new.isEmpty { return pruneTags(projectID: projectID) }
+        for tag in new where projects[index].tagKey(tag) == nil {
+            projects[index].tagColors[tag] = TagColor.allCases.filter { $0 != .gray }.randomElement()
+        }
+        changed()
+    }
+
+    /// Changes the color of `tag` on every task in the project that has it.
+    public func setTagColor(projectID: Project.ID, _ tag: String, _ color: TagColor) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        projects[index].tagColors[projects[index].tagKey(tag) ?? tag] = color
+        changed()
     }
 
     /// Carries on with a task that was stopped or interrupted (`TaskItem.canResume`), in the same
@@ -1479,7 +1544,7 @@ public final class AppModel {
     /// soon as it can take it, or else into a next turn.
     /// `/task <prompt>` starts a new task instead.
     public func sendChat(projectID: Project.ID, text: String, attachments: [String] = []) {
-        if let prompt = Self.taskCommand(text) {
+        if let prompt = Self.command("task", text) {
             createTask(projectID: projectID, prompt: prompt, attachments: attachments)
             return
         }

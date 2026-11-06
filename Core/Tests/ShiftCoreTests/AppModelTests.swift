@@ -90,10 +90,10 @@ final class AppModelTests: XCTestCase {
     }
 
     func testTaskCommandStartsANewTask() async {
-        XCTAssertEqual(AppModel.taskCommand(" /task  Fix the footer\n"), "Fix the footer")
-        XCTAssertEqual(AppModel.taskCommand("/task\nTwo\nlines"), "Two\nlines")
-        XCTAssertNil(AppModel.taskCommand("/tasks"))
-        XCTAssertNil(AppModel.taskCommand("Run /task later"))
+        XCTAssertEqual(AppModel.command("task", " /task  Fix the footer\n"), "Fix the footer")
+        XCTAssertEqual(AppModel.command("task", "/task\nTwo\nlines"), "Two\nlines")
+        XCTAssertNil(AppModel.command("task", "/tasks"))
+        XCTAssertNil(AppModel.command("task", "Run /task later"))
 
         let id = await createCompletedTask()
         model.sendPrompt(taskID: id, text: "/task Fix the footer")
@@ -103,6 +103,42 @@ final class AppModelTests: XCTestCase {
 
         model.sendChat(projectID: project.id, text: "/task Fix the header")
         XCTAssertEqual(model.task(id + 2)?.prompts.map(\.text), ["Fix the header"])
+    }
+
+    func testTagCommandAddsTags() async {
+        let id = await createCompletedTask()
+        model.sendPrompt(taskID: id, text: "/tag foo, bar,,")
+        model.sendPrompt(taskID: id, text: "/tag Bar, baz")
+        XCTAssertEqual(model.task(id)?.tags, ["foo", "bar", "baz"])
+        XCTAssertEqual(model.task(id)?.prompts.map(\.text), ["Do the thing"])
+        let color = model.project(project.id)!.color(ofTag: "FOO")
+        XCTAssertNotEqual(color, .gray)
+        model.setTagColor(projectID: project.id, "Foo", .teal)
+        XCTAssertEqual(model.project(project.id)?.color(ofTag: "foo"), .teal)
+        model.sendPrompt(taskID: id, text: "/tag foo")
+        XCTAssertEqual(model.project(project.id)?.color(ofTag: "foo"), .teal)
+        model.removeTag(taskID: id, "bar")
+        XCTAssertEqual(model.task(id)?.tags, ["foo", "baz"])
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["baz", "foo"], "no task has bar any more")
+        // The tags popover keeps an unchecked tag listed until it closes.
+        model.removeTag(taskID: id, "baz", keepUnused: true)
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["baz", "foo"])
+        model.pruneTags(projectID: project.id)
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["foo"])
+        model.sendPrompt(taskID: id, text: "/tag")
+        XCTAssertNil(model.task(id)?.tags)
+        XCTAssertEqual(model.project(project.id)?.tagNames, [])
+
+        // Shared by two tasks: deleting takes it off both and out of the project.
+        let other = await createCompletedTask()
+        model.addTags(taskID: id, "shared")
+        model.addTags(taskID: other, "Shared")
+        XCTAssertTrue(model.tagIsShared(taskID: id, "SHARED"))
+        model.deleteTag(projectID: project.id, "shared")
+        XCTAssertNil(model.task(id)?.tags)
+        XCTAssertNil(model.task(other)?.tags)
+        XCTAssertEqual(model.project(project.id)?.tagNames, [])
+        XCTAssertNil(AppModel.command("tag", "/tags x"))
     }
 
     func testCreateRunsToCompleted() async {

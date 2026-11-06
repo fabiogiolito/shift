@@ -5,6 +5,7 @@ import ShiftCore
 struct TaskActions {
     var output: TaskOutput?
     var renaming = false
+    var editingTags = false
     var confirmingDelete = false
     /// Completed with nothing committed or uncommitted against its base: it can be archived.
     var unchanged = false
@@ -49,6 +50,7 @@ struct TaskActionItems: View {
         if actions.unchanged && !task.status.isClosed {
             Button("Archive Task") { Task { await model.archive(taskID: task.id) } }
         }
+        Button("Tags…") { actions.editingTags = true }
         Button("Rename Task…") { actions.renaming = true }
         Button("Delete Task…", role: .destructive) { actions.confirmingDelete = true }
     }
@@ -56,8 +58,9 @@ struct TaskActionItems: View {
 
 extension View {
     /// The log sheet, rename alert and delete confirmation the task's menu items open.
-    func taskActions(_ task: TaskItem, _ actions: Binding<TaskActions>) -> some View {
-        modifier(TaskActionsPresenter(task: task, actions: actions))
+    /// `tagsHere` false: the caller shows `TagEditor` itself, anchored where it fits better.
+    func taskActions(_ task: TaskItem, _ actions: Binding<TaskActions>, tagsHere: Bool = true) -> some View {
+        modifier(TaskActionsPresenter(task: task, actions: actions, tagsHere: tagsHere))
     }
 }
 
@@ -65,6 +68,7 @@ private struct TaskActionsPresenter: ViewModifier {
     @Environment(AppModel.self) private var model
     let task: TaskItem
     @Binding var actions: TaskActions
+    let tagsHere: Bool
 
     func body(content: Content) -> some View {
         let taskID = task.id
@@ -78,11 +82,50 @@ private struct TaskActionsPresenter: ViewModifier {
                 }
             }
             .renameTaskAlert(task, isPresented: $actions.renaming)
+            .popover(isPresented: tagsHere ? $actions.editingTags : .constant(false), arrowEdge: .trailing) {
+                TagEditor(taskID: taskID)
+            }
             .confirmationDialog("Delete “\(task.title)”?", isPresented: $actions.confirmingDelete) {
                 Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: taskID) } }
             } message: {
                 Text("Its changes are discarded without merging.")
             }
+    }
+}
+
+/// The project's tags as checkboxes with their colors, for one task, and a field for new ones.
+/// A popover, not a submenu: menus show neither colors nor a checkmark next to an icon.
+struct TagEditor: View {
+    @Environment(AppModel.self) private var model
+    let taskID: TaskItem.ID
+    @State private var name = ""
+
+    var body: some View {
+        if let task = model.task(taskID), let project = model.project(task.projectID) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(project.tagNames, id: \.self) { name in
+                    Toggle(isOn: Binding {
+                        task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
+                    } set: {
+                        if $0 { model.addTags(taskID: taskID, name) } else { model.removeTag(taskID: taskID, name, keepUnused: true) }
+                    }) {
+                        HStack(spacing: 6) {
+                            Circle().fill(project.color(ofTag: name).color).frame(width: 8, height: 8)
+                            Text(name)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                }
+                if !project.tagNames.isEmpty { Divider() }
+                TextField("New Tag", text: $name)
+                    .onSubmit { model.addTags(taskID: taskID, name); name = "" }
+                    .help("Separate several tags with commas.")
+            }
+            .padding(12)
+            .frame(width: 180, alignment: .leading)
+            // Unchecked tags stay listed while it is open, so they can be checked again; then the unused ones go.
+            .onDisappear { model.pruneTags(projectID: project.id) }
+        }
     }
 }
 

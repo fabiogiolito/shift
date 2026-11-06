@@ -228,6 +228,15 @@ public struct BuildTarget: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// The system colors a tag can have. Unknown ones, from a newer build, read as gray.
+public enum TagColor: String, Codable, CaseIterable, Sendable {
+    case red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, brown, gray
+
+    public init(from decoder: Decoder) throws {
+        self = TagColor(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .gray
+    }
+}
+
 public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var name: String
@@ -257,6 +266,22 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var opensPullRequests: Bool
     /// No dev servers run for it, its base's or its tasks', until turned back on.
     public var serversOff: Bool
+    /// Every tag the project's tasks have had, in its first spelling, with its color: one per name whatever its
+    /// case, shared by every task with it. Kept when no task has the tag any more, so it can be picked again.
+    public var tagColors: [String: TagColor] = [:]
+
+    /// The key `tag` is stored under, whatever its case.
+    public func tagKey(_ tag: String) -> String? {
+        tagColors.keys.first { $0.caseInsensitiveCompare(tag) == .orderedSame }
+    }
+
+    /// The color `tag` shows in, gray until it has one.
+    public func color(ofTag tag: String) -> TagColor { tagKey(tag).flatMap { tagColors[$0] } ?? .gray }
+
+    /// Every tag, sorted.
+    public var tagNames: [String] {
+        tagColors.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
 
     public init(id: UUID = UUID(), name: String, repoPath: String, baseBranch: String, type: ProjectType = .other,
                 defaultAgent: AgentKind = .claudeCode, serverCommand: String = "", setupCommand: String = "",
@@ -299,6 +324,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         takesScreenshots = try values.decodeIfPresent(Bool.self, forKey: .takesScreenshots) ?? false
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
+        tagColors = try values.decodeIfPresent([String: TagColor].self, forKey: .tagColors) ?? [:]
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)
@@ -462,6 +488,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var lastBuiltTargetID: BuildTarget.ID?
     /// Merged by merging its pull request on GitHub. Optional so state saved by earlier builds still decodes.
     public var mergedPullRequest: Int?
+    /// Set with `/tag a, b`. Optional so state saved by earlier builds still decodes.
+    public var tags: [String]?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
                 agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,
