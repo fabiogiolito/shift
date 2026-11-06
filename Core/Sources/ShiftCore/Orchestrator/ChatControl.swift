@@ -34,6 +34,30 @@ extension AppModel {
                                setupCommand, buildCommand, buildTargets, pushTaskBranches, takesScreenshots,
                                opensPullRequests. buildTargets is a JSON list of {"name", "command", "kind", "paths"};
                                kind is macApp, iOSSimulator, run or script. buildCommand is for a single target.
+
+    Schedules start a task by themselves each time they come due (a "run"), from their own prompt, base branch,
+    agent, model and permissions, and apply their finish action when it's done. <id> can be its first characters.
+      schedules                the project's schedules, as JSON, with when each runs next
+      schedule <id>            one in full, with its runs: when due, started, task, outcome and why
+      schedule create '<json>' create one; prints its id
+      schedule edit <id> '<json>'
+                               change the fields given (a JSON merge patch: null clears one); applies from the next run
+      schedule pause|resume|delete <id>
+      schedule run <id>        start a run now, whatever its timing
+    A schedule's JSON (only "prompt" and "timing.start" are required; the rest default to the project's):
+      {"title", "prompt", "baseBranch", "agent", "model", "permissions",
+       "timing": {"start": "2026-11-07T09:00" (local time; the first run, or the only one),
+                  "repeat": {"frequency": "hourly|daily|weekly|monthly", "interval": 1,
+                             "weekdays": ["monday", "friday"] (weekly; default the start's),
+                             "monthDays": [1, 15] (monthly; months without the day are skipped; default the start's),
+                             "ordinal": {"week": "first|second|third|fourth|last", "day": "friday"}
+                                        (monthly, instead of monthDays; without "day": that day of the month)},
+                  "between": {"from": "13:00", "to": "17:00"} (only runs at these times of day),
+                  "endAfter": 5 (runs), "endOn": "2026-12-31"},
+       "finish": "review|archive|pullRequest|merge" (archive only without changes, merge only if clean),
+       "keepAwake": false (keeps the Mac from sleeping while a run is coming),
+       "wakeMac": false (wakes the Mac before each run; asks the user for their password)}
+    No "repeat": it runs once. A run missed while the Mac slept or Shift was closed is logged, not caught up.
     """
 
     func handleControl(token: String, arguments: [String]) async -> ControlReply {
@@ -190,6 +214,15 @@ extension AppModel {
             case .browser(let url)?: return [note, "Open it here: \(url.absoluteString)"].compactMap { $0 }.joined(separator: " ")
             case nil: throw Refusal(note ?? "Could not open a pull request.")
             }
+        case "schedules":
+            return try controlJSON(schedules(in: projectID).map { schedule -> [String: Any] in
+                var object = try controlObject(schedule)
+                object["runs"] = schedule.runs.count
+                object["next"] = schedule.nextRun().map(Self.controlDateFormatter.string(from:)) ?? NSNull()
+                return object
+            })
+        case "schedule":
+            return try await scheduleControl(projectID, &rest)
         case "project":
             return json(project(projectID))
         case "set":
@@ -198,6 +231,170 @@ extension AppModel {
         default:
             throw Refusal("Unknown command \(command).\n\n\(Self.controlUsage)")
         }
+    }
+
+    private func scheduleControl(_ projectID: Project.ID, _ rest: inout ArraySlice<String>) async throws -> String {
+        func scheduleArgument() throws -> Schedule {
+            let word = rest.popFirst()?.lowercased() ?? ""
+            let found = schedules(in: projectID).filter { $0.id.uuidString.lowercased().hasPrefix(word) }
+            guard !word.isEmpty, found.count == 1 else { throw Refusal("No such schedule in this project. Run `schedules`.") }
+            return found[0]
+        }
+        func jsonArgument() throws -> [String: Any] {
+            let text = rest.joined(separator: " ")
+            guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else {
+                throw Refusal("Give the schedule's fields as a JSON object.")
+            }
+            return object
+        }
+        switch rest.popFirst() {
+        case "create":
+            guard let project = project(projectID) else { throw Refusal("The project no longer exists.") }
+            let fields = try jsonArgument()
+            let defaults = Schedule(projectID: projectID, title: "", prompt: "", baseBranch: project.baseBranch,
+                                    agent: project.defaultAgent, model: project.models[project.defaultAgent],
+                                    permissions: project.permissions, timing: ScheduleTiming(start: Date()))
+            guard (fields["timing"] as? [String: Any])?["start"] != nil else { throw Refusal("Missing timing.start.") }
+            let schedule = try await validSchedule(patching: defaults, with: fields)
+            addSchedule(schedule)
+            let next = schedule.nextRun().map { "Next run: \(Self.controlDateFormatter.string(from: $0))." } ?? "It has no runs to come."
+            return "Created schedule \(schedule.id.uuidString). \(next)"
+        case "edit":
+            let old = try scheduleArgument()
+            let schedule = try await validSchedule(patching: old, with: try jsonArgument())
+            updateSchedule(schedule)
+            let next = self.schedule(schedule.id)?.nextRun().map { "Next run: \(Self.controlDateFormatter.string(from: $0))." } ?? "It has no runs to come."
+            return "Saved. \(next)"
+        case "pause":
+            let schedule = try scheduleArgument()
+            setSchedulePaused(schedule.id, true)
+            return "Paused \(schedule.title)."
+        case "resume":
+            let schedule = try scheduleArgument()
+            setSchedulePaused(schedule.id, false)
+            let next = self.schedule(schedule.id)?.nextRun().map { "Next run: \(Self.controlDateFormatter.string(from: $0))." } ?? "It has no runs to come."
+            return "Resumed \(schedule.title). \(next)"
+        case "delete":
+            let schedule = try scheduleArgument()
+            deleteSchedule(schedule.id)
+            return "Deleted \(schedule.title). Its runs' tasks stay."
+        case "run":
+            let schedule = try scheduleArgument()
+            guard let taskID = runScheduleNow(schedule.id) else {
+                throw Refusal(self.schedule(schedule.id)?.runs.last?.reason ?? "Could not start a run.")
+            }
+            return "Started task \(taskID)."
+        case let word?:
+            rest.insert(word, at: rest.startIndex)
+            let schedule = try scheduleArgument()
+            var object = try controlObject(schedule)
+            object["next"] = schedule.nextRun().map(Self.controlDateFormatter.string(from:)) ?? NSNull()
+            return try controlJSON(object)
+        case nil:
+            throw Refusal("Missing the schedule.\n\n\(Self.controlUsage)")
+        }
+    }
+
+    /// `schedule` with `fields` merged in, checked: what the chat can't set is refused with why.
+    private func validSchedule(patching schedule: Schedule, with fields: [String: Any]) async throws -> Schedule {
+        guard let project = project(schedule.projectID) else { throw Refusal("The project no longer exists.") }
+        var fields = fields
+        for key in ["id", "projectID", "runs", "createdAt", "checkedUntil", "next"] { fields[key] = nil }
+        let merged = Self.mergePatch(try controlObject(schedule), fields)
+        var result: Schedule
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .custom { decoder in
+                let container = try decoder.singleValueContainer()
+                let text = try container.decode(String.self)
+                guard let date = Self.controlDate(text) else {
+                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "\(text) isn't a date like 2026-11-07T09:00.")
+                }
+                return date
+            }
+            result = try decoder.decode(Schedule.self, from: JSONSerialization.data(withJSONObject: merged))
+        } catch let DecodingError.dataCorrupted(context) {
+            throw Refusal("Invalid schedule: \(context.codingPath.map(\.stringValue).joined(separator: ".")) \(context.debugDescription)")
+        } catch let DecodingError.keyNotFound(key, context) {
+            throw Refusal("Invalid schedule: missing \((context.codingPath + [key]).map(\.stringValue).joined(separator: ".")).")
+        } catch let DecodingError.typeMismatch(_, context), let DecodingError.valueNotFound(_, context) {
+            throw Refusal("Invalid schedule: \(context.codingPath.map(\.stringValue).joined(separator: ".")) has the wrong type.")
+        }
+        // Another agent: its model, unless one was given.
+        if result.agent != schedule.agent && fields["model"] == nil { result.model = project.models[result.agent] }
+        result.title = result.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.prompt = result.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !result.prompt.isEmpty else { throw Refusal("Missing the prompt.") }
+        if result.title.isEmpty { result.title = TaskItem.title(for: result.prompt) }
+        guard installedAgents[result.agent] != nil else {
+            throw Refusal("Pick an installed agent: \(installedAgents.keys.map(\.rawValue).sorted().joined(separator: ", ")).")
+        }
+        if let model = result.model, !(models[result.agent] ?? []).contains(where: { $0.id == model }) {
+            throw Refusal("\(result.agent.displayName) offers: \((models[result.agent] ?? []).map(\.id).joined(separator: ", ")); leave model out for its default.")
+        }
+        let rank: [AgentPermissions: Int] = [.manual: 0, .auto: 1, .bypass: 2]
+        if result.permissions != schedule.permissions, rank[result.permissions]! > rank[project.permissions]! {
+            throw Refusal("Only the user can give a schedule more permissions than the project's (\(project.permissions.rawValue)).")
+        }
+        if result.baseBranch != schedule.baseBranch || schedule.runs.isEmpty,
+           !(await branches(for: project.id)).contains(result.baseBranch) {
+            throw Refusal("No branch \(result.baseBranch) that can be a base.")
+        }
+        if let rule = result.timing.repeat {
+            guard rule.interval >= 1 else { throw Refusal("repeat.interval is 1 or more.") }
+            guard rule.monthDays.allSatisfy((1...31).contains) else { throw Refusal("repeat.monthDays are 1 to 31.") }
+        }
+        if let count = result.timing.endAfter, count < 1 { throw Refusal("endAfter is 1 or more.") }
+        return result
+    }
+
+    /// RFC 7396: `patch`'s values replace `target`'s, objects merge, null removes.
+    nonisolated static func mergePatch(_ target: [String: Any], _ patch: [String: Any]) -> [String: Any] {
+        var result = target
+        for (key, value) in patch {
+            if value is NSNull {
+                result[key] = nil
+            } else if let object = value as? [String: Any], let existing = result[key] as? [String: Any] {
+                result[key] = mergePatch(existing, object)
+            } else {
+                result[key] = value
+            }
+        }
+        return result
+    }
+
+    /// Local time with its offset, which is how the chat's agent reads dates.
+    nonisolated(unsafe) static let controlDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = .current
+        return formatter
+    }()
+
+    /// A full ISO 8601 date, or a local "2026-11-07T09:00", "2026-11-07 09:00:00" or "2026-11-07".
+    nonisolated static func controlDate(_ text: String) -> Date? {
+        if let date = controlDateFormatter.date(from: text) { return date }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: text) { return date }
+        }
+        return nil
+    }
+
+    private func controlObject<T: Encodable>(_ value: T) throws -> [String: Any] {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(Self.controlDateFormatter.string(from: date))
+        }
+        return try JSONSerialization.jsonObject(with: encoder.encode(value)) as? [String: Any] ?? [:]
+    }
+
+    private func controlJSON(_ object: Any) throws -> String {
+        String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
+               as: UTF8.self)
     }
 
     private func set(_ setting: String, to value: String, in projectID: Project.ID) async throws -> String {
@@ -266,7 +463,7 @@ extension AppModel {
     }
 
     /// What `operation` put in `lastError`, for the agent instead of an alert for the user.
-    private func collectingError(_ operation: () async -> Void) async -> String? {
+    func collectingError(_ operation: () async -> Void) async -> String? {
         let before = lastError
         lastError = nil
         await operation()

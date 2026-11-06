@@ -490,6 +490,8 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var mergedPullRequest: Int?
     /// Set with `/tag a, b`. Optional so state saved by earlier builds still decodes.
     public var tags: [String]?
+    /// The schedule that started it, as one of its runs. Optional so state saved by earlier builds, and older phones, still decode.
+    public var scheduleID: UUID?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
                 agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,

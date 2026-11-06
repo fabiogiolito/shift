@@ -70,7 +70,25 @@ public final class AppModel {
     /// Manual permissions: what each chat's agent waits to be allowed to do, oldest first.
     private var chatApprovals: [Project.ID: [(id: String, summary: String)]] = [:]
 
-    private let services: Services?
+    /// Every project's schedules (docs/specs/scheduled-tasks.md). Changed through the methods in Schedules.swift.
+    public internal(set) var schedules: [Schedule] = []
+    /// Kept by Schedules.swift: see AppState.
+    @ObservationIgnored var lastAlive: Date?
+    @ObservationIgnored var asleepSince: Date?
+    @ObservationIgnored var wakes: [Date] = []
+    /// When the Mac last slept and woke while Shift ran: runs due in between were missed.
+    @ObservationIgnored var lastSleep: (from: Date, to: Date)?
+    @ObservationIgnored var scheduleTimer: Task<Void, Never>?
+    @ObservationIgnored let scheduleKeepAwake = KeepAwake(reason: "Shift has a scheduled task coming up")
+    /// A wake change waiting for the admin password, so there's never more than one dialog.
+    @ObservationIgnored var isSchedulingWakes = false
+    /// The user cancelled the password dialog: not asked again until a schedule is saved.
+    @ObservationIgnored var wakesDeclined = false
+    /// Runs `pmset` as root (tests replace it).
+    @ObservationIgnored var runAsAdministrator: @MainActor (String) async throws -> Void = { try await MacSetup.runAsAdministrator($0) }
+    @ObservationIgnored var sleepObservers: [NSObjectProtocol] = []
+
+    let services: Services?
     /// What a paired phone goes through. nil without `Services.remote`.
     var remote: RemoteServer?
     var store: StateStoring? { services?.store }
@@ -246,6 +264,10 @@ public final class AppModel {
             return chat
         }
         nextTaskID = max(state.nextTaskID, (tasks.map(\.id).max() ?? 0) + 1)
+        schedules = state.schedules
+        lastAlive = state.lastAlive
+        asleepSince = state.asleepSince
+        wakes = state.wakes
 
         // Nothing is running yet, so nothing may claim to be working or wait for an approval.
         // Done before the first await.
@@ -286,6 +308,7 @@ public final class AppModel {
         // Its base may have gained code while Shift was closed (a pull request merged, a commit by hand).
         for project in projects { await adoptDetectedType(project.id) }
         changed()
+        startSchedules()
         Task { [weak self] in
             while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
         }
@@ -544,6 +567,12 @@ public final class AppModel {
     @discardableResult
     public func createTask(projectID: Project.ID, prompt: String, attachments: [String] = [],
                            agent: AgentKind? = nil) -> TaskItem.ID? {
+        createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: agent, schedule: nil)
+    }
+
+    /// `schedule`: a run of it, with its base, agent, model and permissions instead of the project's.
+    func createTask(projectID: Project.ID, prompt: String, attachments: [String] = [], agent: AgentKind? = nil,
+                    schedule: Schedule?) -> TaskItem.ID? {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard services != nil, let project = project(projectID), !prompt.isEmpty || !attachments.isEmpty else { return nil }
         let first = Prompt(text: prompt, attachments: attachments)
@@ -558,6 +587,13 @@ public final class AppModel {
         // The footer's choices are the new task's own from here on: changing them later leaves it as it is.
         task.model = project.models[task.agent]
         task.permissions = project.permissions
+        if let schedule {
+            task.agent = schedule.agent
+            task.baseBranch = schedule.baseBranch
+            task.model = schedule.model
+            task.permissions = schedule.permissions
+            task.scheduleID = schedule.id
+        }
         tasks.append(task)
         changed()
         startRun(id, prompt: first.agentText, promptIDs: [first.id])
@@ -2283,7 +2319,9 @@ public final class AppModel {
         guard services != nil, let task = task(id) else { return }
         runs[id] = nil
         update(id) { Self.apply(settled, to: &$0) }
-        notify(task, needsAttention: settled.status.needsAttention)
+        // A scheduled run's finish action says how it ended, once it's applied.
+        let finishesRun = scheduledRunFinishes(task, settled.status)
+        if !finishesRun { notify(task, needsAttention: settled.status.needsAttention) }
         let body = switch settled.status {
         case .needsInput: settled.question ?? ""
         case .blocked: settled.blockedReason ?? ""
@@ -2298,6 +2336,7 @@ public final class AppModel {
         reportToChat(task, report)
         // For the countdown to the reset: the last reading is likely from before the limit was reached.
         if self.task(id)?.isUsageLimited == true { Task { await refreshUsage(task.agent) } }
+        if task.scheduleID != nil { scheduledTaskSettled(id, settled.status, reason: settled.blockedReason, finishes: finishesRun) }
         let pushes = settled.status == .completed && project(task.projectID)?.pushTaskBranches == true
         if pushes || pullRequests[id] != nil {
             Task {
@@ -2372,6 +2411,7 @@ public final class AppModel {
             $0.serverPID = nil
             $0.mergedAt = Date()
         }
+        scheduledTaskClosed(id, as: status)
     }
 
     /// Starts (or replaces) the task's dev server. Returns a message if it could not be started.
@@ -2642,7 +2682,7 @@ public final class AppModel {
 
     // MARK: - Persistence
 
-    private func update(_ id: TaskItem.ID, _ change: (inout TaskItem) -> Void) {
+    func update(_ id: TaskItem.ID, _ change: (inout TaskItem) -> Void) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         change(&tasks[index])
         changed()
@@ -2650,7 +2690,7 @@ public final class AppModel {
 
     /// Call after every state change. Saves are serialized and coalesced: each one writes the state
     /// as it is when the write starts, so the file never goes back in time.
-    private func changed() {
+    func changed() {
         guard let services else { return }
         if !savePending {
             savePending = true
@@ -2658,7 +2698,8 @@ public final class AppModel {
                 guard let self else { return }
                 self.savePending = false
                 await services.store.save(AppState(projects: self.projects, tasks: self.tasks,
-                                                   nextTaskID: self.nextTaskID, chats: self.chats))
+                                                   nextTaskID: self.nextTaskID, chats: self.chats, schedules: self.schedules,
+                                                   lastAlive: self.lastAlive, asleepSince: self.asleepSince, wakes: self.wakes))
             }
         }
         let count = attentionCount
@@ -2668,7 +2709,7 @@ public final class AppModel {
         }
     }
 
-    private func enqueue(_ operation: @escaping @MainActor () async -> Void) {
+    func enqueue(_ operation: @escaping @MainActor () async -> Void) {
         let previous = io
         io = Task {
             await previous?.value
