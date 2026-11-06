@@ -10,6 +10,8 @@ struct TaskListView: View {
     /// Lowercased tag names to show tasks with; empty shows every task.
     @State private var tagFilter: Set<String> = []
     @State private var showingFilter = false
+    /// The layout key while a row's tags popover is open: a rebuild would take the row, and the popover, away.
+    @State private var heldKey: String?
 
     var body: some View {
         let all = model.tasks(in: project.id)
@@ -19,14 +21,16 @@ struct TaskListView: View {
         // section came out clipped), so a change in which task sits in which section rebuilds it at the right sizes.
         // In a ZStack so the rebuild stops there: bars attached to the list itself are rebuilt with it, and the
         // new task field would lose what is being typed in it, and its focus.
+        // A description or tags add lines to a row, so one arriving or going rebuilds it too.
+        let key = sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined()
         ZStack {
             List(selection: $selection) {
                 ChatRow(replying: model.replyingChats.contains(project.id),
                         waiting: model.chatApprovalRequest(projectID: project.id) != nil).tag(ChatRow.id)
                 ForEach(sections, id: \.0) { section($0.0, $0.1) }
             }
-            // A description or tags add lines to a row, so one arriving or going rebuilds it too.
-            .id(sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined())
+            .id(heldKey ?? key)
+            .environment(\.holdTaskListLayout) { heldKey = $0 ? key : nil }
         }
         // Sidebar style keeps section headers from pinning below the toolbar, so the toolbar's edge line
         // lines up with the detail column's. Its sidebar background is dropped: this is the content column.
@@ -182,9 +186,15 @@ struct TaskListView: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Called with true while a row shows its tags popover, and false when it closes.
+    @Entry var holdTaskListLayout: (Bool) -> Void = { _ in }
+}
+
 struct TaskRow: View {
     let task: TaskItem
     @Environment(AppModel.self) private var model
+    @Environment(\.holdTaskListLayout) private var holdLayout
     @State private var actions = TaskActions()
 
     var body: some View {
@@ -212,6 +222,7 @@ struct TaskRow: View {
             }
         }
         .taskActions(task, $actions)
+        .onChange(of: actions.editingTags) { holdLayout(actions.editingTags) }
         // ponytail: one diff per finished task in the list, for its context menu; cache in AppModel if lists grow long.
         .task(id: task.status) {
             let changes = task.status == .completed ? await model.changes(taskID: task.id) : nil
