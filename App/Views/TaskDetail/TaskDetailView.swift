@@ -755,15 +755,19 @@ struct TaskDetailView: View {
     }
 
     private func promptList(_ task: TaskItem) -> some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(task.prompts.reversed()) { prompt in
-                    promptRow(prompt)
-                        .padding(.vertical, 8)
-                    if prompt != task.prompts.first { Divider() }
+        VStack(alignment: .leading, spacing: 8) {
+            // Headed like a schedule's Prompt and runs.
+            Text("Prompt history").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            GroupBox {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(task.prompts.reversed()) { prompt in
+                        promptRow(prompt)
+                            .padding(.vertical, 8)
+                        if prompt != task.prompts.first { Divider() }
+                    }
                 }
+                .padding(.horizontal, 8)
             }
-            .padding(.horizontal, 8)
         }
     }
 
