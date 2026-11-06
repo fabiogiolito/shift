@@ -394,7 +394,6 @@ final class MockNotifier: Notifying {
     private(set) var notifications: [Notification] = []
     private(set) var badges: [Int] = []
 
-    func requestAuthorization() async {}
     func notify(title: String, body: String, taskID: Int) async {
         notifications.append(Notification(title: title, body: body, taskID: taskID))
     }

@@ -4,14 +4,14 @@ import ShiftCore
 /// Everything Shift needs on a Mac, in one place: the setup window and Settings › Setup both draw from these.
 /// `SetupFlow` runs each step's real check and action, through `MacSetup`.
 enum SetupStep: String, CaseIterable, Identifiable {
-    case commandLineTools, node, agent, signIn, gitIdentity, github
+    case commandLineTools, node, agent, signIn, gitIdentity, github, notifications
     /// Asked when a project that needs them is added, not at first launch.
-    case packageManager, xcode
+    case folderAccess, packageManager, xcode
     /// From Settings only: for pairing a phone and sharing servers.
     case tailscale
 
-    static let firstLaunch: [SetupStep] = [.commandLineTools, .node, .agent, .signIn, .gitIdentity, .github]
-    static let projectSteps: [SetupStep] = [.packageManager, .xcode]
+    static let firstLaunch: [SetupStep] = [.commandLineTools, .node, .agent, .signIn, .gitIdentity, .github, .notifications]
+    static let projectSteps: [SetupStep] = [.folderAccess, .packageManager, .xcode]
 
     var id: String { rawValue }
 
@@ -22,6 +22,8 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "Sign in"
         case .gitIdentity: "Your name for commits"
         case .github: "Connect GitHub"
+        case .notifications: "Know when a task needs you"
+        case .folderAccess: "Let Shift work in this folder"
         case .node: "Node.js"
         case .packageManager: "This project needs a package manager"
         case .xcode: "This project needs Xcode"
@@ -36,6 +38,8 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "person.crop.circle"
         case .gitIdentity: "signature"
         case .github: "arrow.triangle.pull"
+        case .notifications: "bell.badge"
+        case .folderAccess: "folder.badge.person.crop"
         case .node: "cube"
         case .packageManager: "shippingbox"
         case .xcode: "hammer"
@@ -50,6 +54,8 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "Each agent needs your account. Signing in opens Terminal."
         case .gitIdentity: "Every commit is signed with a name and email."
         case .github: "Lets Shift open pull requests, follow them, and push your branches."
+        case .notifications: "Shift tells you when a task is ready for review or waiting on an answer, so you don't have to keep checking. macOS will ask you to allow it."
+        case .folderAccess: "macOS asks before an app reads this folder. The agents, Git and dev servers all run as Shift, so they can't work on the project without it."
         case .node: "Most web projects need it to run."
         case .packageManager: "It installs its packages with a package manager Node.js doesn't include."
         case .xcode: "It builds a native app, which needs Xcode."
@@ -62,6 +68,8 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "Sign In"
         case .gitIdentity: "Save"
         case .github: "Connect GitHub"
+        case .notifications: "Allow Notifications"
+        case .folderAccess: "Allow Access"
         case .tailscale: "Set Up"
         default: "Install"
         }
@@ -72,6 +80,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "Waiting for sign-in…"
         case .gitIdentity: "Saving…"
         case .github, .tailscale: "Connecting…"
+        case .notifications, .folderAccess: "Waiting for your answer…"
         default: "Installing…"
         }
     }
@@ -81,16 +90,19 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .signIn: "Signed in"
         case .gitIdentity: "Saved"
         case .github, .tailscale: "Connected"
+        case .notifications, .folderAccess: "Allowed"
         default: "Installed"
         }
     }
 
-    var canSkip: Bool { [.github, .packageManager, .xcode, .tailscale].contains(self) }
+    var canSkip: Bool { [.github, .notifications, .folderAccess, .packageManager, .xcode, .tailscale].contains(self) }
 
     /// What won't work if it's skipped.
     var skipWarning: String? {
         switch self {
         case .github: "Shift can't open pull requests or follow them, and pushing may fail. You can connect GitHub later in Settings."
+        case .notifications: "You won't hear when a task needs you. You can turn notifications on in Settings › Setup."
+        case .folderAccess: "Tasks will stop with permission errors, and macOS will ask while an agent is working."
         case .packageManager: "The project's dev server won't start until it's installed."
         case .xcode: "The project can't be built or run until Xcode is installed."
         case .tailscale: "Your iPhone can't reach this Mac until Tailscale is set up."
@@ -129,6 +141,8 @@ final class SetupFlow {
     var gitName = ""
     var gitEmail = ""
     var packageManager = "npm"
+    /// The protected folder a new project is in, for `.folderAccess`.
+    private(set) var protectedFolder: URL?
 
     init(model: AppModel) { self.model = model }
 
@@ -175,9 +189,33 @@ final class SetupFlow {
         page = steps.first.map(Page.step) ?? .ready
     }
 
+    /// The step's title and summary as shown, with this project's details.
+    func title(_ step: SetupStep) -> String {
+        switch step {
+        case .packageManager: "This project needs \(packageManager)"
+        case .folderAccess: "Let Shift work in \(protectedFolder.map(MacSetup.displayName(ofProtected:)) ?? "this folder")"
+        default: step.title
+        }
+    }
+
+    func summary(_ step: SetupStep) -> String {
+        switch step {
+        case .packageManager: "It installs its packages with \(packageManager), which Node.js doesn't include."
+        case .folderAccess:
+            "macOS asks before an app reads your \(protectedFolder.map(MacSetup.displayName(ofProtected:)) ?? "folder"). The agents, Git and dev servers all run as Shift, so they can't work on this project without it."
+        default: step.summary
+        }
+    }
+
     /// What a project added from `folder` needs that this Mac doesn't have.
     func projectSteps(for folder: URL) async -> [SetupStep] {
         var needed: [SetupStep] = []
+        // ponytail: remembers it asked; macOS can't say whether access was given without asking.
+        if let protected = MacSetup.protectedFolder(containing: folder), !allowedFolders.contains(protected.path) {
+            protectedFolder = protected
+            states[.folderAccess] = .notDone
+            needed.append(.folderAccess)
+        }
         if let manager = MacSetup.packageManager(of: folder) {
             if !(await MacSetup.hasNode()) { needed.append(.node); states[.node] = .notDone }
             if manager != "npm", !(await MacSetup.hasPackageManager(manager)) {
@@ -208,19 +246,26 @@ final class SetupFlow {
         async let node = MacSetup.hasNode()
         async let identity = MacSetup.gitIdentity()
         async let github = MacSetup.isGitHubConnected()
+        async let notifications = MacSetup.notificationsAllowed()
         var agentsFound: [AgentKind: Bool] = [:]
         var agentsSignedIn: [AgentKind: Bool] = [:]
         for agent in AgentKind.allCases {
             agentsFound[agent] = await MacSetup.isInstalled(agent)
             if agentsFound[agent] == true { agentsSignedIn[agent] = await MacSetup.isSignedIn(agent) }
         }
-        let (hasTools, hasNode, (name, email), hasGitHub) = await (tools, node, identity, github)
+        let (hasTools, hasNode, (name, email), hasGitHub, allowsNotifications) = await (tools, node, identity, github, notifications)
         await refreshTailscale()
 
         set(.commandLineTools, done: hasTools)
         set(.node, done: hasNode)
         set(.gitIdentity, done: !name.isEmpty && !email.isEmpty)
         set(.github, done: hasGitHub)
+        // Turned off counts as answered: the window doesn't open at every launch to ask again.
+        if allowsNotifications == false, states[.notifications] != .working {
+            states[.notifications] = .skipped
+        } else {
+            set(.notifications, done: allowsNotifications == true)
+        }
         for agent in AgentKind.allCases {
             if installed[agent] != .working { installed[agent] = agentsFound[agent] == true ? .done : .notDone }
             if signedIn[agent] != .working { signedIn[agent] = agentsSignedIn[agent] == true ? .done : .notDone }
@@ -264,6 +309,16 @@ final class SetupFlow {
         switch step {
         case .agent: installAgents()
         case .signIn: agents.filter { signedIn[$0] != .done }.forEach(signIn)
+        case .notifications:
+            states[step] = .working
+            Task {
+                if await MacSetup.allowNotifications() {
+                    states[step] = .done
+                    skipped.remove(step.rawValue)
+                } else {
+                    skip(step)
+                }
+            }
         default:
             states[step] = .working
             Task {
@@ -290,7 +345,11 @@ final class SetupFlow {
         case .packageManager: try await MacSetup.installPackageManager(packageManager)
         case .xcode: try await MacSetup.installXcode()
         case .tailscale: try await MacSetup.setUpTailscale()
-        case .agent, .signIn: break
+        case .folderAccess:
+            guard let protectedFolder else { return }
+            try await MacSetup.allowAccess(to: protectedFolder)
+            allowedFolders.insert(protectedFolder.path)
+        case .agent, .signIn, .notifications: break
         }
     }
 
@@ -343,6 +402,11 @@ final class SetupFlow {
     private var skipped: Set<String> {
         get { Set(UserDefaults.standard.stringArray(forKey: "setupSkipped") ?? []) }
         set { UserDefaults.standard.set(Array(newValue), forKey: "setupSkipped") }
+    }
+
+    private var allowedFolders: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "setupAllowedFolders") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "setupAllowedFolders") }
     }
 
     private static func combined(_ states: [SetupState]) -> SetupState {

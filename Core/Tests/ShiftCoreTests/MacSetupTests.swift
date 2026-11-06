@@ -20,6 +20,18 @@ final class MacSetupTests: XCTestCase {
         XCTAssertTrue(MacSetup.needsXcode(folder))
     }
 
+    func testProtectedFolder() {
+        let home = URL(fileURLWithPath: "/Users/jane")
+        func root(_ path: String) -> String? { MacSetup.protectedFolder(containing: URL(fileURLWithPath: path), home: home)?.path }
+        XCTAssertEqual(root("/Users/jane/Documents/app"), "/Users/jane/Documents")
+        XCTAssertEqual(root("/Users/jane/Desktop"), "/Users/jane/Desktop")
+        XCTAssertEqual(root("/Users/jane/Library/Mobile Documents/com~apple~CloudDocs/app"), "/Users/jane/Library/Mobile Documents")
+        XCTAssertEqual(root("/Volumes/Work/app"), "/Volumes/Work")
+        XCTAssertNil(root("/Users/jane/Sites/app"))
+        XCTAssertNil(root("/Users/jane/DocumentsOld/app"))
+        XCTAssertEqual(MacSetup.displayName(ofProtected: URL(fileURLWithPath: "/Users/jane/Library/Mobile Documents")), "iCloud Drive")
+    }
+
     func testToolPathForTerminal() {
         XCTAssertEqual(MacSetup.path(of: "git"), "'/usr/bin/git'")
         XCTAssertEqual(MacSetup.path(of: "no-such-tool-here"), "no-such-tool-here")

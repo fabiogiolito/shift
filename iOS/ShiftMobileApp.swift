@@ -36,6 +36,10 @@ struct RootView: View {
                 }
             }
         }
+        .task(id: model.pairing == nil) { await model.checkNotifications() }
+        .sheet(isPresented: Binding(get: { model.offersNotifications }, set: { if !$0 { model.declineNotifications() } })) {
+            NotificationsOffer()
+        }
         .alert("Pair with this Mac?", isPresented: Binding(get: { model.proposedPairing != nil }, set: { if !$0 { model.proposedPairing = nil } })) {
             Button("Pair") {
                 if let pairing = model.proposedPairing { model.pair(pairing) }
@@ -49,6 +53,38 @@ struct RootView: View {
         } message: {
             Text(model.lastError ?? "")
         }
+    }
+}
+
+/// Why Shift wants notifications, before iOS asks: a "Don't Allow" there can only be undone in Settings.
+private struct NotificationsOffer: View {
+    @Environment(RemoteModel.self) private var model
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "bell.badge")
+                .font(.system(size: 56))
+                .foregroundStyle(.tint)
+            Text("Know when a task needs you")
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+            Text("Shift tells you when a task on your Mac is ready for review or waiting on an answer, so you don't have to keep checking.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+            Button {
+                Task { await model.allowNotifications() }
+            } label: {
+                Text("Allow Notifications").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            Button("Not Now") { model.declineNotifications() }
+        }
+        .padding(24)
+        .presentationDetents([.medium])
+        .interactiveDismissDisabled()
     }
 }
 

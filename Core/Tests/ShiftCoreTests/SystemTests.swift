@@ -37,7 +37,6 @@ final class SystemTests: XCTestCase {
 
     func testNotifierIsANoOpWithoutAppBundle() async {
         let notifier = SystemNotifier()
-        await notifier.requestAuthorization()
         await notifier.notify(title: "Ready", body: "Task 3001", taskID: 3001)
         await notifier.setBadge(count: 2)
         await notifier.setBadge(count: 0)

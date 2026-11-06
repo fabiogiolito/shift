@@ -93,7 +93,6 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.fabiogiolito.shift.pairing
             CFBundleURLSchemes: [shift-remote]
-        NSPhotoLibraryUsageDescription: Attach pictures to your prompts.
         # SHIFT_SERVER: a simulator build talks to its Mac build over plain loopback. Paired phones use HTTPS.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

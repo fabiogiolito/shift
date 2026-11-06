@@ -48,8 +48,26 @@ final class RemoteModel {
         if pairing != nil { connect() }
     }
 
-    /// Set on launch: asks for permission once, and shows banners with the app open too, as the Mac does.
+    /// Set on launch: shows banners with the app open too, as the Mac does. Asks for permission only from
+    /// `allowNotifications()`, after saying why.
     @ObservationIgnored private let notifier = Notifier()
+    /// Paired, and never asked or put off: shows why before iOS asks.
+    private(set) var offersNotifications = false
+
+    func checkNotifications() async {
+        let undecided = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .notDetermined
+        offersNotifications = undecided && pairing != nil && !UserDefaults.standard.bool(forKey: "notificationsDeclined")
+    }
+
+    func allowNotifications() async {
+        offersNotifications = false
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+    }
+
+    func declineNotifications() {
+        offersNotifications = false
+        UserDefaults.standard.set(true, forKey: "notificationsDeclined")
+    }
 
     // MARK: Pairing
 
@@ -381,7 +399,6 @@ private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         super.init()
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
     /// One per task: a newer one replaces the older.

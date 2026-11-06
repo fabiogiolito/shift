@@ -271,7 +271,6 @@ public final class AppModel {
             installedAgents[kind] = await services.agents[kind]?.detect()
             models[kind] = await services.agents[kind]?.models()
         }
-        Task { await services.notifier.requestAuthorization() }
         controlPort = await services.control?.start { [weak self] token, arguments in
             await self?.handleControl(token: token, arguments: arguments) ?? ControlReply(ok: false, text: "Shift is quitting.")
         }
