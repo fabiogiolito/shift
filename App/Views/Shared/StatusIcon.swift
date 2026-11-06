@@ -115,10 +115,17 @@ struct TaskTags: View {
 }
 
 /// `view` as a picture, for menus, which drop custom colors from their items.
+/// An `NSImage`, not a template: menus show it as drawn (a `CGImage`-backed one came out blank in them).
 @MainActor func menuImage(_ view: some View) -> Image {
     let renderer = ImageRenderer(content: view)
     renderer.scale = 2
-    return renderer.cgImage.map { Image(decorative: $0, scale: 2) } ?? Image(systemName: "circle.fill")
+    #if os(macOS)
+    guard let image = renderer.nsImage else { return Image(systemName: "circle.fill") }
+    image.isTemplate = false
+    return Image(nsImage: image)
+    #else
+    return renderer.uiImage.map { Image(uiImage: $0.withRenderingMode(.alwaysOriginal)) } ?? Image(systemName: "circle.fill")
+    #endif
 }
 
 /// One tag. Its text is the color mixed toward the label color, so light colors like yellow stay readable.
