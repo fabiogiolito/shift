@@ -24,7 +24,14 @@ struct SetupSettingsView: View {
         .formStyle(.grouped)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
-        .task { await flow.refresh() }
+        .task {
+            await flow.refresh()
+            // ponytail: polls while shown; Tailscale has no change notification we can observe.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                await flow.refreshTailscale()
+            }
+        }
     }
 
     private func row(_ title: String, systemImage: String, step: SetupStep) -> some View {
@@ -68,7 +75,7 @@ struct SetupSettingsView: View {
         switch step {
         case .github: "Connect"
         case .gitIdentity: "Create"
-        case .tailscale: MacSetup.hasTailscaleApp() ? "Set Up" : "Install"
+        case .tailscale: flow.tailscaleOff ? "Turn On" : MacSetup.hasTailscaleApp() ? "Set Up" : "Install"
         default: "Install"
         }
     }

@@ -159,8 +159,10 @@ public enum MacSetup {
             try await installPackage(from: URL(string: "https://pkgs.tailscale.com/stable/Tailscale-latest-macos.pkg")!)
         }
         NSWorkspace.shared.open(URL(fileURLWithPath: tailscaleApp))
+        // Signed in but turned off: turn it back on.
+        if await tailscaleState() == "Stopped", let cli = tailscaleCLI { _ = await run([cli, "up"]) }
         try await wait(minutes: 15, "Tailscale didn't connect. Sign in from its menu bar icon and try again.") {
-            await tailscaleStatus()?["BackendState"] as? String == "Running"
+            await tailscaleState() == "Running"
         }
         guard !(await isTailscaleReady()) else { return }
         NSWorkspace.shared.open(URL(string: "https://login.tailscale.com/admin/dns")!)
@@ -201,8 +203,13 @@ public enum MacSetup {
     private static let xcode = "/Applications/Xcode.app"
     private static let tailscaleApp = "/Applications/Tailscale.app"
 
+    /// Tailscale's BackendState: "Running" when connected, "Stopped" when turned off, "NeedsLogin"; nil without it.
+    public static func tailscaleState() async -> String? { await tailscaleStatus()?["BackendState"] as? String }
+
+    private static var tailscaleCLI: String? { Tailscale.candidates.first(where: FileManager.default.isExecutableFile(atPath:)) }
+
     private static func tailscaleStatus() async -> [String: Any]? {
-        guard let cli = Tailscale.candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else { return nil }
+        guard let cli = tailscaleCLI else { return nil }
         let output = await run([cli, "status", "--json"]).output
         // From the JSON on: a version warning can come first.
         guard let start = output.firstIndex(of: "{") else { return nil }

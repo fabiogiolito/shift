@@ -208,20 +208,19 @@ final class SetupFlow {
         async let node = MacSetup.hasNode()
         async let identity = MacSetup.gitIdentity()
         async let github = MacSetup.isGitHubConnected()
-        async let tailscale = MacSetup.isTailscaleReady()
         var agentsFound: [AgentKind: Bool] = [:]
         var agentsSignedIn: [AgentKind: Bool] = [:]
         for agent in AgentKind.allCases {
             agentsFound[agent] = await MacSetup.isInstalled(agent)
             if agentsFound[agent] == true { agentsSignedIn[agent] = await MacSetup.isSignedIn(agent) }
         }
-        let (hasTools, hasNode, (name, email), hasGitHub, hasTailscale) = await (tools, node, identity, github, tailscale)
+        let (hasTools, hasNode, (name, email), hasGitHub) = await (tools, node, identity, github)
+        await refreshTailscale()
 
         set(.commandLineTools, done: hasTools)
         set(.node, done: hasNode)
         set(.gitIdentity, done: !name.isEmpty && !email.isEmpty)
         set(.github, done: hasGitHub)
-        set(.tailscale, done: hasTailscale)
         for agent in AgentKind.allCases {
             if installed[agent] != .working { installed[agent] = agentsFound[agent] == true ? .done : .notDone }
             if signedIn[agent] != .working { signedIn[agent] = agentsSignedIn[agent] == true ? .done : .notDone }
@@ -229,6 +228,18 @@ final class SetupFlow {
         chosenAgents = agents.isEmpty ? [.claudeCode] : []
         if gitName.isEmpty { gitName = name.isEmpty ? NSFullUserName() : name }
         if gitEmail.isEmpty { gitEmail = email }
+    }
+
+    /// Signed in to Tailscale but turned off.
+    private(set) var tailscaleOff = false
+
+    /// Tailscale alone, cheap enough to check every few seconds: it can be turned off from its menu at any time.
+    func refreshTailscale() async {
+        async let ready = MacSetup.isTailscaleReady()
+        async let state = MacSetup.tailscaleState()
+        let (isReady, backend) = await (ready, state)
+        tailscaleOff = backend == "Stopped"
+        set(.tailscale, done: isReady)
     }
 
     private func set(_ step: SetupStep, done: Bool) {
