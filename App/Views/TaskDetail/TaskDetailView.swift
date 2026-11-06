@@ -120,7 +120,7 @@ struct TaskDetailView: View {
                 menu.unchanged = (try? changes?.get())?.files.isEmpty == true
             }
             .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
-            .taskActions(task, $menu)
+            .taskActions(task, $menu, tagsHere: false)
             .confirmationDialog("Change the base of “\(task.title)” to \(newBase ?? "")?",
                                 isPresented: Binding(get: { newBase != nil }, set: { if !$0 { newBase = nil } })) {
                 Button("Change Base") {
@@ -823,6 +823,7 @@ struct TaskDetailView: View {
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
+        .popover(isPresented: $menu.editingTags, arrowEdge: .bottom) { TagEditor(taskID: task.id) }
     }
 
     // MARK: Helpers

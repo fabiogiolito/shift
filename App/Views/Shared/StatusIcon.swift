@@ -1,7 +1,4 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#endif
 import ShiftProtocol
 
 struct StatusIcon: View {
@@ -96,15 +93,11 @@ struct TaskTags: View {
                 TagCapsule(name: tag, color: project?.color(ofTag: tag) ?? .gray)
                     .contextMenu {
                         if let onColor {
-                            Menu("Color") {
-                                ForEach(TagColor.allCases, id: \.self) { color in
-                                    Button { onColor(tag, color) } label: {
-                                        Label { Text(color.rawValue.capitalized) } icon: {
-                                            tagMenuIcon(color, on: color == project?.color(ofTag: tag) ?? .gray)
-                                        }
-                                    }
-                                }
+                            // Names only: menus show no colors, and drop the checkmark of an item with an icon.
+                            Picker("Color", selection: Binding { project?.color(ofTag: tag) ?? .gray } set: { onColor(tag, $0) }) {
+                                ForEach(TagColor.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
                             }
+                            .pickerStyle(.menu)
                         }
                         if let onDelete { Button("Delete Tag", role: .destructive) { onDelete(tag) } }
                     }
@@ -112,28 +105,6 @@ struct TaskTags: View {
         }
     }
 
-}
-
-/// A menu item's icon: a checkmark when `on`, then a dot in `color`. Menus drop icons from checkable items
-/// (Toggle, Picker) and colors from SwiftUI views, but show a plain button's bitmap `NSImage` as drawn,
-/// like Open In's app icons; so the check is drawn in the icon, and the item is a button.
-func tagMenuIcon(_ color: TagColor, on: Bool = false) -> Image {
-    #if os(macOS)
-    let size = NSSize(width: 28, height: 16)
-    let image = NSImage(size: size)
-    image.lockFocus()
-    if on {
-        NSAttributedString(string: "✓", attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.labelColor])
-            .draw(at: NSPoint(x: 0, y: 0))
-    }
-    NSColor(color.color).setFill()
-    NSBezierPath(ovalIn: NSRect(x: 16, y: 3, width: 10, height: 10)).fill()
-    image.unlockFocus()
-    image.isTemplate = false
-    return Image(nsImage: image)
-    #else
-    return Image(systemName: on ? "checkmark.circle.fill" : "circle.fill")
-    #endif
 }
 
 /// One tag. Its text is the color mixed toward the label color, so light colors like yellow stay readable.

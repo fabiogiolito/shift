@@ -5,7 +5,7 @@ import ShiftCore
 struct TaskActions {
     var output: TaskOutput?
     var renaming = false
-    var addingTag = false
+    var editingTags = false
     var confirmingDelete = false
     /// Completed with nothing committed or uncommitted against its base: it can be archived.
     var unchanged = false
@@ -50,19 +50,7 @@ struct TaskActionItems: View {
         if actions.unchanged && !task.status.isClosed {
             Button("Archive Task") { Task { await model.archive(taskID: task.id) } }
         }
-        Menu("Tags") {
-            ForEach(TaskListView.tagNames(model.tasks(in: project.id)), id: \.self) { name in
-                let on = task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
-                Button {
-                    if on { model.removeTag(taskID: task.id, name) } else { model.addTags(taskID: task.id, name) }
-                } label: {
-                    Label { Text(name) } icon: { tagMenuIcon(project.color(ofTag: name), on: on) }
-                }
-                .accessibilityValue(on ? "On" : "Off")
-            }
-            Divider()
-            Button("New Tag…") { actions.addingTag = true }
-        }
+        Button("Tags…") { actions.editingTags = true }
         Button("Rename Task…") { actions.renaming = true }
         Button("Delete Task…", role: .destructive) { actions.confirmingDelete = true }
     }
@@ -70,8 +58,9 @@ struct TaskActionItems: View {
 
 extension View {
     /// The log sheet, rename alert and delete confirmation the task's menu items open.
-    func taskActions(_ task: TaskItem, _ actions: Binding<TaskActions>) -> some View {
-        modifier(TaskActionsPresenter(task: task, actions: actions))
+    /// `tagsHere` false: the caller shows `TagEditor` itself, anchored where it fits better.
+    func taskActions(_ task: TaskItem, _ actions: Binding<TaskActions>, tagsHere: Bool = true) -> some View {
+        modifier(TaskActionsPresenter(task: task, actions: actions, tagsHere: tagsHere))
     }
 }
 
@@ -79,6 +68,7 @@ private struct TaskActionsPresenter: ViewModifier {
     @Environment(AppModel.self) private var model
     let task: TaskItem
     @Binding var actions: TaskActions
+    let tagsHere: Bool
 
     func body(content: Content) -> some View {
         let taskID = task.id
@@ -92,7 +82,9 @@ private struct TaskActionsPresenter: ViewModifier {
                 }
             }
             .renameTaskAlert(task, isPresented: $actions.renaming)
-            .modifier(NewTagAlert(task: task, isPresented: $actions.addingTag))
+            .popover(isPresented: tagsHere ? $actions.editingTags : .constant(false), arrowEdge: .trailing) {
+                TagEditor(taskID: taskID)
+            }
             .confirmationDialog("Delete “\(task.title)”?", isPresented: $actions.confirmingDelete) {
                 Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: taskID) } }
             } message: {
@@ -101,23 +93,36 @@ private struct TaskActionsPresenter: ViewModifier {
     }
 }
 
-/// Asks for one or more comma-separated tags to add to `task`.
-private struct NewTagAlert: ViewModifier {
+/// The project's tags as checkboxes with their colors, for one task, and a field for new ones.
+/// A popover, not a submenu: menus show neither colors nor a checkmark next to an icon.
+struct TagEditor: View {
     @Environment(AppModel.self) private var model
-    let task: TaskItem
-    @Binding var isPresented: Bool
+    let taskID: TaskItem.ID
     @State private var name = ""
 
-    func body(content: Content) -> some View {
-        content
-            .onChange(of: isPresented) { if isPresented { name = "" } }
-            .alert("New Tag", isPresented: $isPresented) {
-                TextField("Name", text: $name)
-                Button("Add") { model.addTags(taskID: task.id, name) }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Separate several tags with commas.")
+    var body: some View {
+        if let task = model.task(taskID), let project = model.project(task.projectID) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(TaskListView.tagNames(model.tasks(in: project.id)), id: \.self) { name in
+                    Toggle(isOn: Binding {
+                        task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
+                    } set: {
+                        if $0 { model.addTags(taskID: taskID, name) } else { model.removeTag(taskID: taskID, name) }
+                    }) {
+                        HStack(spacing: 6) {
+                            Circle().fill(project.color(ofTag: name).color).frame(width: 8, height: 8)
+                            Text(name)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                }
+                TextField("New Tag", text: $name)
+                    .onSubmit { model.addTags(taskID: taskID, name); name = "" }
+                    .help("Separate several tags with commas.")
             }
+            .padding(12)
+            .frame(width: 180, alignment: .leading)
+        }
     }
 }
 
