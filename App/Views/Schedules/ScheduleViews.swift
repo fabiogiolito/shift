@@ -358,28 +358,38 @@ struct ScheduleForm: View {
             }
             if let rule {
                 VStack(alignment: .leading, spacing: 12) {
-                    // "Every [2] weeks", as in Calendar's custom repeat.
-                    Stepper(value: self.rule(\.interval, 1), in: 1...99) {
-                        Text(every(rule)).monospacedDigit()
+                    // "Every [2] weeks", as in Calendar's custom repeat. Hours sit beside it.
+                    HStack(spacing: 24) {
+                        Stepper(value: self.rule(\.interval, 1), in: 1...99) {
+                            steady(every(rule), widest: every(.init(rule.frequency, interval: 99)))
+                        }
+                        if rule.frequency == .hourly {
+                            HStack {
+                                Toggle("Only between", isOn: Binding { draft.timing.between != nil } set: {
+                                    draft.timing.between = $0 ? .init(from: .init(9), to: .init(17)) : nil
+                                })
+                                if draft.timing.between != nil {
+                                    DateField(date: time(\.from), part: .time)
+                                    Text("and")
+                                    DateField(date: time(\.to), part: .time)
+                                }
+                            }
+                        }
                     }
                     if rule.frequency == .weekly { weekdays(rule) }
                     if rule.frequency == .monthly { monthly(rule) }
                     if rule.frequency == .hourly {
-                        HStack {
-                            Toggle("Only between", isOn: Binding { draft.timing.between != nil } set: {
-                                draft.timing.between = $0 ? .init(from: .init(9), to: .init(17)) : nil
-                            })
-                            if draft.timing.between != nil {
-                                DateField(date: time(\.from), part: .time)
-                                Text("and")
-                                DateField(date: time(\.to), part: .time)
-                            }
-                        }
                         note("Every run is a new task, and each one takes disk space until it's archived or merged.")
                     }
                 }
             }
         }
+    }
+
+    /// A stepper's label at the width of its widest value, so the arrows stay put as the number changes.
+    private func steady(_ text: String, widest: String) -> some View {
+        Text(widest).monospacedDigit().hidden()
+            .overlay(alignment: .leading) { Text(text).monospacedDigit() }
     }
 
     private func every(_ rule: ScheduleTiming.Recurrence) -> String {
@@ -510,7 +520,7 @@ struct ScheduleForm: View {
                 .fixedSize()
                 if let count = draft.timing.endAfter {
                     Stepper(value: Binding { count } set: { draft.timing.endAfter = $0 }, in: 1...999) {
-                        Text(count == 1 ? "1 time" : "\(count) times").monospacedDigit()
+                        steady(count == 1 ? "1 time" : "\(count) times", widest: "999 times")
                     }
                 }
                 if let date = draft.timing.endOn {
