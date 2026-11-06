@@ -285,14 +285,13 @@ struct ScheduleForm: View {
                         }
                     }
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
-                ScheduleRunMenus(schedule: $draft)
             }
             Divider().padding(.vertical, 20)
             timing
             HStack { Spacer(); buttons }
                 .padding(.top, 24)
         }
-        .frame(width: 640)
+        .frame(width: 560)
         .padding(24)
     }
 
