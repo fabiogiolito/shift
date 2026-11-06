@@ -1,7 +1,7 @@
 import SwiftUI
 
 extension View {
-    /// Secondary text; while `active`, a darker gray with a light band sweeping across, for "1 of 2 tasks running".
+    /// Secondary text; while `active`, a darker gray with a lighter band sweeping across, for "1 of 2 tasks running".
     func runningShimmer(_ active: Bool) -> some View { modifier(RunningShimmer(active: active)) }
 }
 
@@ -10,28 +10,19 @@ private struct RunningShimmer: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        if active {
-            content
-                .foregroundStyle(.primary.opacity(0.75))
-                .overlay {
-                    if !reduceMotion {
-                        TimelineView(.animation) { context in
-                            let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
-                            content
-                                .foregroundStyle(.tertiary)
-                                .mask {
-                                    GeometryReader { geo in
-                                        let band = geo.size.width * 0.5
-                                        LinearGradient(colors: [.clear, .black, .clear], startPoint: .leading, endPoint: .trailing)
-                                            .frame(width: band)
-                                            .offset(x: -band + (geo.size.width + band) * phase)
-                                    }
-                                }
-                        }
-                    }
-                }
-        } else {
+        if !active {
             content.foregroundStyle(.secondary)
+        } else if reduceMotion {
+            content.foregroundStyle(Color.primary.opacity(0.7))
+        } else {
+            TimelineView(.animation) { context in
+                // 0…1 every 2 seconds; the band travels from off the left edge to off the right.
+                let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2) / 2
+                let x = -1 + 2 * phase
+                content.foregroundStyle(LinearGradient(
+                    colors: [Color.primary.opacity(0.7), Color.primary.opacity(0.25), Color.primary.opacity(0.7)],
+                    startPoint: UnitPoint(x: x, y: 0.5), endPoint: UnitPoint(x: x + 1, y: 0.5)))
+            }
         }
     }
 }
