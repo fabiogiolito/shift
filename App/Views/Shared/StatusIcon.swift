@@ -96,12 +96,15 @@ struct TaskTags: View {
                 TagCapsule(name: tag, color: project?.color(ofTag: tag) ?? .gray)
                     .contextMenu {
                         if let onColor {
-                            Picker("Color", selection: Binding { project?.color(ofTag: tag) ?? .gray } set: { onColor(tag, $0) }) {
+                            Menu("Color") {
                                 ForEach(TagColor.allCases, id: \.self) { color in
-                                    Label { Text(color.rawValue.capitalized) } icon: { tagDot(color) }.tag(color)
+                                    Button { onColor(tag, color) } label: {
+                                        Label { Text(color.rawValue.capitalized) } icon: {
+                                            tagMenuIcon(color, on: color == project?.color(ofTag: tag) ?? .gray)
+                                        }
+                                    }
                                 }
                             }
-                            .pickerStyle(.menu)
                         }
                         if let onDelete { Button("Delete Tag", role: .destructive) { onDelete(tag) } }
                     }
@@ -111,19 +114,25 @@ struct TaskTags: View {
 
 }
 
-/// A dot in `color`, for menus: they show an AppKit image as drawn (as Finder's tag menus do), where
-/// SwiftUI-styled views and rendered pictures come out uncolored or blank.
-func tagDot(_ color: TagColor) -> Image {
+/// A menu item's icon: a checkmark when `on`, then a dot in `color`. Menus drop icons from checkable items
+/// (Toggle, Picker) and colors from SwiftUI views, but show a plain button's bitmap `NSImage` as drawn,
+/// like Open In's app icons; so the check is drawn in the icon, and the item is a button.
+func tagMenuIcon(_ color: TagColor, on: Bool = false) -> Image {
     #if os(macOS)
-    let image = NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
-        NSColor(color.color).setFill()
-        NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
-        return true
+    let size = NSSize(width: 28, height: 16)
+    let image = NSImage(size: size)
+    image.lockFocus()
+    if on {
+        NSAttributedString(string: "✓", attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.labelColor])
+            .draw(at: NSPoint(x: 0, y: 0))
     }
+    NSColor(color.color).setFill()
+    NSBezierPath(ovalIn: NSRect(x: 16, y: 3, width: 10, height: 10)).fill()
+    image.unlockFocus()
     image.isTemplate = false
     return Image(nsImage: image)
     #else
-    return Image(systemName: "circle.fill")
+    return Image(systemName: on ? "checkmark.circle.fill" : "circle.fill")
     #endif
 }
 

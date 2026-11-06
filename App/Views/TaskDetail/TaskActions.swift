@@ -52,13 +52,13 @@ struct TaskActionItems: View {
         }
         Menu("Tags") {
             ForEach(TaskListView.tagNames(model.tasks(in: project.id)), id: \.self) { name in
-                Toggle(isOn: Binding {
-                    task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
-                } set: {
-                    if $0 { model.addTags(taskID: task.id, name) } else { model.removeTag(taskID: task.id, name) }
-                }) {
-                    Label { Text(name) } icon: { tagDot(project.color(ofTag: name)) }
+                let on = task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
+                Button {
+                    if on { model.removeTag(taskID: task.id, name) } else { model.addTags(taskID: task.id, name) }
+                } label: {
+                    Label { Text(name) } icon: { tagMenuIcon(project.color(ofTag: name), on: on) }
                 }
+                .accessibilityValue(on ? "On" : "Off")
             }
             Divider()
             Button("New Tag…") { actions.addingTag = true }
