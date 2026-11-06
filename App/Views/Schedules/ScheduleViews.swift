@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import ShiftCore
 
 extension Schedule {
@@ -377,7 +378,13 @@ struct ScheduleForm: View {
 
     @ViewBuilder private var timingRows: some View {
         let rule = draft.timing.repeat ?? .init(.daily)
-        DatePicker("Starts:", selection: $draft.timing.start)
+        // A date and a time field, as in Calendar: clicking the date opens a calendar.
+        LabeledContent("Starts:") {
+            HStack(spacing: 6) {
+                DateField(date: $draft.timing.start, part: .date)
+                DateField(date: $draft.timing.start, part: .time)
+            }
+        }
         Picker("Repeat:", selection: repeatChoice) {
             Text("Never").tag(Repeat.never)
             Divider()
@@ -419,9 +426,9 @@ struct ScheduleForm: View {
                             draft.timing.between = $0 ? .init(from: .init(9), to: .init(17)) : nil
                         })
                         if draft.timing.between != nil {
-                            DatePicker("From", selection: time(\.from), displayedComponents: .hourAndMinute).labelsHidden()
+                            DateField(date: time(\.from), part: .time)
                             Text("and")
-                            DatePicker("To", selection: time(\.to), displayedComponents: .hourAndMinute).labelsHidden()
+                            DateField(date: time(\.to), part: .time)
                         }
                     }
                 }
@@ -551,8 +558,7 @@ struct ScheduleForm: View {
                     }
                 }
                 if let date = draft.timing.endOn {
-                    DatePicker("On", selection: Binding { date } set: { draft.timing.endOn = $0 }, displayedComponents: .date)
-                        .labelsHidden()
+                    DateField(date: Binding { date } set: { draft.timing.endOn = $0 }, part: .date)
                 }
             }
         }
@@ -729,3 +735,37 @@ extension Schedule.FinishAction {
     }
 }
 
+
+/// A date or a time as a plain field, the way Calendar and Reminders show them: no stepper, and clicking a date
+/// opens a small calendar under it. SwiftUI's DatePicker can't show that calendar, so this is AppKit's.
+struct DateField: NSViewRepresentable {
+    enum Part { case date, time }
+    @Binding var date: Date
+    let part: Part
+
+    func makeNSView(context: Context) -> NSDatePicker {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textField
+        picker.datePickerElements = part == .date ? .yearMonthDay : .hourMinute
+        picker.presentsCalendarOverlay = part == .date
+        picker.isBezeled = true
+        picker.drawsBackground = true
+        picker.target = context.coordinator
+        picker.action = #selector(Coordinator.changed(_:))
+        picker.setContentHuggingPriority(.required, for: .horizontal)
+        return picker
+    }
+
+    func updateNSView(_ picker: NSDatePicker, context: Context) {
+        context.coordinator.date = $date
+        if picker.dateValue != date { picker.dateValue = date }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(date: $date) }
+
+    final class Coordinator: NSObject {
+        var date: Binding<Date>
+        init(date: Binding<Date>) { self.date = date }
+        @objc func changed(_ picker: NSDatePicker) { date.wrappedValue = picker.dateValue }
+    }
+}
