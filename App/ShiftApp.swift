@@ -82,6 +82,13 @@ struct ShiftApp: App {
         Window("Set Up Shift", id: SetupWindow.id) {
             SetupWindow().environment(delegate.setupFlow)
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+
+        Window("Onboarding Debug", id: SetupDebugControls.id) {
+            SetupDebugControls().environment(delegate.setupFlow)
+        }
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
         #endif
@@ -117,6 +124,7 @@ private struct TestOnboardingCommand: Commands {
             Button("Test Onboarding") {
                 flow.reset()
                 openWindow(id: SetupWindow.id)
+                openWindow(id: SetupDebugControls.id)
             }
         }
     }

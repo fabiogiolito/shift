@@ -2,82 +2,103 @@ import SwiftUI
 import ShiftCore
 
 /// The setup assistant: one step at a time, then "You're ready". Phase 1 opens only from Help › Test Onboarding.
+/// Laid out like macOS's own setup panels: left-aligned, fixed size, actions at the bottom right.
 struct SetupWindow: View {
     static let id = "setup"
     @Environment(SetupFlow.self) private var flow
     @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             Group {
                 switch flow.page {
                 case .step(let step): SetupStepView(step: step).id(step)
-                case .ready: ReadyView { dismissWindow(id: Self.id) }
+                case .ready: ReadyView()
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            Divider()
             footer
-            #if DEBUG
-            SetupDebugBar()
-            #endif
         }
-        .frame(width: 620, height: 600)
+        .padding(.horizontal, 32)
+        .padding(.top, 16)
+        .padding(.bottom, 20)
+        .frame(width: 520, height: 410)
     }
 
     private var footer: some View {
         HStack {
-            switch flow.page {
-            case .step(let step) where SetupStep.projectSteps.contains(step):
-                Text("Project setup").foregroundStyle(.secondary)
-            case .step(let step):
-                Text("Step \(SetupStep.firstLaunch.firstIndex(of: step)! + 1) of \(SetupStep.firstLaunch.count)")
-                    .foregroundStyle(.secondary)
-            case .ready:
-                EmptyView()
-            }
-            Spacer()
             if let back = flow.move(by: -1) {
                 Button("Back") { flow.page = back }
             }
-            if case .step(let step) = flow.page {
-                Button("Continue") {
-                    if let next = flow.move(by: 1) { flow.page = next } else { dismissWindow(id: Self.id) }
+            Spacer()
+            switch flow.page {
+            case .ready:
+                Button("Add Project") { dismissWindow(id: Self.id) }
+                    .keyboardShortcut(.defaultAction)
+            case .step(let step):
+                let state = flow.state(step)
+                if step.canSkip, state == .notDone || state.isFailed {
+                    Button("Skip") { flow.skip(step) }
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(![.done, .skipped].contains(flow.state(step)))
+                if state == .skipped {
+                    Button(step.actionTitle) { flow.perform(step) }
+                }
+                primaryButton(step, state)
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .controlSize(.large)
-        .padding(20)
+    }
+
+    /// Does the step's action, then moves on once it's done.
+    @ViewBuilder private func primaryButton(_ step: SetupStep, _ state: SetupState) -> some View {
+        switch state {
+        case .done, .skipped:
+            Button("Continue") {
+                if let next = flow.move(by: 1) { flow.page = next } else { dismissWindow(id: Self.id) }
+            }
+        case .failed:
+            Button("Try Again") { flow.perform(step) }
+        case .working:
+            Button(step.actionTitle) {}.disabled(true)
+        case .notDone:
+            // Sign-in has a button on each row.
+            if step == .signIn {
+                Button("Continue") {}.disabled(true)
+            } else {
+                Button(step.actionTitle) { flow.perform(step) }
+            }
+        }
     }
 }
 
-/// A step's header, its own content, and its state.
+/// A step's header, its own content, and how it went.
 private struct SetupStepView: View {
     let step: SetupStep
     @Environment(SetupFlow.self) private var flow
 
     var body: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 8) {
-                Image(systemName: step.symbol)
-                    .font(.system(size: 44))
-                    .foregroundStyle(.tint)
-                    .frame(height: 56)
-                Text(step == .packageManager ? "This project needs \(flow.packageManager)" : step.title).font(.title).bold()
-                Text(summary)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: 16) {
+            Image(systemName: step.symbol)
+                .font(.system(size: 32))
+                .foregroundStyle(.tint)
+                .frame(height: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(progress).font(.subheadline).foregroundStyle(.secondary)
+                Text(step == .packageManager ? "This project needs \(flow.packageManager)" : step.title)
+                    .font(.title2).bold()
+                Text(summary).foregroundStyle(.secondary)
             }
-
             content
-
             SetupStatus(step: step)
         }
-        .padding(.horizontal, 48)
-        .padding(.top, 40)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var progress: String {
+        guard let index = SetupStep.firstLaunch.firstIndex(of: step) else { return "Project setup" }
+        return "Step \(index + 1) of \(SetupStep.firstLaunch.count)"
     }
 
     private var summary: String {
@@ -88,42 +109,39 @@ private struct SetupStepView: View {
         @Bindable var flow = flow
         switch step {
         case .agent:
-            Form {
-                Section {
-                    ForEach(AgentKind.allCases) { kind in
-                        AgentChoiceRow(kind: kind, isSelected: flow.agents.contains(kind)) { flow.agent = kind }
-                    }
-                }
-                Section {
-                    Toggle("Install both", isOn: $flow.installBoth).toggleStyle(.checkbox)
+            GroupBox {
+                ForEach(AgentKind.allCases) { kind in
+                    if kind != AgentKind.allCases.first { Divider() }
+                    AgentChoiceRow(kind: kind, isSelected: flow.agents.contains(kind)) { flow.agent = kind }
                 }
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            .frame(width: 440, height: 210)
+            Toggle("Install both", isOn: $flow.installBoth).toggleStyle(.checkbox)
         case .signIn:
-            Form {
+            GroupBox {
                 ForEach(flow.agents) { kind in
-                    LabeledContent {
+                    if kind != flow.agents.first { Divider() }
+                    HStack {
+                        Label(kind.displayName, image: kind.icon)
+                        Spacer()
                         SetupStateLabel(step: step, state: flow.state(step)) {
                             Button("Sign In") { flow.perform(step) }
                         }
-                    } label: {
-                        Label(kind.displayName, image: kind.icon)
                     }
+                    .padding(4)
+                    .frame(minHeight: 28)
                 }
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            .frame(width: 440, height: CGFloat(flow.agents.count) * 44 + 40)
         case .gitIdentity:
-            Form {
-                TextField("Name", text: $flow.gitName, prompt: Text(verbatim: "Jane Appleseed"))
-                TextField("Email", text: $flow.gitEmail, prompt: Text(verbatim: "jane@example.com"))
+            Grid(alignment: .leading) {
+                GridRow {
+                    Text("Name").gridColumnAlignment(.trailing)
+                    TextField("Name", text: $flow.gitName, prompt: Text(verbatim: "Jane Appleseed")).labelsHidden()
+                }
+                GridRow {
+                    Text("Email")
+                    TextField("Email", text: $flow.gitEmail, prompt: Text(verbatim: "jane@example.com")).labelsHidden()
+                }
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            .frame(width: 440, height: 120)
         default:
             EmptyView()
         }
@@ -157,53 +175,43 @@ private struct AgentChoiceRow: View {
                     .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                     .imageScale(.large)
             }
+            .padding(4)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }
 }
 
-/// The step's main button, or how it went.
+/// How the step's action went. Its buttons are in the window's footer.
 private struct SetupStatus: View {
     let step: SetupStep
     @Environment(SetupFlow.self) private var flow
 
     var body: some View {
-        let state = flow.state(step)
-        VStack(spacing: 12) {
-            switch state {
-            case .notDone:
-                // Sign-in has a button on each row.
-                if step != .signIn {
-                    Button(step.actionTitle) { flow.perform(step) }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                }
-                if step.canSkip {
-                    Button("Skip") { flow.skip(step) }.buttonStyle(.link)
-                }
-            case .working, .done:
-                if step != .signIn { SetupStateLabel(step: step, state: state) { EmptyView() } }
-            case .failed(let error):
-                Label(error, systemImage: "xmark.octagon.fill")
-                    .foregroundStyle(.red)
-                HStack {
-                    Button("Help Me Fix This") {}
-                    Button("Try Again") { flow.perform(step) }.buttonStyle(.borderedProminent)
-                }
-                .controlSize(.large)
-            case .skipped:
-                if let warning = step.skipWarning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .symbolRenderingMode(.multicolor)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: 420)
-                }
-                Button(step.actionTitle) { flow.perform(step) }.controlSize(.large)
+        switch flow.state(step) {
+        case .notDone:
+            EmptyView()
+        case let state where step == .signIn && !state.isFailed:
+            EmptyView() // shown on each row
+        case .failed(let error):
+            VStack(alignment: .leading, spacing: 6) {
+                Label(error, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+                Button("Help Me Fix This") {}.buttonStyle(.link)
             }
+        case .skipped:
+            if let warning = step.skipWarning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .symbolRenderingMode(.multicolor)
+                    .foregroundStyle(.secondary)
+            }
+        case let state:
+            SetupStateLabel(step: step, state: state) { EmptyView() }
         }
-        .multilineTextAlignment(.center)
     }
+}
+
+extension SetupState {
+    var isFailed: Bool { if case .failed = self { true } else { false } }
 }
 
 /// Working, done, failed or skipped as a short line; `notDone` shows `action`.
@@ -234,28 +242,25 @@ struct SetupStateLabel<Action: View>: View {
 }
 
 private struct ReadyView: View {
-    let addProject: () -> Void
-
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 56))
+                .font(.system(size: 32))
                 .foregroundStyle(.green)
-            Text("You're ready").font(.title).bold()
-            Text("Add a project to start your first task.")
-                .foregroundStyle(.secondary)
-            Button("Add Project", action: addProject)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.top, 8)
+                .frame(height: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("You're ready").font(.title2).bold()
+                Text("Add a project to start your first task.").foregroundStyle(.secondary)
+            }
         }
-        .frame(maxHeight: .infinity)
     }
 }
 
 #if DEBUG
+/// Its own window beside the setup window, so the setup window looks as it will ship.
 /// Switches the step's fake state and jumps between steps. Debug builds only.
-private struct SetupDebugBar: View {
+struct SetupDebugControls: View {
+    static let id = "setup-debug"
     @Environment(SetupFlow.self) private var flow
 
     var body: some View {
@@ -282,10 +287,8 @@ private struct SetupDebugBar: View {
             }
             .fixedSize()
         }
-        .controlSize(.small)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
-        .background(.orange.opacity(0.12))
+        .padding(12)
+        .frame(width: 520)
     }
 
     private func stateBinding(_ step: SetupStep) -> Binding<String> {
