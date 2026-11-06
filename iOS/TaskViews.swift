@@ -39,7 +39,8 @@ struct ProjectsView: View {
                                 VStack(alignment: .leading) {
                                     Text(project.name)
                                         .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
-                                    Text(Project.summary(of: tasks)).font(.subheadline).foregroundStyle(.secondary)
+                                    Text(Project.summary(of: tasks)).font(.subheadline)
+                                        .runningShimmer(tasks.contains { $0.status == .working })
                                 }
                                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                             }
