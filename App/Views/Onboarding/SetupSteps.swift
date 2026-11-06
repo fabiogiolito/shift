@@ -43,7 +43,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .commandLineTools: "Apple's developer tools, including Git. Shift needs them for every project."
-        case .agent: "The coding agent that works on your tasks. You can add the other one later."
+        case .agent: "The coding agent that works on your tasks. Choose one or both."
         case .signIn: "Each agent needs your account. Signing in opens Terminal."
         case .gitIdentity: "Every commit is signed with a name and email."
         case .github: "Lets Shift open pull requests, follow them, and push your branches."
@@ -120,13 +120,16 @@ final class SetupFlow {
 
     var page: Page = .step(.commandLineTools)
     var states: [SetupStep: SetupState] = [:]
-    var agent: AgentKind = .claudeCode
-    var installBoth = false
+    var chosenAgents: Set<AgentKind> = [.claudeCode]
     var gitName = ""
     var gitEmail = ""
     var packageManager = "pnpm"
 
-    var agents: [AgentKind] { installBoth ? AgentKind.allCases : [agent] }
+    var agents: [AgentKind] { AgentKind.allCases.filter(chosenAgents.contains) }
+
+    func toggle(_ agent: AgentKind) {
+        if chosenAgents.contains(agent) { chosenAgents.remove(agent) } else { chosenAgents.insert(agent) }
+    }
 
     func state(_ step: SetupStep) -> SetupState { states[step] ?? .notDone }
 
@@ -177,7 +180,7 @@ extension SetupFlow {
         if parts.first == "ready" { page = .ready; return }
         guard let step = parts.first.flatMap(SetupStep.init(rawValue:)) else { return }
         page = .step(step)
-        installBoth = step == .signIn
+        chosenAgents = step == .signIn ? Set(AgentKind.allCases) : [.claudeCode]
         switch parts.count > 1 ? parts[1] : "" {
         case "working": states[step] = .working
         case "done": states[step] = .done

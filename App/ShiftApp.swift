@@ -331,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func openSetupForScreenshot() {
         guard let spec = ProcessInfo.processInfo.environment["SHIFT_ONBOARDING"] else { return }
         if spec == "settings" {
-            setupFlow.installBoth = false
+            setupFlow.chosenAgents = [.claudeCode]
             setupFlow.states = [.commandLineTools: .done, .node: .done, .agent: .done, .gitIdentity: .done, .github: .skipped]
             openSettings?()
         } else {

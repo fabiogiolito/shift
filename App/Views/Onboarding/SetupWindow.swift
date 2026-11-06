@@ -34,7 +34,10 @@ struct SetupWindow: View {
             Spacer()
             switch flow.page {
             case .ready:
-                Button("Add Project") { dismissWindow(id: Self.id) }
+                Button("Add Project") {
+                    dismissWindow(id: Self.id)
+                    NotificationCenter.default.post(name: .addProject, object: nil)
+                }
                     .keyboardShortcut(.defaultAction)
             case .step(let step):
                 let state = flow.state(step)
@@ -68,6 +71,7 @@ struct SetupWindow: View {
                 Button("Continue") {}.disabled(true)
             } else {
                 Button(step.actionTitle) { flow.perform(step) }
+                    .disabled(step == .agent && flow.agents.isEmpty)
             }
         }
     }
@@ -112,10 +116,9 @@ private struct SetupStepView: View {
             GroupBox {
                 ForEach(AgentKind.allCases) { kind in
                     if kind != AgentKind.allCases.first { Divider() }
-                    AgentChoiceRow(kind: kind, isSelected: flow.agents.contains(kind)) { flow.agent = kind }
+                    AgentChoiceRow(kind: kind, isSelected: flow.agents.contains(kind)) { flow.toggle(kind) }
                 }
             }
-            Toggle("Install both", isOn: $flow.installBoth).toggleStyle(.checkbox)
         case .signIn:
             GroupBox {
                 ForEach(flow.agents) { kind in

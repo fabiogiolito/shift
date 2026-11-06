@@ -77,6 +77,7 @@ struct ProjectsSidebar: View {
             geo.contentOffset.y + geo.containerSize.height - geo.contentInsets.bottom < geo.contentSize.height - 1
         } action: { scrolledUnderBar = $1 }
         .sheet(item: $settingsProject) { ProjectSettingsView(projectID: $0.id) }
+        .onReceive(NotificationCenter.default.publisher(for: .addProject)) { _ in addProject() }
         .confirmationDialog("Remove “\(removingProject?.name ?? "")”?",
                             isPresented: Binding(get: { removingProject != nil }, set: { if !$0 { removingProject = nil } }),
                             presenting: removingProject) { project in
@@ -115,4 +116,9 @@ struct ProjectsSidebar: View {
             if !known.contains(project.id) { settingsProject = project }
         }
     }
+}
+
+extension Notification.Name {
+    /// Opens the folder picker to add a project, from outside the sidebar (the setup window's Add Project).
+    static let addProject = Notification.Name("addProject")
 }

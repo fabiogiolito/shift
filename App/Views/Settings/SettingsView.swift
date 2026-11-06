@@ -17,7 +17,7 @@ struct SettingsView: View {
                 .tag("setup")
             #endif
             PairedDevicesView()
-                .tabItem { Label("Paired Devices", systemImage: "iphone") }
+                .tabItem { Label("Devices", systemImage: "iphone") }
                 .tag("devices")
         }
     }
