@@ -44,6 +44,8 @@ struct TaskDetailView: View {
     /// The screenshot open in Quick Look.
     @State private var screenshotPreview: URL?
     @State private var screenshotsExpanded = false
+    /// Clicking the toolbar title scrolls this back to the top.
+    @State private var scrollPosition = ScrollPosition(edge: .top)
 
     private let apps = ExternalApps()
 
@@ -80,6 +82,7 @@ struct TaskDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Self.margin)
                     }
+                    .scrollPosition($scrollPosition)
                     .safeAreaBar(edge: .bottom) {
                         if ResponsePanel.shows(task) {
                             ResponsePanel(task: task, maxHeight: windowHeight * 0.5)
@@ -160,7 +163,10 @@ struct TaskDetailView: View {
                     .help("Back to task")
             }
         }
-        ToolbarItem { Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset) }
+        ToolbarItem {
+            Text(task.title).font(.title3).lineLimit(1).padding(.leading, Self.margin - Self.toolbarInset)
+                .onTapGesture { withAnimation(reduceMotion ? nil : .smooth) { scrollPosition.scrollTo(edge: .top) } }
+        }
             .sharedBackgroundVisibility(.hidden)
         ToolbarSpacer(.flexible)
         ToolbarItem {
