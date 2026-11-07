@@ -126,13 +126,20 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .row p { grid-column: 2 / 4; font-size: 11.5px; color: #8e8e93; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .row.merged b { color: #8e8e93; }
 .row.enter { animation: slide-in .55s var(--ease) both; }
-.field { position: relative; min-height: 62px; margin: 10px; padding: 10px 40px 10px 14px; border: 1px solid #3a3a3c; border-radius: 12px; background: #232325; color: #e8e8e8; transition: border-color .2s; }
-.field .ph, .field:empty::before { content: attr(data-ph); color: #6e6e73; }
+/* Inputs: text on top; plus, branch (new task only) and send along the bottom */
+.field { display: flex; flex-direction: column; justify-content: space-between; height: 84px; margin: 0 10px 10px; padding: 11px 10px 9px 14px; border: 1px solid #3a3a3c; border-radius: 13px; background: #232325; color: #e8e8e8; transition: border-color .2s; }
+.field .txt:empty::before { content: attr(data-ph); color: #6e6e73; }
 .field.typing { border-color: #545458; }
-.field.typing::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; margin-left: 1px; vertical-align: -2px; background: var(--blue); animation: blink 1s steps(1) infinite; }
-.field .send { position: absolute; right: 10px; bottom: 9px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #3a3a3c; color: #8e8e93; }
+.field.typing .txt::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; margin-left: 1px; vertical-align: -2px; background: var(--blue); animation: blink 1s steps(1) infinite; }
+.tools { display: flex; align-items: center; gap: 10px; margin-left: -2px; color: #9a9a9e; }
+.tools > :nth-child(2) { margin-left: auto; }
+.tools .plus-b svg.g { width: 17px; height: 17px; stroke-width: 1.6; }
+.tools .br { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: #c7c7cc; }
+.tools .br svg.g { width: 13px; height: 13px; }
+.tools .br > span:last-child svg.g { width: 10px; color: #8e8e93; }
+.field .send { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #2c2c2e; box-shadow: inset 0 0 0 1px #3a3a3c; color: #8e8e93; transition: background .2s, color .2s; }
 .field .send svg.g { width: 13px; height: 13px; }
-.field .send.go { background: var(--blue); color: #fff; }
+.field .send.go { background: var(--blue); box-shadow: none; color: #fff; }
 .detail { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .hbar .right { display: flex; align-items: center; gap: 14px; margin-left: auto; font-size: 12px; font-weight: 400; color: #9a9a9e; }
 .hbar .right > span { display: flex; align-items: center; gap: 6px; }
@@ -168,10 +175,14 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .ask li.pick .radio { border: 5px solid var(--blue); background: #fff; }
 .ask .ub { position: absolute; right: 14px; bottom: 14px; color: #8e8e93; }
 .ask .ub.go { background: var(--blue); color: #fff; }
-.bar { grid-column: 2 / 4; display: flex; align-items: center; gap: 22px; padding: 0 16px; border-top: 1px solid #2c2c2e; font-size: 12px; color: #c7c7cc; white-space: nowrap; }
+.bar { grid-column: 2 / 4; display: flex; align-items: center; gap: 22px; padding: 0 16px 0 0; border-top: 1px solid #2c2c2e; font-size: 12px; color: #c7c7cc; white-space: nowrap; }
 .bar > span { display: flex; align-items: center; gap: 6px; }
 .bar svg.g { width: 13px; height: 13px; }
-.bar svg.g:last-child { width: 10px; color: #8e8e93; }
+.bar > .path { align-self: stretch; width: 310px; padding-left: 16px; border-right: 1px solid #2c2c2e; }
+.compact .bar > .path { width: 250px; }
+.bar > .lim { margin-left: auto; color: #8e8e93; }
+.bar span { flex-shrink: 0; }
+.bar > span > span:last-child svg.g { width: 10px; color: #8e8e93; }
 /* Status marks, as in the app */
 .st { display: grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0; }
 .st svg { width: 100%; height: 100%; }
@@ -289,12 +300,12 @@ body > footer a:hover { color: var(--fg); }
             <section class="list">
               <div class="hbar"><span id="pname"></span><span class="caps"><span data-ic="list"></span><span data-ic="globe"></span><span style="display:flex;align-items:center;gap:3px"><span data-ic="up"></span>2</span></span></div>
               <div class="rows" id="rows"></div>
-              <div class="field" style="margin-top:0"><span class="ph">New task or ‘/’ for commands</span><span class="send" data-ic="up"></span></div>
+              <div class="field"><div class="txt" data-ph="New task or ‘/’ for commands"></div><div class="tools"><span class="plus-b" data-ic="plus"></span><span class="br"><span data-ic="branch"></span>main<span data-ic="chev"></span></span><span class="send" data-ic="up"></span></div></div>
             </section>
             <section class="detail">
               <div class="hbar"><span id="dtitle"></span><span class="right" id="dstatus"></span><span class="more" data-ic="dots"></span></div>
               <div class="dbody" id="dbody"></div>
-              <div class="field" id="dfield" data-ph="Ask for changes…"></div>
+              <div class="field" id="dfield"><div class="txt" data-ph="Ask or tell the agent anything…"></div><div class="tools"><span class="plus-b" data-ic="plus"></span><span class="send" data-ic="up"></span></div></div>
               <div class="ask" id="ask">
                 <span class="sec" style="font-size:11.5px">The agent needs a decision</span>
                 <div class="q">Should the lightbox show each photo’s caption?</div>
@@ -302,7 +313,7 @@ body > footer a:hover { color: var(--fg); }
                 <span class="ub" id="asksend">Send</span>
               </div>
             </section>
-            <div class="bar"><span><span data-ic="folder"></span><span id="path"></span><span data-ic="chev"></span></span><span><span data-ic="branch"></span>main<span data-ic="chev"></span></span><span><span data-ic="claude"></span>Claude Code<span data-ic="chev"></span></span><span><span data-ic="cpu"></span>Default model<span data-ic="chev"></span></span><span><span data-ic="shield"></span>Bypass permissions<span data-ic="chev"></span></span></div>
+            <div class="bar"><span class="path"><span data-ic="folder"></span><span id="path"></span><span data-ic="chev"></span></span><span><span data-ic="claude"></span>Claude Code<span data-ic="chev"></span></span><span><span data-ic="cpu"></span>Default model<span data-ic="chev"></span></span><span><span data-ic="shield"></span>Bypass permissions<span data-ic="chev"></span></span><span class="lim">Weekly limit 68% left</span></div>
             <div class="notif" id="notif"><img src="icon.png" alt=""><div><b>Portfolio</b><p>Gallery lightbox is ready for review.</p></div><small>now</small></div>
             <div class="browser" id="browser">
               <div class="chrome"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="url"><span data-ic="lock"></span>localhost:3201</span></div>
@@ -514,7 +525,6 @@ function renderDetail(fade = true) {
   $("dstatus").innerHTML = `<span>${HEAD[st]()}</span><span>main ← shift/${S.sel}</span>`
   dbody.innerHTML = detailHTML()
   dbody.classList.remove("fade"); void dbody.offsetWidth; dbody.classList.toggle("fade", fade)
-  $("dfield").dataset.ph = st === "working" || st === "input" ? "Add instructions…" : "Ask for changes…"
   $("ask").classList.toggle("on", st === "input")
 }
 
@@ -527,7 +537,8 @@ function renderAll() {
   $("notif").classList.toggle("on", !!S.notif)
   $("browser").classList.toggle("on", !!S.preview)
   $("cursor").classList.remove("on", "down")
-  $("dfield").textContent = ""
+  $("dfield").querySelector(".txt").textContent = ""
+  $("dfield").querySelector(".send").classList.remove("go")
   $("dfield").className = "field"
   $("opt").classList.remove("pick")
   $("asksend").classList.remove("go")
@@ -552,11 +563,12 @@ async function click(el) {
   cursor.classList.remove("down"); el.classList.remove("press")
   await wait(150)
 }
-async function type(el, text) {
-  el.classList.add("typing")
-  for (const ch of text) { el.textContent += ch; await wait(36) }
-  el.classList.remove("typing")
-  el.insertAdjacentHTML("beforeend", `<span class="send go">${ic("up")}</span>`)
+async function type(field, text) {
+  const txt = field.querySelector(".txt")
+  field.classList.add("typing")
+  for (const ch of text) { txt.textContent += ch; await wait(36) }
+  field.classList.remove("typing")
+  field.querySelector(".send").classList.add("go")
 }
 function addAct() { S.acts++; $("acts").outerHTML = actsList(S.acts) }
 
@@ -583,11 +595,11 @@ const BEATS = [
   // 3. A second prompt is typed and sent while it works
   async () => {
     const f = $("dfield")
-    await point(f, .3, .4); await click(f)
+    await point(f.querySelector(".txt"), .3, .5); await click(f)
     await type(f, SECOND)
     const send = f.querySelector(".send")
     await point(send); await click(send)
-    f.textContent = ""
+    f.querySelector(".txt").textContent = ""; send.classList.remove("go")
     S.prompts = [SECOND, ...TASKS[201].prompts]
     $("prompts").insertAdjacentHTML("afterbegin", `<li class="enter">${SECOND}</li>`)
     cursor.classList.remove("on")
