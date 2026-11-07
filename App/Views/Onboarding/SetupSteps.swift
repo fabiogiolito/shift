@@ -1,7 +1,7 @@
 import SwiftUI
 import ShiftCore
 
-/// Everything Shift needs on a Mac, in one place: the setup window and Settings › Setup both draw from these.
+/// Everything Shift needs on a Mac, in one place: the setup sheet and Settings › Setup both draw from these.
 /// `SetupFlow` runs each step's real check and action, through `MacSetup`.
 enum SetupStep: String, CaseIterable, Identifiable {
     case commandLineTools, node, agent, signIn, gitIdentity, github, notifications
@@ -121,14 +121,16 @@ extension AgentKind {
     }
 }
 
-/// The setup window's place and each step's state, from real checks (`MacSetup`). Settings › Setup shows the same.
+/// The setup sheet's place and each step's state, from real checks (`MacSetup`). Settings › Setup shows the same.
 @MainActor @Observable
 final class SetupFlow {
     enum Page: Hashable { case step(SetupStep), ready }
 
     private let model: AppModel
     var page: Page = .ready
-    /// The steps this run of the window walks through: what was missing when it opened.
+    /// Shown as a sheet on the main window.
+    var isPresented = false
+    /// The steps this run of the sheet walks through: what was missing when it opened.
     private(set) var steps: [SetupStep] = []
     /// First launch ends with "You're ready"; a fix from Settings or a project's steps just close.
     private(set) var endsReady = false
@@ -164,7 +166,7 @@ final class SetupFlow {
         }
     }
 
-    /// Any first-launch step still to do: the window opens at launch.
+    /// Any first-launch step still to do: the sheet opens at launch.
     var needsSetup: Bool {
         SetupStep.firstLaunch.contains { [.notDone, .working].contains(state($0)) || state($0).isFailed }
     }
@@ -187,6 +189,7 @@ final class SetupFlow {
         self.endsReady = endsReady
         self.isProjectSetup = isProjectSetup
         page = steps.first.map(Page.step) ?? .ready
+        isPresented = true
     }
 
     /// The step's title and summary as shown, with this project's details.

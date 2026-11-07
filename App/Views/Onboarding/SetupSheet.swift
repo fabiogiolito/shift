@@ -3,11 +3,9 @@ import ShiftCore
 
 /// The setup assistant: one step at a time, then "You're ready". Opens at first launch with what's missing, from
 /// Settings › Setup for one item, and when an added project needs something.
-/// Laid out like macOS's own setup panels: left-aligned, fixed size, actions at the bottom right.
-struct SetupWindow: View {
-    static let id = "setup"
+/// A sheet on the main window, laid out like macOS's own setup panels: left-aligned, fixed size, actions at the bottom right.
+struct SetupSheet: View {
     @Environment(SetupFlow.self) private var flow
-    @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,14 +27,16 @@ struct SetupWindow: View {
 
     private var footer: some View {
         HStack {
+            Button("Cancel") { flow.isPresented = false }
+                .keyboardShortcut(.cancelAction)
+            Spacer()
             if let back = flow.move(by: -1) {
                 Button("Back") { flow.page = back }
             }
-            Spacer()
             switch flow.page {
             case .ready:
                 Button("Add Project") {
-                    dismissWindow(id: Self.id)
+                    flow.isPresented = false
                     NotificationCenter.default.post(name: .addProject, object: nil)
                 }
                     .keyboardShortcut(.defaultAction)
@@ -61,7 +61,7 @@ struct SetupWindow: View {
         switch state {
         case .done, .skipped:
             Button("Continue") {
-                if let next = flow.move(by: 1) { flow.page = next } else { dismissWindow(id: Self.id) }
+                if let next = flow.move(by: 1) { flow.page = next } else { flow.isPresented = false }
             }
         case .failed:
             Button("Try Again") { flow.perform(step) }
@@ -188,7 +188,7 @@ private struct AgentChoiceRow: View {
     }
 }
 
-/// How the step's action went. Its buttons are in the window's footer.
+/// How the step's action went. Its buttons are in the sheet's footer.
 private struct SetupStatus: View {
     let step: SetupStep
     @Environment(SetupFlow.self) private var flow
