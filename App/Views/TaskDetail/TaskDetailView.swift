@@ -191,7 +191,7 @@ struct TaskDetailView: View {
                     TaskTags(tags: task.tags, project: project, onRemove: { model.removeTag(taskID: task.id, $0) },
                              onDelete: { model.deleteTag(projectID: project.id, $0) },
                              isShared: { model.tagIsShared(taskID: task.id, $0) },
-                             onColor: { model.setTagColor(projectID: project.id, $0, $1) })
+                             onColor: { model.setTagColor(projectID: project.id, $0, $1) }, large: true)
                 }
             }
             .padding(.bottom, 8)

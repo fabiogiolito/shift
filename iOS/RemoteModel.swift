@@ -34,8 +34,13 @@ final class RemoteModel {
     @ObservationIgnored private var streams: [AgentLog: LogStream] = [:]
     /// A screenshot never changes once taken.
     @ObservationIgnored private var screenshots: [UUID: UIImage] = [:]
+    @ObservationIgnored private var attachmentImages: [String: UIImage] = [:]
+
+    /// A notification tapped on: RootView opens it once the task is known, then clears it.
+    var openedTask: Int?
 
     init() {
+        notifier.onOpen = { [weak self] in self?.openedTask = $0 }
         #if DEBUG
         // scripts/build.sh launches a simulator build at its own Mac build, with no pairing.
         if let server = ProcessInfo.processInfo.environment["SHIFT_SERVER"], let direct = Pairing(shiftServer: server) {
@@ -293,6 +298,21 @@ final class RemoteModel {
     }
 
     func merge(taskID: Int) async { await perform(.merge(taskID: taskID)) }
+    func rename(taskID: Int, to title: String) async { await perform(.rename(taskID: taskID, title: title)) }
+    func delete(taskID: Int) async { await perform(.delete(taskID: taskID)) }
+    func archive(taskID: Int) async { await perform(.archive(taskID: taskID)) }
+    func addTags(taskID: Int, _ tags: String) async { await perform(.addTags(taskID: taskID, tags: tags)) }
+    func removeTag(taskID: Int, _ tag: String) async { await perform(.removeTag(taskID: taskID, tag: tag)) }
+
+    func serverLog(taskID: Int) async -> String? {
+        guard case .text(let text)? = await perform(.serverLog(taskID: taskID)) else { return nil }
+        return text
+    }
+
+    func buildLog(taskID: Int, target: UUID) async -> String? {
+        guard case .text(let text)? = await perform(.buildLog(taskID: taskID, target: target)) else { return nil }
+        return text
+    }
     func push(taskID: Int) async { await perform(.pushBranch(taskID: taskID)) }
     func push(projectID: UUID) async { await perform(.push(projectID: projectID)) }
     func resolveConflict(taskID: Int) async { await perform(.resolveConflict(taskID: taskID)) }
@@ -351,6 +371,19 @@ final class RemoteModel {
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200, let image = UIImage(data: data) else { return nil }
         screenshots[shot.id] = image
+        return image
+    }
+
+    /// An attached picture, by its path on the Mac, fetched once. nil if it isn't one, or the Mac doesn't serve it.
+    func image(attachment path: String) async -> UIImage? {
+        if let image = attachmentImages[path] { return image }
+        guard let pairing else { return nil }
+        let name = (path as NSString).lastPathComponent
+        var request = URLRequest(url: pairing.url(path: Wire.attachmentsPath, query: [.init(name: "name", value: name)]))
+        request.setValue("Bearer \(pairing.token)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200, let image = UIImage(data: data) else { return nil }
+        attachmentImages[path] = image
         return image
     }
 
@@ -440,7 +473,10 @@ private enum Keychain {
 }
 
 /// Local notifications for task changes heard over the socket.
-private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
+private final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    /// Called with the task id when the user taps a notification.
+    @MainActor var onOpen: ((Int) -> Void)?
+
     override init() {
         super.init()
         let center = UNUserNotificationCenter.current()
@@ -453,6 +489,7 @@ private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         content.sound = .default
+        content.userInfo = ["taskID": taskID]
         let id = "task-\(taskID)"
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [id])
@@ -462,5 +499,10 @@ private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard let taskID = response.notification.request.content.userInfo["taskID"] as? Int else { return }
+        await MainActor.run { onOpen?(taskID) }
     }
 }

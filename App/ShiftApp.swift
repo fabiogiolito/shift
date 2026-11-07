@@ -279,6 +279,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openWindow?(id: "main")
     }
 
+    /// The model sets itself as the notification delegate: it must be by the end of launch, or a click that launched
+    /// the app is lost.
+    func applicationWillFinishLaunching(_ notification: Notification) { _ = model }
+
     /// SHIFT_APPEARANCE=dark forces dark mode, for screenshots.
     func applicationDidFinishLaunching(_ notification: Notification) {
         if ProcessInfo.processInfo.environment["SHIFT_APPEARANCE"] == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }

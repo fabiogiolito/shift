@@ -31,6 +31,13 @@ public struct PushState: Codable, Equatable, Sendable {
 }
 
 /// A pull request on GitHub, as `gh pr list --json` gives it.
+extension PullRequest {
+    /// The PR badge from SF Symbols in macOS and iOS 27; on 26, the pull arrows.
+    public static func symbol(filled: Bool = false) -> String {
+        if #available(macOS 27, iOS 27, *) { filled ? "pr.button.horizontal.fill" : "pr.button.horizontal" } else { "arrow.triangle.pull" }
+    }
+}
+
 public struct PullRequest: Codable, Equatable, Sendable {
     public enum State: String, Codable, Sendable {
         case open = "OPEN", merged = "MERGED", closed = "CLOSED"

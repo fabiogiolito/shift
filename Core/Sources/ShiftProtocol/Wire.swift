@@ -11,6 +11,7 @@ public enum Wire {
     public static let version = 2
     public static let socketPath = "/ws"
     /// POST an image's bytes here, `?name=photo.jpg`. The reply is `AttachmentUploaded`.
+    /// GET one back, `?name=` the last component of its path.
     public static let attachmentsPath = "/attachments"
     /// GET a task's screenshot, `?name=` the last component of its `path`.
     public static let screenshotsPath = "/screenshots"
@@ -71,6 +72,11 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     case rename(taskID: Int, title: String)
     case merge(taskID: Int)
     case delete(taskID: Int)
+    /// A Mac from before the phone's context menu doesn't know these three.
+    case archive(taskID: Int)
+    /// Comma-separated, as `AppModel.addTags`.
+    case addTags(taskID: Int, tags: String)
+    case removeTag(taskID: Int, tag: String)
     case resolveConflict(taskID: Int)
     case conflictedFiles(taskID: Int)
     case pushBranch(taskID: Int)
