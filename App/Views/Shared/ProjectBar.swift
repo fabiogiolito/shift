@@ -41,6 +41,8 @@ struct ProjectBar: View {
                 Button("Show in Finder") {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.repoPath)
                 }
+                OpenInMenu(directory: project.repoURL)
+                Divider()
                 Button("Project Settings…") { showingSettings = true }
             } label: {
                 // Drawn by SwiftUI, not AppKit, so a long path loses its start, not its end.

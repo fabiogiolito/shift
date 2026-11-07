@@ -91,12 +91,14 @@ struct TaskTags: View {
     var isShared: (String) -> Bool = { _ in false }
     /// Given, right-clicking a tag offers to change its color, for every task in the project.
     var onColor: ((String, TagColor) -> Void)?
+    /// Bigger capsules, for a task's own page rather than a list row.
+    var large = false
     @State private var deleting: String?
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: large ? 6 : 4) {
             ForEach(tags ?? [], id: \.self) { tag in
-                TagCapsule(name: tag, color: project?.color(ofTag: tag) ?? .gray)
+                TagCapsule(name: tag, color: project?.color(ofTag: tag) ?? .gray, large: large)
                     .contextMenu {
                         if let onColor {
                             // Names only: menus show no colors, and drop the checkmark of an item with an icon.
@@ -123,12 +125,20 @@ struct TaskTags: View {
 struct TagCapsule: View {
     let name: String
     let color: TagColor
-    var font: Font = .caption2
+    var large = false
+
+    private var font: Font {
+        #if os(macOS)
+        large ? .callout : .caption2
+        #else
+        large ? .subheadline : .caption2
+        #endif
+    }
 
     var body: some View {
         Text(name).font(font).fontWeight(.medium).fixedSize()
             .foregroundStyle(color.color.mix(with: .primary, by: 0.45))
-            .padding(.horizontal, 5).padding(.vertical, 1)
+            .padding(.horizontal, large ? 8 : 5).padding(.vertical, large ? 3 : 1)
             .background(color.color.opacity(0.22), in: .capsule)
     }
 }
