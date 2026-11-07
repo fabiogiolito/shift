@@ -18,9 +18,9 @@ enum SlashCommand: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .task: "plus.circle"
+        case .task: "plus"
         case .tag: "tag"
-        case .schedule: "clock"
+        case .schedule: "calendar"
         }
     }
 
