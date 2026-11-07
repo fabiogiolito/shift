@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shift — Parallel AI coding for your Mac</title>
-<meta name="description" content="Hand tasks to AI agents. Each gets its own branch, worktree and dev server. You test and merge.">
+<meta name="description" content="Hand tasks to Claude Code or Codex. Each gets its own branch, worktree and dev server. You test and merge, from your Mac or your iPhone.">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -96,15 +96,11 @@ header, .section, .cta, footer { transition: opacity .7s ease 1.4s; }
 h2 { max-width: 40rem; margin-inline: auto; text-align: center; font-size: 2rem; line-height: 1.1; letter-spacing: -.035em; }
 h2 span { color: var(--muted); }
 
-/* What Shift handles */
-.panels { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 1.5rem; margin-top: 4rem; }
-.panel { border: 1px solid var(--line); border-radius: .75rem; }
-.panel-bar { padding: .75rem 1.25rem; border-bottom: 1px solid var(--line); }
-
-.tasks li { display: flex; align-items: center; gap: .75rem; height: 3.5rem; padding-inline: 1.25rem; }
+/* Task rows, shared by the demo window and the phones */
+.tasks li { display: flex; align-items: center; gap: .75rem; height: 3.25rem; padding-inline: 1rem; animation: row-in .4s var(--ease) both; }
 .tasks li:not(:last-child) { border-bottom: 1px solid var(--line); }
-.tasks .pinned { background: #f5f5f5; }
-.tasks .title { flex: 1; font-size: 15px; transition: color .5s var(--ease); }
+.tasks .sel { background: #f2f2f2; }
+.tasks .title { flex: 1; font-size: 14px; transition: color .5s var(--ease); }
 .tasks [data-status=merged] .title { color: var(--muted); text-decoration: line-through; }
 .st { display: grid; place-items: center; flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; animation: fade .3s; }
 .st .i, .chip .i { width: .75rem; height: .75rem; stroke-width: 3.5; }
@@ -112,22 +108,86 @@ h2 span { color: var(--muted); }
 .st.input { border: 1.5px solid var(--fg); font-size: 11px; font-weight: 700; }
 .st.ready { background: var(--fg); color: var(--bg); }
 .st.merged { background: var(--line); color: var(--muted); }
+.st.sched { color: var(--muted); }
+.st.sched .i { width: 1rem; height: 1rem; stroke-width: 2; }
 .meta { display: flex; align-items: center; gap: .375rem; animation: fade .5s; }
 .meta .i { width: .875rem; height: .875rem; }
 .meta.input, .meta.ready { color: var(--fg); }
-
-.details-body { padding: 1.25rem; }
-.details-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 h3 { font-size: 1.125rem; line-height: 1.75rem; font-weight: 500; letter-spacing: -.025em; }
 .chip { display: flex; flex-shrink: 0; align-items: center; gap: .375rem; padding: .25rem .625rem; border: 1px solid var(--fg); border-radius: 99px; font-size: .75rem; line-height: 1rem; font-weight: 500; }
-dl { margin-top: 1.25rem; font-family: var(--mono); font-size: 13px; line-height: 1.75rem; }
-dl div { display: flex; gap: .75rem; }
-dt { flex-shrink: 0; width: 6rem; color: var(--muted); }
-.details-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; }
+.chip .st { width: 12px; height: 12px; border-width: 1.5px; }
 
-.steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 4rem; border-top: 1px solid var(--fg); }
-.steps li { padding: 1.25rem 0; }
-.steps p { margin-top: 1.5rem; font-size: 1.25rem; font-weight: 500; letter-spacing: -.025em; }
+/* A day with Shift: a scripted Mac window, a clock and a caption, with the phone dropping in at lunch */
+.day { margin-top: 3.5rem; }
+.day-head { display: flex; flex-direction: column; align-items: center; gap: .75rem; text-align: center; }
+.clock { font-size: .875rem; color: var(--fg); font-variant-numeric: tabular-nums; }
+.caption { display: grid; max-width: 34rem; min-height: 3.5rem; color: var(--muted); text-wrap: balance; }
+.caption p { grid-area: 1 / 1; animation: cap-in .5s var(--ease) both; }
+.beats { display: flex; gap: .375rem; margin-top: .5rem; }
+.beats li { width: 2rem; height: 3px; border-radius: 2px; background: var(--line); transition: background .4s var(--ease); }
+.beats li.on { background: var(--fg); }
+.stage { position: relative; margin-top: 2.5rem; }
+.win { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 24px 60px -24px rgba(0, 0, 0, .18); }
+.win-bar { display: flex; align-items: center; gap: .5rem; height: 2.5rem; padding-inline: 1rem; border-bottom: 1px solid var(--line); }
+.win-bar i { width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+.win-body { display: grid; grid-template-columns: 11rem 20rem minmax(0, 1fr); height: 27rem; }
+.win-side { padding: .75rem .5rem; border-right: 1px solid var(--line); background: #fafafa; font-size: 13px; }
+.win-side li { display: flex; align-items: center; gap: .5rem; height: 2rem; padding-inline: .625rem; border-radius: 6px; color: var(--muted); }
+.win-side li.on { background: #ececec; color: var(--fg); font-weight: 500; }
+.win-list { display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.list-head { display: flex; align-items: center; justify-content: space-between; height: 3rem; padding-inline: 1rem; border-bottom: 1px solid var(--line); font-weight: 600; }
+.win-list .tasks { flex: 1; }
+.field { display: flex; align-items: flex-start; min-height: 2.75rem; margin: .75rem; padding: .625rem .75rem; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; line-height: 1.4; }
+.field:empty::before { content: attr(data-placeholder); color: #aaa; }
+.field.typing::after { content: ""; width: 1.5px; height: 1.1em; margin-left: 1px; background: var(--fg); animation: blink 1s steps(1) infinite; }
+.win-detail { display: flex; flex-direction: column; min-width: 0; }
+.win-detail > div { display: flex; flex: 1; flex-direction: column; gap: 1.25rem; padding: 1.25rem; animation: fade .35s var(--ease); }
+.win-detail .field { margin: auto 0 0; }
+.details-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+dl { font-family: var(--mono); font-size: 12px; line-height: 1.75rem; }
+dl div { display: flex; gap: .75rem; }
+dt { flex-shrink: 0; width: 5.5rem; color: var(--muted); }
+.ask { padding: 1rem; border-radius: 10px; background: #f5f5f5; }
+.ask .mono { display: block; margin-bottom: .375rem; }
+.summary { color: #333; font-size: 15px; }
+.details-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.btn.mock { height: 2rem; border-radius: .5rem; padding: 0 .75rem; font-size: 13px; pointer-events: none; }
+.btn.mock:not(.primary) { border-color: var(--line); font-family: var(--mono); font-size: 12px; }
+.files li { display: flex; justify-content: space-between; height: 2rem; align-items: center; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; }
+.files li span:last-child { color: var(--muted); }
+.stage .phone { position: absolute; right: -7rem; bottom: -3rem; width: 14rem; opacity: 0; translate: 0 3rem; transition: opacity .5s var(--ease), translate .7s cubic-bezier(.16, 1, .3, 1); pointer-events: none; }
+.stage .phone.on { opacity: 1; translate: 0 0; }
+
+/* iPhone, drawn plainly: black body, island, one list */
+.phone { width: 15.5rem; padding: .5rem; border-radius: 2.75rem; background: #000; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .35); }
+.phone-screen { position: relative; overflow: hidden; height: 31rem; border-radius: 2.25rem; background: var(--bg); padding-top: 3.25rem; }
+.phone-screen::before { content: ""; position: absolute; top: .625rem; left: 50%; width: 5.5rem; height: 1.5rem; border-radius: 99px; background: #000; translate: -50% 0; }
+.phone-title { padding: 0 1rem .5rem; font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; }
+.phone .sect { padding: .875rem 1rem .25rem; }
+.phone .tasks li { height: 2.75rem; gap: .625rem; padding-inline: 1rem; }
+.phone .tasks .title { font-size: 13px; }
+.phone .meta { display: none; }
+.phone .tasks .sel { background: none; }
+.stage .phone-screen { height: 26rem; }
+.phone-bar { position: absolute; inset: auto .75rem 1.25rem; display: flex; align-items: center; justify-content: space-between; height: 2.5rem; padding: 0 .375rem 0 1rem; border: 1px solid var(--line); border-radius: 99px; background: var(--bg); font-size: 13px; color: #aaa; }
+.phone-bar b { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: 50%; background: var(--fg); color: var(--bg); }
+.phone-bar .i { width: .875rem; height: .875rem; }
+
+/* Features */
+.features { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: 4rem; border-top: 1px solid var(--fg); }
+.features li { padding: 1.75rem 0; border-bottom: 1px solid var(--line); }
+.features .i { width: 1.25rem; height: 1.25rem; stroke-width: 1.75; }
+.features h3 { margin-top: 1rem; font-size: 1rem; line-height: 1.5rem; }
+.features p { margin-top: .25rem; font-size: 15px; color: var(--muted); }
+
+/* iPhone section */
+.mobile { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 4rem; }
+.mobile h2 { margin: 0; text-align: left; }
+.mobile .lede { margin: 1.5rem 0 0; text-align: left; }
+.checks { display: grid; gap: .625rem; margin-top: 2rem; }
+.checks li { display: flex; align-items: center; gap: .625rem; font-size: 15px; }
+.checks .i { width: .875rem; height: .875rem; stroke-width: 3; }
+.mobile .phone { justify-self: center; }
 
 /* Screens: two radio groups pick the shot, no JS */
 .screens { display: flex; flex-direction: column; align-items: center; gap: 2rem; margin-top: 3rem; }
@@ -167,7 +227,21 @@ footer a:hover { color: var(--fg); }
   h1 { font-size: 4.5rem; }
   .section { padding-top: 10rem; }
   h2 { font-size: 3rem; }
-  .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .features { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 3rem; }
+}
+@media (min-width: 960px) {
+  .features { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mobile { grid-template-columns: minmax(0, 1fr) auto; gap: 6rem; }
+}
+/* Compact demo: no sidebar or phone, the task details sit under the list */
+@media (max-width: 899px) {
+  .win-side, .stage .phone { display: none; }
+  .win-body { grid-template-columns: 17rem minmax(0, 1fr); }
+}
+@media (max-width: 639px) {
+  .win-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 22rem; height: auto; }
+  .win-list { border-right: 0; border-bottom: 1px solid var(--line); }
+  .win-list .field { display: none; }
 }
 @media (max-width: 959px) {
   .gitcmd:nth-child(n+3) { display: none; }
@@ -176,12 +250,12 @@ footer a:hover { color: var(--fg); }
 @media (max-width: 639px) {
   .gitcmds { display: none; }
 }
-@media (min-width: 1024px) {
-  .panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 
 @keyframes spin { to { rotate: 360deg; } }
 @keyframes fade { from { opacity: 0; } }
+@keyframes row-in { from { opacity: 0; translate: 0 -6px; } }
+@keyframes cap-in { from { opacity: 0; translate: 0 6px; filter: blur(4px); } }
+@keyframes blink { 50% { opacity: 0; } }
 @keyframes eyebrow-in { from { color: transparent; } }
 @keyframes letter-rise { from { opacity: 0; transform: translateY(.4em); filter: blur(8px); } }
 @keyframes cmds-burst { 0% { scale: .12; opacity: 0; } 25% { opacity: 1; } }
@@ -192,7 +266,7 @@ footer a:hover { color: var(--fg); }
 
 @media (prefers-reduced-motion: reduce) {
   .st.working { animation-duration: 3s; }
-  .hero > .mono, h1 .l, .gitcmds, .gitcmd, .shot, .shot img { animation: none !important; }
+    .hero > .mono, h1 .l, .gitcmds, .gitcmd, .shot, .shot img { animation: none !important; }
   header, .hero .lede, .hero .actions, .section, .cta, footer { transition: none !important; }
 }
 </style>
@@ -207,6 +281,18 @@ footer a:hover { color: var(--fg); }
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="i-git-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-git-branch" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-file-diff" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M9 10h6"/><path d="M12 13V7"/><path d="M9 17h6"/></symbol>
+  <symbol id="i-pull-request" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-calendar-clock" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+  <symbol id="i-command" viewBox="0 0 24 24"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
 </svg>
 
@@ -234,11 +320,11 @@ footer a:hover { color: var(--fg); }
       <span class="gitcmd" style="--dx:240px;--dy:170px;--r:7deg;top:63%;right:12%"><b>$</b> git branch -D shift/101</span>
     </div>
 
-    <span class="mono">Claude Code · Codex · macOS</span>
+    <span class="mono">Claude Code · Codex · Mac + iPhone</span>
 
     <h1 aria-label="Agents as easy as a to-do list."><span class="w" aria-hidden="true"><span class="l" style="--i:0">A</span><span class="l" style="--i:1">g</span><span class="l" style="--i:2">e</span><span class="l" style="--i:3">n</span><span class="l" style="--i:4">t</span><span class="l" style="--i:5">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:6">a</span><span class="l" style="--i:7">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:8">e</span><span class="l" style="--i:9">a</span><span class="l" style="--i:10">s</span><span class="l" style="--i:11">y</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:12">a</span><span class="l" style="--i:13">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:14">a</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:15">t</span><span class="l" style="--i:16">o</span><span class="l" style="--i:17">-</span><span class="l" style="--i:18">d</span><span class="l" style="--i:19">o</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:20">l</span><span class="l" style="--i:21">i</span><span class="l" style="--i:22">s</span><span class="l" style="--i:23">t</span><span class="l" style="--i:24">.</span></span></h1>
 
-    <p class="lede">Add tasks. Get them done. Agents, worktrees, branches, ports, commits, merges, and cleanup are handled for you.</p>
+    <p class="lede">Add tasks. Get them done. Agents, worktrees, branches, ports, commits, merges and cleanup are handled for you, and you can check in from your phone.</p>
 
     <div class="actions">
       <a class="btn primary xl" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
@@ -250,43 +336,43 @@ footer a:hover { color: var(--fg); }
     </div>
   </section>
 
-  <!-- What Shift handles -->
+  <!-- A day with Shift -->
   <section id="how" class="section wrap" style="scroll-margin-top:6rem">
-    <h2>You write the tasks.<br><span>Shift does the rest.</span></h2>
+    <h2>A day with Shift.<br><span>Many tasks, one calm list.</span></h2>
 
-    <div class="panels">
-      <div class="panel">
-        <div class="panel-bar"><span class="mono">My Project · 5 tasks</span></div>
-        <ul class="tasks" id="tasks"></ul>
+    <div class="day">
+      <div class="day-head" aria-live="off">
+        <span class="clock mono" id="clock"></span>
+        <div class="caption" id="caption"></div>
+        <ol class="beats" id="beats" aria-hidden="true"><li></li><li></li><li></li><li></li><li></li></ol>
       </div>
-      <div class="panel details">
-        <div class="panel-bar"><span class="mono">Task 101</span></div>
-        <div class="details-body" id="details">
-          <div class="details-head">
-            <h3 class="truncate">Tighter board spacing</h3>
-            <span class="chip"><svg class="i"><use href="#i-check"/></svg>Ready to test</span>
+
+      <div class="stage" aria-hidden="true">
+        <div class="win">
+          <div class="win-bar"><i></i><i></i><i></i></div>
+          <div class="win-body">
+            <ul class="win-side">
+              <li class="on"><svg class="i"><use href="#i-folder"/></svg>Storefront</li>
+              <li><svg class="i"><use href="#i-folder"/></svg>Docs site</li>
+              <li><svg class="i"><use href="#i-folder"/></svg>iOS app</li>
+            </ul>
+            <div class="win-list">
+              <div class="list-head">Storefront<span class="mono">main</span></div>
+              <ul class="tasks" id="dtasks"></ul>
+              <div class="field" id="newtask" data-placeholder="New task…"></div>
+            </div>
+            <div class="win-detail" id="ddetail"></div>
           </div>
-          <dl>
-            <div><dt>branch</dt><dd class="truncate">shift/101</dd></div>
-            <div><dt>worktree</dt><dd class="truncate">~/.shift/worktrees/my-project/101</dd></div>
-            <div><dt>agent</dt><dd class="truncate">Claude Code</dd></div>
-            <div><dt>server</dt><dd class="truncate">localhost:3001</dd></div>
-            <div><dt>commit</dt><dd class="truncate">a41f9c2 Tighter board spacing</dd></div>
-          </dl>
-          <div class="details-actions">
-            <span class="btn mock primary"><svg class="i"><use href="#i-git-merge"/></svg>Merge into main</span>
-            <span class="btn mock"><i class="dot"></i>localhost:3001<svg class="i"><use href="#i-arrow-up-right"/></svg></span>
+        </div>
+        <div class="phone" id="dphone">
+          <div class="phone-screen">
+            <div class="phone-title">Storefront</div>
+            <ul class="tasks" id="ptasks"></ul>
+            <div class="phone-bar">New task…<b><svg class="i"><use href="#i-arrow-up"/></svg></b></div>
           </div>
         </div>
       </div>
     </div>
-
-    <ol class="steps">
-      <li><span class="mono">01</span><p>Describe</p></li>
-      <li><span class="mono">02</span><p>Agent works</p></li>
-      <li><span class="mono">03</span><p>Test</p></li>
-      <li><span class="mono">04</span><p>Merge</p></li>
-    </ol>
   </section>
 
   <!-- Screens -->
@@ -320,6 +406,57 @@ footer a:hover { color: var(--fg); }
     </div>
   </section>
 
+  <!-- Features -->
+  <section class="section wrap">
+    <h2>Everything around the agent,<br><span>handled.</span></h2>
+    <ul class="features">
+      <li><svg class="i"><use href="#i-git-branch"/></svg><h3>One task, one worktree</h3><p>Each task gets its own branch, worktree, agent session and dev server. Run as many side by side as you like.</p></li>
+      <li><svg class="i"><use href="#i-globe"/></svg><h3>Test it for real</h3><p>Every task has its own localhost port, or share it on your tailnet. Mac, iOS Simulator and Electron apps build and run per task.</p></li>
+      <li><svg class="i"><use href="#i-file-diff"/></svg><h3>See what changed</h3><p>A short handoff note, a built-in diff, and before and after screenshots the agent takes of the change.</p></li>
+      <li><svg class="i"><use href="#i-pull-request"/></svg><h3>Merge or open a pull request</h3><p>One click merges into your base branch and cleans up. Or open a pull request and follow it until it lands.</p></li>
+      <li><svg class="i"><use href="#i-message"/></svg><h3>Chat with your project</h3><p>Ask questions and plan in one ongoing conversation that can start, follow and merge tasks for you.</p></li>
+      <li><svg class="i"><use href="#i-calendar-clock"/></svg><h3>Schedules</h3><p>Run a prompt hourly, daily or weekly. Say “every weekday at 9” and the chat drafts it. Each run is a normal task.</p></li>
+      <li><svg class="i"><use href="#i-bell"/></svg><h3>Only interrupts when it matters</h3><p>Questions and approvals come first, a notification when something is ready. Hit a usage limit and it resumes on its own.</p></li>
+      <li><svg class="i"><use href="#i-terminal"/></svg><h3>The agents you already use</h3><p>Claude Code or Codex, with your instruction files, models and permissions. Open any task in your editor or terminal.</p></li>
+      <li><svg class="i"><use href="#i-command"/></svg><h3>Made for the keyboard</h3><p>Slash commands for /task, /schedule and /tag, shortcuts for everything, and a setup assistant that installs what’s missing.</p></li>
+    </ul>
+  </section>
+
+  <!-- iPhone -->
+  <section class="section wrap">
+    <div class="mobile">
+      <div>
+        <span class="mono">iPhone app</span>
+        <h2 style="margin-top:1rem">Step away.<br><span>Your tasks come with you.</span></h2>
+        <p class="lede">Pair your iPhone with a QR code. The work stays on your Mac; your phone follows it over Tailscale, wherever you are.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg>Answer questions, allow or deny requests</li>
+          <li><svg class="i"><use href="#i-check"/></svg>Start, stop and resume tasks</li>
+          <li><svg class="i"><use href="#i-check"/></svg>Preview a task’s dev server on your phone</li>
+          <li><svg class="i"><use href="#i-check"/></svg>Read the diff, screenshots and conversation</li>
+          <li><svg class="i"><use href="#i-check"/></svg>Chat with your project and manage schedules</li>
+        </ul>
+      </div>
+      <div class="phone" aria-hidden="true">
+        <div class="phone-screen">
+          <div class="phone-title">Storefront</div>
+          <ul class="tasks">
+            <li><span class="st sched"><svg class="i"><use href="#i-message"/></svg></span><span class="title truncate">Chat</span></li>
+            <li><span class="st input">?</span><span class="title truncate">Empty cart illustration</span></li>
+            <li><span class="st ready"><svg class="i"><use href="#i-check"/></svg></span><span class="title truncate">Wishlist button</span></li>
+            <li><span class="st working"></span><span class="title truncate">⌘K product search</span></li>
+            <li><span class="st working"></span><span class="title truncate">Dark mode</span></li>
+          </ul>
+          <div class="sect mono">Scheduled</div>
+          <ul class="tasks">
+            <li><span class="st sched"><svg class="i"><use href="#i-calendar-clock"/></svg></span><span class="title truncate">Weekly dependency updates</span></li>
+          </ul>
+          <div class="phone-bar">New task…<b><svg class="i"><use href="#i-arrow-up"/></svg></b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- CTA -->
   <section class="cta">
     <div>
@@ -327,7 +464,7 @@ footer a:hover { color: var(--fg); }
       <div class="actions">
         <a class="btn primary xl" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
       </div>
-      <p class="mono">Free &amp; open source · macOS 26+</p>
+      <p class="mono">Free &amp; open source · macOS 26+ · iPhone companion app</p>
     </div>
   </section>
 
@@ -340,52 +477,190 @@ footer a:hover { color: var(--fg); }
 </main>
 
 <script>
-// Every task starts out working, then moves through its [tick, status] steps and stays on the last one.
-// The pinned one is ready from the start; a line connects it to the task details panel.
-const TASKS = [
-  { id: 102, title: "Wishlist button", steps: [[2, "ready"], [5, "merged"]] },
-  { id: 101, title: "Tighter board spacing", steps: [[0, "ready"]], pinned: true },
-  { id: 103, title: "Empty cart illustration", steps: [[4, "input"]] },
-  { id: 104, title: "Dark mode for product pages", steps: [[7, "ready"]] },
-  { id: 105, title: "⌘K product search", steps: [] },
+// A day with Shift: a scripted loop over four tasks in one project. Statuses change on their own rows,
+// the details pane follows the selected task, and the phone drops in at lunch.
+const TASKS = {
+  101: { title: "⌘K product search", prompt: "Add a ⌘K search for products", activity: "Indexing product titles…" },
+  102: {
+    title: "Wishlist button", prompt: "Add a wishlist heart to product cards", activity: "Updating the product card…",
+    tweak: "Keep the heart outlined until it’s tapped",
+    summary: "Added a heart to product cards that saves the item to the shopper’s wishlist.",
+    files: [["ProductCard.tsx", "+38 −3"], ["wishlist.ts", "+24"], ["card.css", "+6"]],
+  },
+  103: {
+    title: "Empty cart illustration", prompt: "Put an illustration on the empty cart page", activity: "Placing the illustration…",
+    question: "Use the existing illustration set, or draw a new one in the brand colors?", answer: "The existing set, in grayscale",
+  },
+  104: { title: "Dark mode", prompt: "Dark mode for product pages", activity: "Adding color tokens…" },
+}
+const BEATS = [
+  ["9:02 AM", "Over coffee, write down what you want. Each task starts right away, side by side."],
+  ["9:41 AM", "One agent has a question. It waits for you; the others keep going."],
+  ["10:15 AM", "Wishlist is ready. Try it on its own localhost, then ask for a tweak."],
+  ["12:40 PM", "Out for lunch. Check in from your phone and preview what’s ready."],
+  ["3:20 PM", "Back at your desk, merge. Worktrees, branches and servers clean themselves up."],
 ]
-const LAST = 7
 
+const $ = (id) => document.getElementById(id)
 const icon = (name) => `<svg class="i"><use href="#i-${name}"/></svg>`
-const STATUS_ICON = { working: "", input: "?", ready: icon("check"), merged: icon("check") }
+const port = (id) => `localhost:${3000 + (id % 100)}`
+const ST = { working: "", input: "?", ready: icon("check"), merged: icon("check") }
+const CHIP = {
+  working: `<span class="st working"></span>Working`,
+  input: "? Needs input",
+  ready: `${icon("check")}Ready to test`,
+  merged: `${icon("git-merge")}Merged`,
+}
 const META = {
   working: (id) => `shift/${id}`,
   input: () => "needs input",
-  ready: (id) => `<i class="dot"></i>localhost:${3000 + (id % 100)}`,
+  ready: (id) => `<i class="dot"></i>${port(id)}`,
   merged: () => `${icon("git-merge")} Merged`,
 }
 
-const list = document.getElementById("tasks")
-list.innerHTML = TASKS.map((t) => `<li${t.pinned ? ' class="pinned"' : ""}><span></span><span class="title truncate">${t.title}</span><span></span></li>`).join("")
+let state, shownDetail
+const lists = [$("dtasks"), $("ptasks")], detailPane = $("ddetail"), newTask = $("newtask"), phone = $("dphone")
 
-function render(tick) {
-  TASKS.forEach(({ id, steps }, i) => {
-    const li = list.children[i]
-    const status = steps.findLast(([at]) => tick >= at)?.[1] ?? "working"
+function syncList(ul) {
+  state.order.forEach((id, i) => {
+    let li = ul.querySelector(`[data-id="${id}"]`)
+    if (!li) {
+      li = document.createElement("li")
+      li.dataset.id = id
+      li.innerHTML = `<span></span><span class="title truncate">${TASKS[id].title}</span><span></span>`
+    }
+    if (ul.children[i] !== li) ul.insertBefore(li, ul.children[i] ?? null)
+    li.classList.toggle("sel", state.sel === id)
+    const status = state.status[id]
     if (li.dataset.status === status) return
     li.dataset.status = status
     // Replacing the elements restarts their enter animation
-    li.firstChild.outerHTML = `<span class="st ${status}">${STATUS_ICON[status]}</span>`
+    li.firstChild.outerHTML = `<span class="st ${status}">${ST[status]}</span>`
     li.lastChild.outerHTML = `<span class="meta mono ${status}">${META[status](id)}</span>`
   })
 }
-render(0)
 
-const onView = (el, threshold, fn) =>
-  new IntersectionObserver(([e], io) => e.isIntersecting && (io.disconnect(), fn()), { threshold }).observe(el)
+function detail(id) {
+  const t = TASKS[id], status = state.status[id]
+  const files = (t.files ?? []).map(([f, n]) => `<li><span>${f}</span><span>${n}</span></li>`).join("")
+  const head = `<div class="details-head"><h3 class="truncate">${t.title}</h3><span class="chip">${CHIP[status]}</span></div>`
+  if (status === "input") return `${head}<div class="ask"><span class="mono">The agent needs a decision</span>${t.question}</div><div class="field" id="dfield" data-placeholder="Answer…"></div>`
+  if (status === "ready") return `${head}<p class="summary">${t.summary}</p>
+    <div class="details-actions"><span class="btn mock primary">${icon("git-merge")}Merge into main</span><span class="btn mock"><i class="dot"></i>${port(id)}${icon("arrow-up-right")}</span></div>
+    <ul class="files">${files}</ul><div class="field" id="dfield" data-placeholder="Ask for changes…"></div>`
+  if (status === "merged") return `${head}<p class="summary">Merged into main. Its worktree, branch and dev server are gone.</p><ul class="files">${files}</ul>`
+  return `${head}<div class="ask"><span class="mono">Prompt</span>${t.sent ?? t.prompt}</div>
+    <dl><div><dt>branch</dt><dd class="truncate">shift/${id}</dd></div><div><dt>worktree</dt><dd class="truncate">~/.shift/worktrees/storefront/${id}</dd></div>
+    <div><dt>agent</dt><dd class="truncate">Claude Code</dd></div><div><dt>now</dt><dd class="truncate">${t.activity}</dd></div></dl><div class="field" data-placeholder="Add instructions…"></div>`
+}
 
-// Start once the list scrolls into view, stop when everything has settled
-onView(list, 0.6, () => {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return render(LAST)
-  let tick = 0
-  const id = setInterval(() => (render(++tick), tick >= LAST && clearInterval(id)), 1100)
-})
+function render() {
+  lists.forEach(syncList)
+  const key = state.sel && `${state.sel}:${state.status[state.sel]}`
+  if (key !== shownDetail) {
+    shownDetail = key
+    detailPane.innerHTML = key ? `<div>${detail(state.sel)}</div>` : ""
+  }
+}
+const set = (id, status, sel = state.sel) => ((state.status[id] = status), (state.sel = sel), render())
 
+function beat(i) {
+  $("clock").textContent = BEATS[i][0]
+  $("caption").innerHTML = `<p>${BEATS[i][1]}</p>`
+  ;[...$("beats").children].forEach((li, j) => li.classList.toggle("on", j <= i))
+}
+
+// Timers wait while the demo is off screen, so it picks up where it left off
+let visible = false, resume
+const wait = (ms) => new Promise((r) => setTimeout(r, ms)).then(() => visible || new Promise((r) => (resume = r)))
+
+async function type(el, text) {
+  el.classList.add("typing")
+  for (const ch of text) { el.textContent += ch; await wait(34) }
+  await wait(450)
+  el.classList.remove("typing")
+}
+
+function clear() {
+  state = { order: [], status: {}, sel: null }
+  lists.forEach((ul) => (ul.innerHTML = ""))
+  delete TASKS[102].sent
+  shownDetail = undefined
+  render()
+}
+
+// The frame people see without motion, and before the loop starts: every status at once
+function poster() {
+  clear()
+  state = { order: [104, 103, 102, 101], status: { 101: "working", 102: "ready", 103: "input", 104: "working" }, sel: 102 }
+  render()
+  beat(2)
+}
+
+async function day() {
+  // The seam: yesterday's list fades out, a new day starts
+  const ul = lists[0], pane = detailPane
+  ul.style.transition = pane.style.transition = "opacity .5s"
+  ul.style.opacity = pane.style.opacity = 0
+  await wait(600)
+  clear()
+  ul.style.opacity = pane.style.opacity = 1
+  set(101, "working", 101)
+  state.order = [101]; render()
+  beat(0)
+  await wait(1000)
+  for (const id of [102, 103, 104]) {
+    await type(newTask, TASKS[id].prompt)
+    newTask.textContent = ""
+    state.order.unshift(id)
+    set(id, "working", id)
+    await wait(600)
+  }
+  await wait(1200)
+
+  beat(1)
+  set(103, "input", 103)
+  await wait(1800)
+  await type($("dfield"), TASKS[103].answer)
+  set(103, "working")
+  await wait(1400)
+
+  beat(2)
+  set(102, "ready", 102)
+  await wait(2600)
+  await type($("dfield"), TASKS[102].tweak)
+  TASKS[102].sent = TASKS[102].tweak
+  set(102, "working")
+  await wait(1600)
+
+  beat(3)
+  set(102, "ready")
+  phone.classList.add("on")
+  await wait(1000); set(104, "ready")
+  await wait(1000); set(103, "ready")
+  await wait(2600)
+  phone.classList.remove("on")
+
+  beat(4)
+  await wait(900); set(102, "merged")
+  await wait(900); set(104, "merged")
+  await wait(900); set(101, "ready")
+  await wait(3200)
+}
+
+poster()
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  let started = false
+  new IntersectionObserver(([e]) => {
+    visible = e.isIntersecting
+    if (visible && resume) { resume(); resume = null }
+    if (visible && !started) {
+      started = true
+      ;(async () => { for (;;) await day() })()
+    }
+  }, { threshold: 0.35 }).observe(document.querySelector(".stage"))
+}
 </script>
+
 </body>
 </html>
