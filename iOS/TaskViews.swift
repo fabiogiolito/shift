@@ -179,11 +179,17 @@ struct ChatView: View {
         // On send, the new message and "Working…" in view.
         .onChange(of: chat?.prompts.count) { withAnimation { scroll.scrollTo(edge: .bottom) } }
         .onChange(of: replying) { if replying { withAnimation { scroll.scrollTo(edge: .bottom) } } }
-        // Follows the reply as it arrives, unless scrolled back to read.
-        .onChange(of: stream?.turns) { if !scrolledUp { scroll.scrollTo(edge: .bottom) } }
-        .onScrollGeometryChange(for: Bool.self) { geo in
-            geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY > 100
-        } action: { scrolledUp = $1 }
+        // Follows whatever arrives, unless scrolled back to read: the log loading on open too, which can come in
+        // pieces and lay out late, so it opens on the newest message.
+        .onScrollGeometryChange(for: [CGFloat].self) { geo in
+            [geo.contentSize.height, geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY]
+        } action: { old, new in
+            if !scrolledUp && new[0] > old[0] {
+                scroll.scrollTo(edge: .bottom)
+            } else {
+                scrolledUp = new[1] > 100
+            }
+        }
         .scrollDismissesKeyboard(.interactively)
         .overlay {
             if chat == nil {
