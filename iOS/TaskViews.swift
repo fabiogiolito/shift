@@ -1028,7 +1028,7 @@ extension RemoteModel {
         let id = task.id, model = self
         let pullRequest = state.pullRequests[id]
         let view = pullRequest.map { pullRequest in
-            TaskAction(title: "View Pull Request #\(pullRequest.number)", systemImage: "arrow.up.forward.square") { openURL(pullRequest.url) }
+            TaskAction(title: "View Pull Request #\(pullRequest.number)", systemImage: PullRequest.symbol()) { openURL(pullRequest.url) }
         }
         let viewing = view.map { [$0] } ?? []
         switch task.status {
@@ -1040,7 +1040,7 @@ extension RemoteModel {
             }
             // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
             if pullRequest?.state == .merged { return [merge] + viewing }
-            let open = TaskAction(title: "Open Pull Request", systemImage: "arrow.triangle.pull") {
+            let open = TaskAction(title: "Open Pull Request", systemImage: PullRequest.symbol()) {
                 if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
             }
             return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
