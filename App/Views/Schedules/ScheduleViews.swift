@@ -275,7 +275,9 @@ struct ScheduleForm: View {
                 TextEditor(text: $draft.prompt)
                     .font(.body)
                     .scrollContentBackground(.hidden)
-                    .padding(.vertical, 7).padding(.horizontal, 3)
+                    // Inside the scroll view, so text scrolls up to the border instead of being cut short of it.
+                    .contentMargins(.vertical, 7, for: .scrollContent)
+                    .padding(.horizontal, 3)
                     .frame(height: 120)
                     .background(.background, in: .rect(cornerRadius: 6))
                     .overlay(alignment: .topLeading) {
