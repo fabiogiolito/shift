@@ -298,8 +298,19 @@ struct ScheduleForm: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.quinary, in: .rect(cornerRadius: 10))
                 .padding(.top, 16)
-            HStack { Spacer(); buttons }
-                .padding(.top, 24)
+            // Apart from the schedule itself, at the bottom left, like a dialog's option beside its buttons.
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Wake up Mac for runs", isOn: Binding { draft.wakeMac } set: {
+                        draft.wakeMac = $0
+                        if $0 { draft.keepAwake = false }
+                    })
+                    if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
+                }
+                Spacer()
+                buttons
+            }
+            .padding(.top, 24)
         }
         .frame(width: 560)
         .padding(24)
@@ -382,15 +393,6 @@ struct ScheduleForm: View {
                     row("") { note("Every run is a new task, and each one takes disk space until it's archived or merged.") }
                 }
                 row("Ends") { endRow }
-            }
-            row("") {
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Wake up Mac for runs", isOn: Binding { draft.wakeMac } set: {
-                        draft.wakeMac = $0
-                        if $0 { draft.keepAwake = false }
-                    })
-                    if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
-                }
             }
         }
     }
