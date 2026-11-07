@@ -715,7 +715,11 @@ function renderProjects(enter) {
   $("projects").innerHTML = S.projects.map((k) => {
     const p = PROJECTS[k]
     // The new project's subtitle follows its tasks
-    if (k === "portfolio") { const n = S.tasks.filter(([, st]) => st === "working" || st === "input").length; p.sub = n ? `${n} task${n > 1 ? "s" : ""} running` : "No tasks yet" }
+    if (k === "portfolio") {
+      // Same wording as the app: "No tasks", "2 tasks", "1 of 2 tasks running"
+      const open = S.tasks.filter(([, st]) => st !== "merged").length, run = S.tasks.filter(([, st]) => st === "working").length, noun = open === 1 ? "task" : "tasks"
+      p.sub = !open ? "No tasks" : run ? `${run} of ${open} ${noun} running` : `${open} ${noun}`
+    }
     return `<li class="${k === S.project ? "sel" : ""}${k === enter ? " enter" : ""}">${svg(p.icon, `color:${p.color}`)}<span><b>${p.name}</b><small>${p.sub}</small></span><span class="n">${p.n || ""}</span></li>`
   }).join("")
   $("pname").textContent = PROJECTS[S.project].name
