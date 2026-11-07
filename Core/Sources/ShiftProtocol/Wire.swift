@@ -62,7 +62,8 @@ public struct CommandRequest: Codable, Equatable, Sendable {
 
 /// `AppModel`'s public methods, one to one. Project settings and adding projects aren't here: those stay on the Mac.
 public enum RemoteCommand: Codable, Equatable, Sendable {
-    case createTask(projectID: UUID, prompt: String, attachments: [String], agent: AgentKind?)
+    /// `baseBranch` nil means the project's. A Mac from before it starts from the project's.
+    case createTask(projectID: UUID, prompt: String, attachments: [String], agent: AgentKind?, baseBranch: String? = nil)
     case sendPrompt(taskID: Int, text: String, attachments: [String])
     case answerApproval(taskID: Int, allow: Bool)
     case stop(taskID: Int)

@@ -571,16 +571,16 @@ public final class AppModel {
     // MARK: Tasks
 
     /// Creates the task and returns immediately with status `.working`; setup continues in the background.
-    /// `agent` nil means the project default.
+    /// `agent` and `baseBranch` nil mean the project's.
     @discardableResult
     public func createTask(projectID: Project.ID, prompt: String, attachments: [String] = [],
-                           agent: AgentKind? = nil) -> TaskItem.ID? {
-        createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: agent, schedule: nil)
+                           agent: AgentKind? = nil, baseBranch: String? = nil) -> TaskItem.ID? {
+        createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: agent, baseBranch: baseBranch, schedule: nil)
     }
 
     /// `schedule`: a run of it, with its base, agent, model and permissions instead of the project's.
     func createTask(projectID: Project.ID, prompt: String, attachments: [String] = [], agent: AgentKind? = nil,
-                    schedule: Schedule?) -> TaskItem.ID? {
+                    baseBranch: String? = nil, schedule: Schedule?) -> TaskItem.ID? {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard services != nil, let project = project(projectID), !prompt.isEmpty || !attachments.isEmpty else { return nil }
         let first = Prompt(text: prompt, attachments: attachments)
@@ -589,7 +589,7 @@ public final class AppModel {
         let title = TaskItem.localTitle(id: id, prompt: prompt, attachments: attachments)
         var task = TaskItem(
             id: id, projectID: projectID, title: title, status: .working,
-            agent: agent ?? project.defaultAgent, branch: "shift/\(id)", baseBranch: project.baseBranch,
+            agent: agent ?? project.defaultAgent, branch: "shift/\(id)", baseBranch: baseBranch ?? project.baseBranch,
             worktreePath: ShiftPaths.worktree(project: project, taskID: id, root: worktreesRoot).path,
             prompts: [first], workingSince: Date())
         // The footer's choices are the new task's own from here on: changing them later leaves it as it is.

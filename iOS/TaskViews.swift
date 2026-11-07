@@ -179,11 +179,17 @@ struct ChatView: View {
         // On send, the new message and "Working…" in view.
         .onChange(of: chat?.prompts.count) { withAnimation { scroll.scrollTo(edge: .bottom) } }
         .onChange(of: replying) { if replying { withAnimation { scroll.scrollTo(edge: .bottom) } } }
-        // Follows the reply as it arrives, unless scrolled back to read.
-        .onChange(of: stream?.turns) { if !scrolledUp { scroll.scrollTo(edge: .bottom) } }
-        .onScrollGeometryChange(for: Bool.self) { geo in
-            geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY > 100
-        } action: { scrolledUp = $1 }
+        // Follows whatever arrives, unless scrolled back to read: the log loading on open too, which can come in
+        // pieces and lay out late, so it opens on the newest message.
+        .onScrollGeometryChange(for: [CGFloat].self) { geo in
+            [geo.contentSize.height, geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY]
+        } action: { old, new in
+            if !scrolledUp && new[0] > old[0] {
+                scroll.scrollTo(edge: .bottom)
+            } else {
+                scrolledUp = new[1] > 100
+            }
+        }
         .scrollDismissesKeyboard(.interactively)
         .overlay {
             if chat == nil {
@@ -247,6 +253,9 @@ private struct NewTaskView: View {
     @Environment(RemoteModel.self) private var model
     let projectID: UUID
     @State private var taskID: Int?
+    /// The branch it starts from, if not the project's.
+    @State private var base: String?
+    @State private var branches: [String] = []
     /// Sent `/schedule …`: the chat drafts it, and the schedule form opens on the Mac.
     @State private var showsChat = false
 
@@ -259,7 +268,8 @@ private struct NewTaskView: View {
         } else {
             Color.clear
                 .safeAreaBar(edge: .bottom) {
-                    PromptBar(placeholder: "What should it do?", focusesOnAppear: true, commands: [.schedule]) { text, attachments in
+                    PromptBar(placeholder: "What should it do?", focusesOnAppear: true, commands: [.schedule],
+                              accessory: AnyView(branchMenu)) { text, attachments in
                         // As on the Mac: the words go to the project chat, whose agent asks what's missing and opens the
                         // schedule form there. Alone, it would open an empty form on the Mac, out of sight: it needs words.
                         if let words = Prompt.command("schedule", text) {
@@ -267,12 +277,37 @@ private struct NewTaskView: View {
                             showsChat = await model.sendChat(projectID: projectID, text: text, attachments: attachments)
                             return showsChat
                         }
-                        taskID = await model.createTask(projectID: projectID, prompt: text, attachments: attachments)
+                        taskID = await model.createTask(projectID: projectID, prompt: text, attachments: attachments, baseBranch: base)
                         return taskID != nil
                     }
                 }
                 .navigationTitle("New Task")
                 .navigationBarTitleDisplayMode(.inline)
+                .task(id: model.link) {
+                    if model.link == .online { branches = await model.branches(projectID: projectID) }
+                }
+        }
+    }
+
+    @ViewBuilder private var branchMenu: some View {
+        if let project = model.state.projects.first(where: { $0.id == projectID }) {
+            let current = base ?? project.baseBranch
+            Menu {
+                // The current one is always offered, so the picker is valid before branches load.
+                Picker("Starts From", selection: Binding(get: { current }, set: { base = $0 })) {
+                    ForEach(branches.contains(current) ? branches : [current] + branches, id: \.self) { Text($0) }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.branch")
+                    Text(current).lineLimit(1)
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color.secondary)
+                .padding(.horizontal, 6)
+                .frame(height: 30)
+            }
+            .accessibilityLabel("Starts from \(current)")
         }
     }
 }
@@ -515,6 +550,8 @@ private struct PromptBar: View {
     var inset = true
     /// Offered in the + menu, under Photos: each starts the message with its `/command`.
     var commands: [PromptCommand] = []
+    /// Beside Send. With one, the text has the full width and the buttons go on a row under it.
+    var accessory: AnyView?
     /// False if it didn't go through: what was written stays.
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
     @State private var text = ""
@@ -549,39 +586,25 @@ private struct PromptBar: View {
                 .scrollIndicators(.hidden)
                 .padding(.top, 3)
             }
-            // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
-            HStack(alignment: .bottom, spacing: 8) {
-                Menu {
-                    Button("Photos", systemImage: "photo.on.rectangle") { showsPhotos = true }
-                    if !commands.isEmpty {
-                        Section {
-                            ForEach(commands, id: \.name) { command in
-                                Button(command.title, systemImage: command.systemImage) { start(command) }
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
-                        .frame(width: Self.controlSize, height: Self.controlSize)
-                        .accessibilityLabel("Add")
+            if let accessory {
+                // The text has the full width here: leave the expand button room at its end.
+                textView.padding(.trailing, isTall ? Self.controlSize : 0).padding(.horizontal, 6).padding(.top, 2)
+                    .overlay(alignment: .topTrailing) { expandButton }
+                HStack(spacing: 8) {
+                    addMenu
+                    Spacer()
+                    accessory
+                    sendButton
                 }
-                PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
-                    images += pasted.map(PromptImage.init)
+            } else {
+                // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
+                HStack(alignment: .bottom, spacing: 8) {
+                    addMenu
+                    textView
+                    sendButton
                 }
-                .onGeometryChange(for: Bool.self) { $0.size.height > UIFont.preferredFont(forTextStyle: .body).lineHeight * 2.5 } action: { isTall = $0 }
-                .padding(.vertical, 4)
-                sendButton
-            }
-            // Three lines or more: open the text in a sheet, over the send button's column.
-            .overlay(alignment: .topTrailing) {
-                if isTall {
-                    Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") { isExpanded = true }
-                        .labelStyle(.iconOnly)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.secondary)
-                        .frame(width: Self.controlSize, height: Self.controlSize)
-                }
+                // Over the send button's column.
+                .overlay(alignment: .topTrailing) { expandButton }
             }
         }
         .padding(.horizontal, 10)
@@ -621,6 +644,43 @@ private struct PromptBar: View {
         }
         .sheet(item: $viewing) { image in
             PromptImageViewer(image: image.image) { images.removeAll { $0.id == image.id } }
+        }
+    }
+
+    private var addMenu: some View {
+        Menu {
+            Button("Photos", systemImage: "photo.on.rectangle") { showsPhotos = true }
+            if !commands.isEmpty {
+                Section {
+                    ForEach(commands, id: \.name) { command in
+                        Button(command.title, systemImage: command.systemImage) { start(command) }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
+                .frame(width: Self.controlSize, height: Self.controlSize)
+                .accessibilityLabel("Add")
+        }
+    }
+
+    private var textView: some View {
+        PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
+            images += pasted.map(PromptImage.init)
+        }
+        .onGeometryChange(for: Bool.self) { $0.size.height > UIFont.preferredFont(forTextStyle: .body).lineHeight * 2.5 } action: { isTall = $0 }
+        .padding(.vertical, 4)
+    }
+
+    /// Three lines or more: open the text in a sheet.
+    @ViewBuilder private var expandButton: some View {
+        if isTall {
+            Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") { isExpanded = true }
+                .labelStyle(.iconOnly)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .frame(width: Self.controlSize, height: Self.controlSize)
         }
     }
 

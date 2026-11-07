@@ -205,7 +205,9 @@ struct TaskListView: View {
 
     private var newTaskField: some View {
         PromptField(placeholder: "New task or ‘/’ for commands", submitTitle: "Start", isNewTaskField: true,
-                    draftKey: "project \(project.id)", commands: [.schedule]) { text, attachments in
+                    draftKey: "project \(project.id)", commands: [.schedule],
+                    onNewSchedule: { model.scheduleDraft = model.newSchedule(projectID: project.id) },
+                    accessory: AnyView(BaseBranchMenu(project: project))) { text, attachments in
             // `/schedule` alone opens the schedule form; with words, the chat drafts it, asking what it needs to know.
             if let words = AppModel.command("schedule", text) {
                 model.sendChat(projectID: project.id, text: text)
