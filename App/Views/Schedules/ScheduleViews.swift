@@ -606,7 +606,8 @@ struct ScheduleRunMenus: View {
                 }
                 .pickerStyle(.inline)
             } label: {
-                Label(schedule.baseBranch, systemImage: "arrow.triangle.branch")
+                // Through NSImage: a menu's label, like a toolbar's, draws nothing for Image("Branch"), a custom symbol.
+                Label { Text(schedule.baseBranch) } icon: { Image(nsImage: NSImage(named: "Branch")!) }
             }
             .help("Branch each run starts from")
             Menu {

@@ -16,7 +16,8 @@ struct BranchButton: View {
         } label: {
             // Not a Label: its icon column can't be tightened.
             HStack(spacing: 3) {
-                Image(systemName: "arrow.triangle.branch").imageScale(.small)
+                // Through NSImage: in a toolbar, Image("Branch") draws nothing for a custom symbol.
+                Image(nsImage: NSImage(named: "Branch")!).imageScale(.small)
                 if let base {
                     Text(base).lineLimit(1)
                     Image(systemName: "arrow.left").imageScale(.small).foregroundStyle(.tertiary)
