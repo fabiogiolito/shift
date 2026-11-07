@@ -305,8 +305,8 @@ struct ScheduleForm: View {
                         Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
                     }
                 }
+                .labelsHidden()
                 .fixedSize()
-                if draft.finish == .archive || draft.finish == .merge { note("Otherwise it's left for review.") }
                 Toggle("Wake up Mac for runs", isOn: Binding { draft.wakeMac } set: {
                     draft.wakeMac = $0
                     if $0 { draft.keepAwake = false }
