@@ -488,6 +488,8 @@ const TASKS = {
   204: { title: "Faster page loads", desc: "Serves smaller images and preloads the fonts." },
 }
 const DRAFT = "Add my latest work"
+// After the first task finishes: Faster page loads and Contact form finish, Case study pages asks a question
+const AFTER = [[3, "ready"], [1, "ready"], [2, "input"]]
 const SECOND = "Let arrow keys move between photos."
 const ACTIONS = ["Reading Gallery.tsx", "Optimizing 6 photos", "Adding them to the gallery", "Writing tests for Lightbox", "Adding keyboard navigation", "Adding captions", "Running the tests"]
 
@@ -505,7 +507,7 @@ function stateAfter(beat) {
   if (beat === 1) return { ...s, tasks: [], sel: null, draft: true }
   if (beat >= 3) { s.acts = 5; s.prompts = [SECOND, ...s.prompts] }
   if (beat >= 4) s.acts = 6
-  if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true }
+  if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true; for (const [i, st] of AFTER) s.tasks[i][1] = st }
   if (beat >= 6) { s.notif = false; s.preview = true; s.photo = 1 }
   if (beat >= 7) { s.tasks[0][1] = "merged"; s.preview = false }
   return s
@@ -728,6 +730,8 @@ const BEATS = [
     renderRows(); renderDetail()
     await wait(800)
     S.notif = true; $("notif").classList.add("on")
+    // The others land too: two finish, one stops to ask
+    for (const [i, st] of AFTER) { await wait(900); S.tasks[i][1] = st; renderRows(); renderProjects() }
   },
   // 6. Open the preview and stay there until the next scroll
   async () => {
