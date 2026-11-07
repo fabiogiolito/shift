@@ -60,6 +60,13 @@ struct RootView: View {
                     #if DEBUG
                     .task { path = Self.debugPath() }
                     #endif
+                    // A tapped notification: its task, over its project. Waits for the task to arrive after a cold launch.
+                    .onChange(of: model.openedTask.flatMap(model.task)?.projectID, initial: true) { _, projectID in
+                        guard let projectID, let taskID = model.openedTask else { return }
+                        path = NavigationPath([projectID])
+                        path.append(taskID)
+                        model.openedTask = nil
+                    }
                 }
             }
         }

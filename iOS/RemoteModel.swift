@@ -35,7 +35,11 @@ final class RemoteModel {
     /// A screenshot never changes once taken.
     @ObservationIgnored private var screenshots: [UUID: UIImage] = [:]
 
+    /// A notification tapped on: RootView opens it once the task is known, then clears it.
+    var openedTask: Int?
+
     init() {
+        notifier.onOpen = { [weak self] in self?.openedTask = $0 }
         #if DEBUG
         // scripts/build.sh launches a simulator build at its own Mac build, with no pairing.
         if let server = ProcessInfo.processInfo.environment["SHIFT_SERVER"], let direct = Pairing(shiftServer: server) {
@@ -439,7 +443,10 @@ private enum Keychain {
 }
 
 /// Local notifications for task changes heard over the socket.
-private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
+private final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    /// Called with the task id when the user taps a notification.
+    @MainActor var onOpen: ((Int) -> Void)?
+
     override init() {
         super.init()
         let center = UNUserNotificationCenter.current()
@@ -452,6 +459,7 @@ private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         content.sound = .default
+        content.userInfo = ["taskID": taskID]
         let id = "task-\(taskID)"
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [id])
@@ -461,5 +469,10 @@ private final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard let taskID = response.notification.request.content.userInfo["taskID"] as? Int else { return }
+        await MainActor.run { onOpen?(taskID) }
     }
 }
