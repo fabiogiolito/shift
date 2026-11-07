@@ -29,6 +29,10 @@ struct ShiftApp: App {
                     .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
             }
             .background { OpenWindowHandoff(delegate: delegate) }
+            // At first launch with what's missing, from Settings › Setup, and when a new project needs something.
+            .sheet(isPresented: Bindable(delegate.setupFlow).isPresented) {
+                SetupSheet().environment(delegate.setupFlow)
+            }
             .task {
                 #if DEBUG
                 if ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == nil { await DemoProject.seed() }
@@ -70,14 +74,6 @@ struct ShiftApp: App {
         Window(MemoryWindow.title, id: MemoryWindow.id) {
             MemoryWindow().environment(delegate.model)
         }
-        .windowResizability(.contentSize)
-        .restorationBehavior(.disabled)
-
-        // At first launch with what's missing, from Settings › Setup, and when a new project needs something.
-        Window("Set Up Shift", id: SetupWindow.id) {
-            SetupWindow().environment(delegate.setupFlow)
-        }
-        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
 
@@ -292,13 +288,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrame(NSRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
     }
 
-    /// Opens the setup window when this Mac is missing something Shift needs. Not for sample data.
+    /// Opens the setup sheet when this Mac is missing something Shift needs. Not for sample data.
     func openSetupIfNeeded() async {
         guard ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == nil else { return }
         await setupFlow.refresh()
         guard setupFlow.needsSetup else { return }
         setupFlow.startFirstLaunch()
-        openWindow?(id: SetupWindow.id)
     }
 
     /// Tasks keep running when the window is closed.

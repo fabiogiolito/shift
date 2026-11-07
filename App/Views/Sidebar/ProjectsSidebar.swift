@@ -10,6 +10,8 @@ struct ProjectsSidebar: View {
     @State private var search = ""
     @FocusState private var searchFocused: Bool
     @State private var settingsProject: Project?
+    /// A new project's settings, opened once its setup sheet closes: a window shows one sheet at a time.
+    @State private var settingsAfterSetup: Project?
     @State private var removingProject: Project?
     @State private var scrolledUnderBar = false
 
@@ -79,6 +81,9 @@ struct ProjectsSidebar: View {
             geo.contentOffset.y + geo.containerSize.height - geo.contentInsets.bottom < geo.contentSize.height - 1
         } action: { scrolledUnderBar = $1 }
         .sheet(item: $settingsProject) { ProjectSettingsView(projectID: $0.id) }
+        .onChange(of: setup.isPresented) { _, shown in
+            if !shown, let project = settingsAfterSetup { settingsAfterSetup = nil; settingsProject = project }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .addProject)) { _ in addProject() }
         .confirmationDialog("Remove “\(removingProject?.name ?? "")”?",
                             isPresented: Binding(get: { removingProject != nil }, set: { if !$0 { removingProject = nil } }),
@@ -114,20 +119,21 @@ struct ProjectsSidebar: View {
             let known = Set(model.projects.map(\.id))
             guard let project = await model.addProject(at: url, initializingGit: initializingGit) else { return }
             selection = project.id
-            // A new project opens its settings, so permissions and commands can be reviewed first, and the setup
-            // window if it needs something this Mac doesn't have.
+            // A new project opens its settings, so permissions and commands can be reviewed first, after the setup
+            // sheet if it needs something this Mac doesn't have.
             guard !known.contains(project.id) else { return }
-            settingsProject = project
             let steps = await setup.projectSteps(for: url)
-            if !steps.isEmpty {
+            if steps.isEmpty {
+                settingsProject = project
+            } else {
+                settingsAfterSetup = project
                 setup.start(steps, isProjectSetup: true)
-                openWindow(id: SetupWindow.id)
             }
         }
     }
 }
 
 extension Notification.Name {
-    /// Opens the folder picker to add a project, from outside the sidebar (the setup window's Add Project).
+    /// Opens the folder picker to add a project, from outside the sidebar (the setup sheet's Add Project).
     static let addProject = Notification.Name("addProject")
 }

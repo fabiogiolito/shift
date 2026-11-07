@@ -1,7 +1,7 @@
 import SwiftUI
 import ShiftCore
 
-/// Each thing Shift needs on this Mac, checked when shown, with a way to fix it: the setup window at that step.
+/// Each thing Shift needs on this Mac, checked when shown, with a way to fix it: the setup sheet at that step.
 struct SetupSettingsView: View {
     @Environment(SetupFlow.self) private var flow
     @Environment(\.openWindow) private var openWindow
@@ -44,7 +44,7 @@ struct SetupSettingsView: View {
         }
     }
 
-    /// Install it from the setup window; sign in right here.
+    /// Install it from the setup sheet; sign in right here.
     private func agentRow(_ agent: AgentKind) -> some View {
         LabeledContent {
             let installed = flow.installed[agent] ?? .notDone
@@ -85,7 +85,7 @@ struct SetupSettingsView: View {
 
     private func open(_ step: SetupStep) {
         flow.start([step])
-        openWindow(id: SetupWindow.id)
+        openWindow(id: "main") // the sheet is on the main window
     }
 }
 
