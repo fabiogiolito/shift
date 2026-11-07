@@ -265,4 +265,21 @@ final class ProjectSetupTests: XCTestCase {
         try plist.write(to: app.appendingPathComponent("Info.plist"))
         XCTAssertEqual(Simulators.bundleID(ofApp: app), "com.example.a")
     }
+
+    func testGhPagesTaskIsAStaticWebsite() {
+        let project = Project(name: "Shift", repoPath: "/repo", baseBranch: "main", type: .nativeApp,
+                              serverCommand: "", setupCommand: "pnpm install",
+                              buildTargets: [BuildTarget(name: "Shift", command: "scripts/build.sh")])
+        func task(base: String?) -> TaskItem {
+            TaskItem(id: 1, projectID: project.id, title: "", agent: .claudeCode, branch: "b", baseBranch: base, worktreePath: "/wt")
+        }
+        let site = project.forTask(task(base: "gh-pages"))
+        XCTAssertEqual(site.type, .staticWebsite)
+        XCTAssertFalse(site.isApp)
+        XCTAssertTrue(site.targets.isEmpty)
+        XCTAssertEqual(site.setupCommand, "")
+        XCTAssertEqual(ProjectSetup.serverCommand(for: site, in: URL(fileURLWithPath: "/wt")), ProjectSetup.staticServer)
+        XCTAssertEqual(project.forTask(task(base: "main")), project)
+        XCTAssertEqual(project.forTask(task(base: nil)), project)
+    }
 }

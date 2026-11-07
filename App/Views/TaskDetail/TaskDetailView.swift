@@ -60,7 +60,7 @@ struct TaskDetailView: View {
     private static let promptIndent: CGFloat = 17
 
     var body: some View {
-        if let task = model.task(taskID), let project = model.project(task.projectID) {
+        if let task = model.task(taskID), let project = model.project(for: task) {
             Group {
                 if showingDiff {
                     DiffView(taskID: taskID, isSettled: diffSettled, selecting: diffPath).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -253,7 +253,8 @@ struct TaskDetailView: View {
                 } else if project.serversOff, task.serverURL != nil {
                     Text("Servers are off").foregroundStyle(.secondary)
                     Button("Turn On") {
-                        var updated = project
+                        // The project itself, not the task's view of it (a gh-pages task sees a static website).
+                        guard var updated = model.project(project.id) else { return }
                         updated.serversOff = false
                         model.updateProject(updated)
                     }
@@ -461,7 +462,7 @@ struct TaskDetailView: View {
         }
     }
 
-    private var project: Project? { model.task(taskID).flatMap { model.project($0.projectID) } }
+    private var project: Project? { model.task(taskID).flatMap(model.project(for:)) }
 
     private func isRunning(_ target: BuildTarget) -> Bool {
         server == .up && model.runningTargets[taskID] == target.id
