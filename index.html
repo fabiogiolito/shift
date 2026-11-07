@@ -379,16 +379,18 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .cta .actions { margin-top: 2.75rem; }
 .cta > .mono { margin-top: 2rem; }
 .cta-icon { width: clamp(88px, 12vw, 128px); height: auto; margin: 0 auto 2.5rem; filter: drop-shadow(0 20px 40px rgba(0,0,0,.6)); }
-/* Icon, title, buttons and note rise in one after another as the section scrolls in */
+/* Parallax: one scroll range for all, but each starts further down, so it travels faster.
+   The icon is nearly in place first and eases in while the rest catch up; all settle together. */
 @supports (animation-timeline: view()) {
-  .cta { view-timeline: --cta; }
-  .cta > * { animation: rise linear both; animation-timeline: --cta; }
-  .cta-icon { animation-name: icon-in; animation-range: entry 20% entry 70%; }
-  .cta h2 { animation-range: entry 35% entry 85%; }
-  .cta .actions { animation-range: entry 50% cover 45%; }
-  .cta > .mono { animation-range: entry 60% cover 48%; }
+  .cta { view-timeline: --cta; overflow: clip; }
+  .cta.screen > * { animation: cta-in both cubic-bezier(.25, .6, .35, 1); animation-timeline: --cta; animation-range: entry 35% cover 50%; }
+  .cta.screen > .cta-icon { --dy: 90px; animation-name: cta-icon-in; }
+  .cta h2 { --dy: 260px; }
+  .cta .actions { --dy: 420px; }
+  .cta > .mono { --dy: 560px; }
 }
-@keyframes icon-in { from { opacity: 0; scale: .6; translate: 0 40px; } }
+@keyframes cta-in { from { opacity: 0; translate: 0 var(--dy); } 50% { opacity: 1; } }
+@keyframes cta-icon-in { from { opacity: 0; translate: 0 var(--dy); rotate: -40deg; scale: .3; } 25% { opacity: 1; } }
 body > footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
 body > footer a:hover { color: var(--fg); }
 
