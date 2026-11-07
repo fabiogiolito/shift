@@ -119,7 +119,7 @@ struct ProjectBar: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .help("Usage limits")
-                .popover(isPresented: $showingUsage, arrowEdge: .top) { UsagePopover(agent: agent, usage: usage) }
+                .popover(isPresented: $showingUsage, arrowEdge: .top) { UsagePopover(agent: agent) }
             }
         }
         .task(id: agent) {
@@ -145,32 +145,47 @@ struct ProjectBar: View {
     }
 }
 
-/// Each of an agent's usage windows (session, week): how much is used, as a bar, and when it resets.
+/// Each agent's usage windows (session, week): how much is used, as a bar, and when it resets.
+/// Opens on the active agent; the other can be peeked at without switching to it.
 private struct UsagePopover: View {
-    let agent: AgentKind
-    let usage: AgentUsage
+    @Environment(AppModel.self) private var model
+    @State private var agent: AgentKind
+
+    init(agent: AgentKind) { _agent = State(initialValue: agent) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("\(agent.displayName) usage").font(.headline)
-            ForEach(usage.windows, id: \.name) { window in
-                let used = 100 - window.percentLeft()
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("\(window.name) limit")
-                        Spacer()
-                        Text("\(Int(used.rounded()))% used").monospacedDigit().foregroundStyle(.secondary)
-                    }
-                    ProgressView(value: used, total: 100)
-                        .tint(used >= 90 ? .red : used >= 75 ? .orange : .accentColor)
-                    if let time = window.resetTime {
-                        Text("Resets \(time)").font(.caption).foregroundStyle(.secondary)
+            Picker("Agent", selection: $agent) {
+                ForEach(AgentKind.allCases) { Text($0.displayName).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if let usage = model.usage[agent], !usage.windows.isEmpty {
+                ForEach(usage.windows, id: \.name) { window in
+                    let used = 100 - window.percentLeft()
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("\(window.name) limit")
+                            Spacer()
+                            Text("\(Int(used.rounded()))% used").monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        ProgressView(value: used, total: 100)
+                            .tint(used >= 90 ? .red : used >= 75 ? .orange : .accentColor)
+                        if let time = window.resetTime {
+                            Text("Resets \(time)").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
+            } else {
+                Text(model.installedAgents[agent] == nil ? "\(agent.displayName) isn't installed" : "No usage information")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 40)
             }
         }
         .padding()
         .frame(width: 260)
+        // The bar only polls the active agent; fetch the other's once when peeked at.
+        .task(id: agent) { if model.usage[agent] == nil { await model.refreshUsage(agent) } }
     }
 }
 
