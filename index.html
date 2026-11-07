@@ -63,9 +63,9 @@ nav .gh:hover { color: var(--fg); }
 /* The story: the Mac app, rebuilt in HTML, pinned while each screen of scrolling plays one beat */
 .story { position: relative; height: calc(var(--n) * 100vh); }
 .pin { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; height: 100svh; padding-top: 6.5rem; overflow: hidden; text-align: center; }
-.heads { position: relative; z-index: 2; display: grid; padding-inline: 1.5rem; translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px)); }
+.heads { position: relative; z-index: 2; display: grid; padding-inline: 1.5rem; translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px) + var(--t, 0) * var(--bal, 0px)); }
 .head { grid-area: 1 / 1; opacity: 0; translate: 0 16px; filter: blur(6px); pointer-events: none; transition: opacity .4s, translate .7s var(--ease), filter .4s; }
-.head:not([data-i="0"]) { align-self: center; }
+.head:not([data-i="0"]) { align-self: start; }
 .head.on { opacity: 1; translate: 0 0; filter: none; pointer-events: auto; }
 .head[data-i="0"] .actions { margin-top: 2.75rem; animation: rise .8s var(--ease) .9s both; }
 h1 .w { display: inline-block; white-space: nowrap; }
@@ -73,7 +73,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .scene { position: relative; flex: 1; margin-top: clamp(1.5rem, 4.5vh, 3rem); perspective: 1800px; animation: rise 1.4s var(--ease) .3s both; }
 /* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene */
 .mac { position: absolute; top: 0; left: 50%; width: var(--w); height: var(--h); transform-origin: 50% 0;
-  transform: translateX(-50%) translateY(calc((1 - var(--t)) * var(--drop))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * (.84 + .16 * var(--t)))); }
+  transform: translateX(-50%) translateY(calc((1 - var(--t)) * var(--drop) - var(--t) * var(--lift, 0px))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * (.84 + .16 * var(--t)))); }
 .phone { width: var(--pw); padding: calc(var(--pw) * .045); border-radius: calc(var(--pw) * .17); background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 70px -10px #000; }
 .phone img { border-radius: calc(var(--pw) * .13); }
 .iphone { position: absolute; z-index: 3; left: calc(50% + var(--mw) * .5 - var(--pw) * .7); top: calc(var(--drop) * 1.1); width: var(--pw);
@@ -90,7 +90,9 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 /* ---- The Mac app, dark appearance, drawn at 1120 × 700 (640 wide on phones, without the sidebar) ---- */
 .win { position: absolute; inset: 0; display: grid; grid-template-columns: 220px 310px 1fr; grid-template-rows: 1fr 38px; overflow: hidden; border-radius: 14px; background: #1e1e1e; color: #e8e8e8; text-align: left;
   font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 0 0 1px #000, 0 50px 120px -20px rgba(0, 0, 0, .9); }
+  box-shadow: 0 0 0 1px #000, 0 50px 120px -20px rgba(0, 0, 0, .9); }
+/* The light edge sits above the columns, so every column gets it */
+.win::after { content: ""; position: absolute; inset: 0; z-index: 10; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); pointer-events: none; }
 .win svg.g { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .win.compact { grid-template-columns: 250px 1fr; }
 .compact .sb { display: none; }
@@ -230,7 +232,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .cursor.down svg { transform: scale(.82); }
 
 /* The iPhone app, in code: slides up over the Mac in the last step */
-.rphone { position: absolute; z-index: 3; left: calc(50% + var(--mw1) * .5 - var(--pw) * 1.05); top: 4%; width: var(--pw);
+.rphone { position: absolute; z-index: 3; left: calc(50% + var(--mw1) * .5 - var(--pw) * 1.05); top: calc(4% - var(--lift, 0px)); width: var(--pw);
   translate: 0 115%; opacity: 0; transition: translate .9s var(--ease), opacity .5s; }
 .rphone.on { translate: 0 0; opacity: 1; }
 .ps { position: relative; display: flex; flex-direction: column; aspect-ratio: 603 / 1311; overflow: hidden; padding: 6% 7% 7%; border-radius: calc(var(--pw) * .13); background: #000; color: #f2f2f7; text-align: left;
@@ -283,8 +285,8 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 /* Replay is secondary: dimmer than the arrows */
 .ctrl #replay { background: rgba(28, 28, 30, .6); color: #6e6e73; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
 .ctrl #replay:hover { background: rgba(44, 44, 46, .8); color: #aeaeb2; }
-.ctrl #next.flash { animation: flash 1.2s ease-out; }
-@keyframes flash { 30% { background: rgba(86, 86, 90, .85); } }
+.ctrl #next.flash { animation: flash .5s ease-out 2; }
+@keyframes flash { 35% { background: rgba(120, 120, 125, .9); } }
 .ctrl #replay.spin svg { animation: spin-back .6s var(--ease); }
 @keyframes spin-back { to { rotate: -360deg; } }
 @media (max-width: 639px) {
@@ -995,7 +997,13 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
 function layout() {
   const w = scene.clientWidth, h = scene.clientHeight, nextW = w < 760 ? 640 : 1120, H = nextW < 1120 ? 940 : 700
   if (nextW !== W) { W = nextW; if (!running) { S = stateAfter(shown); renderAll() } }
-  const fit = Math.min((w - 40) / W, (h - 40) / H, .8)
+  // Steps have a shorter heading than the opening, so once upright the window moves up by the difference
+  const lift = Math.max(0, heads[0].offsetHeight - Math.max(...heads.slice(1).map((e) => e.offsetHeight)))
+  const fit = Math.min((w - 40) / W, (h + lift - 56) / H, .8)
+  // Whatever room is left below the window is split, so title and window sit centered together
+  const bal = Math.max(0, (h + lift - 56 - H * fit) / 2)
+  scene.style.setProperty("--lift", `${lift - bal}px`)
+  scene.parentElement.style.setProperty("--bal", `${bal}px`)
   mac.style.setProperty("--w", `${W}px`); mac.style.setProperty("--h", `${H}px`)
   scene.style.setProperty("--fit", fit)
   scene.style.setProperty("--drop", `${h * .4}px`)
