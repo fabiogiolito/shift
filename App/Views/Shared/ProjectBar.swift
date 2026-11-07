@@ -65,34 +65,34 @@ struct ProjectBar: View {
         let whose = task == nil ? "for new tasks" : "for this task's next prompt"
 
         return HStack(spacing: 16) {
+            // One menu for both: a submenu per agent with its models. Picking another agent's model switches agent.
             Menu {
-                Picker("Agent", selection: Binding(get: { agent }, set: { kind in
-                    if let task { model.setAgent(taskID: task.id, to: kind) } else { updateProject { $0.defaultAgent = kind } }
-                })) {
-                    ForEach(AgentKind.allCases) { kind in
-                        let installed = model.installedAgents[kind] != nil
+                ForEach(AgentKind.allCases) { kind in
+                    let installed = model.installedAgents[kind] != nil
+                    let options = model.models[kind] ?? []
+                    Menu {
+                        Picker("Model", selection: Binding(get: { kind == agent ? modelID : "\u{0}" }, set: { id in
+                            select(kind, id, task: task)
+                        })) {
+                            Text("Default model").tag("")
+                            Divider()
+                            ForEach(options) { Text($0.name).tag($0.id) }
+                            // A saved model the agent no longer lists stays selectable.
+                            if kind == agent, !modelID.isEmpty, !options.contains(where: { $0.id == modelID }) {
+                                Text(modelID).tag(modelID)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
                         Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
-                            .tag(kind)
-                            .disabled(!installed)
                     }
+                    // Its session is the agent's own: switching starts a new one, so not in the middle of a turn.
+                    .disabled(!installed || (kind != agent && task?.status == .working))
                 }
-                .pickerStyle(.inline)
             } label: {
-                Label(agent.displayName, image: agent.icon)
+                Label(modelID.isEmpty ? agent.displayName : model.modelName(modelID, for: agent), image: agent.icon)
             }
-            // Its session is the agent's own: switching starts a new one, so not in the middle of a turn.
-            .disabled(task?.status == .working)
-            .help(task?.status == .working ? "The agent can be changed once it stops working" : "Agent \(whose)")
-
-            Menu {
-                ModelPicker(agent: agent, selection: Binding(get: { modelID }, set: { id in
-                    if let task { model.setModel(taskID: task.id, to: id.isEmpty ? nil : id) } else { updateProject { $0.defaultModel = id } }
-                }))
-                .pickerStyle(.inline)
-            } label: {
-                Label(model.modelName(modelID, for: agent), systemImage: "cpu")
-            }
-            .help("Model \(whose)")
+            .help("Agent and model \(whose)")
 
             Menu {
                 Picker("Permissions", selection: Binding(get: { permissions }, set: { new in
@@ -136,6 +136,15 @@ struct ProjectBar: View {
         var text = "\(window.name) limit \(Int(window.percentLeft().rounded()))% left"
         if let time = window.resetTime { text += " · resets \(time)" }
         return text
+    }
+
+    private func select(_ kind: AgentKind, _ id: String, task: TaskItem?) {
+        if let task {
+            if kind != task.agent { model.setAgent(taskID: task.id, to: kind) }
+            model.setModel(taskID: task.id, to: id.isEmpty ? nil : id)
+        } else {
+            updateProject { $0.defaultAgent = kind; $0.defaultModel = id }
+        }
     }
 
     private func updateProject(_ change: (inout Project) -> Void) {
