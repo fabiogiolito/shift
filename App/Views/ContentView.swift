@@ -117,6 +117,10 @@ struct ContentView: View {
         .focusedSceneValue(\.openRepository, project.map { project in {
             Task { if let url = await model.repositoryURL(projectID: project.id) { ExternalApps().openInBrowser(url) } }
         } })
+        // ⌥⌘N
+        .focusedSceneValue(\.newSchedule, project.map { project in {
+            model.scheduleDraft = model.newSchedule(projectID: project.id)
+        } })
         .modifier(ScheduleFormPresenter(selectedProject: $selectedProject, selectedTask: $selectedTask))
         .alert("Something Went Wrong", isPresented: Binding(get: { model.lastError != nil },
                                                            set: { if !$0 { model.lastError = nil } })) {
