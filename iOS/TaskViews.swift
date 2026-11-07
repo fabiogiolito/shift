@@ -253,6 +253,9 @@ private struct NewTaskView: View {
     @Environment(RemoteModel.self) private var model
     let projectID: UUID
     @State private var taskID: Int?
+    /// The branch it starts from, if not the project's.
+    @State private var base: String?
+    @State private var branches: [String] = []
     /// Sent `/schedule …`: the chat drafts it, and the schedule form opens on the Mac.
     @State private var showsChat = false
 
@@ -265,7 +268,8 @@ private struct NewTaskView: View {
         } else {
             Color.clear
                 .safeAreaBar(edge: .bottom) {
-                    PromptBar(placeholder: "What should it do?", focusesOnAppear: true, commands: [.schedule]) { text, attachments in
+                    PromptBar(placeholder: "What should it do?", focusesOnAppear: true, commands: [.schedule],
+                              accessory: AnyView(branchMenu)) { text, attachments in
                         // As on the Mac: the words go to the project chat, whose agent asks what's missing and opens the
                         // schedule form there. Alone, it would open an empty form on the Mac, out of sight: it needs words.
                         if let words = Prompt.command("schedule", text) {
@@ -273,12 +277,37 @@ private struct NewTaskView: View {
                             showsChat = await model.sendChat(projectID: projectID, text: text, attachments: attachments)
                             return showsChat
                         }
-                        taskID = await model.createTask(projectID: projectID, prompt: text, attachments: attachments)
+                        taskID = await model.createTask(projectID: projectID, prompt: text, attachments: attachments, baseBranch: base)
                         return taskID != nil
                     }
                 }
                 .navigationTitle("New Task")
                 .navigationBarTitleDisplayMode(.inline)
+                .task(id: model.link) {
+                    if model.link == .online { branches = await model.branches(projectID: projectID) }
+                }
+        }
+    }
+
+    @ViewBuilder private var branchMenu: some View {
+        if let project = model.state.projects.first(where: { $0.id == projectID }) {
+            let current = base ?? project.baseBranch
+            Menu {
+                // The current one is always offered, so the picker is valid before branches load.
+                Picker("Starts From", selection: Binding(get: { current }, set: { base = $0 })) {
+                    ForEach(branches.contains(current) ? branches : [current] + branches, id: \.self) { Text($0) }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.branch")
+                    Text(current).lineLimit(1)
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color.secondary)
+                .padding(.horizontal, 6)
+                .frame(height: 30)
+            }
+            .accessibilityLabel("Starts from \(current)")
         }
     }
 }
@@ -521,6 +550,8 @@ private struct PromptBar: View {
     var inset = true
     /// Offered in the + menu, under Photos: each starts the message with its `/command`.
     var commands: [PromptCommand] = []
+    /// Beside Send. With one, the text has the full width and the buttons go on a row under it.
+    var accessory: AnyView?
     /// False if it didn't go through: what was written stays.
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
     @State private var text = ""
@@ -553,32 +584,21 @@ private struct PromptBar: View {
                 .scrollIndicators(.hidden)
                 .padding(.top, 3)
             }
-            // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
-            HStack(alignment: .bottom, spacing: 8) {
-                Menu {
-                    Button("Photos", systemImage: "photo.on.rectangle") { showsPhotos = true }
-                    if !commands.isEmpty {
-                        Section {
-                            ForEach(commands, id: \.name) { command in
-                                Button(command.title, systemImage: command.systemImage) { start(command) }
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
-                        .frame(width: Self.controlSize, height: Self.controlSize)
-                        .accessibilityLabel("Add")
+            if let accessory {
+                textView.padding(.horizontal, 6).padding(.top, 2)
+                HStack(spacing: 8) {
+                    addMenu
+                    Spacer()
+                    accessory
+                    sendButton
                 }
-                PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
-                    images += pasted.map(PromptImage.init)
+            } else {
+                // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
+                HStack(alignment: .bottom, spacing: 8) {
+                    addMenu
+                    textView
+                    sendButton
                 }
-                .padding(.vertical, 4)
-                Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: Self.controlSize - 2))
-                    .frame(width: Self.controlSize, height: Self.controlSize)
-                    .disabled(!canSend)
             }
         }
         .padding(.horizontal, 10)
@@ -604,6 +624,39 @@ private struct PromptBar: View {
         .sheet(item: $viewing) { image in
             PromptImageViewer(image: image.image) { images.removeAll { $0.id == image.id } }
         }
+    }
+
+    private var addMenu: some View {
+        Menu {
+            Button("Photos", systemImage: "photo.on.rectangle") { showsPhotos = true }
+            if !commands.isEmpty {
+                Section {
+                    ForEach(commands, id: \.name) { command in
+                        Button(command.title, systemImage: command.systemImage) { start(command) }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
+                .frame(width: Self.controlSize, height: Self.controlSize)
+                .accessibilityLabel("Add")
+        }
+    }
+
+    private var textView: some View {
+        PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
+            images += pasted.map(PromptImage.init)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var sendButton: some View {
+        Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
+            .labelStyle(.iconOnly)
+            .font(.system(size: Self.controlSize - 2))
+            .frame(width: Self.controlSize, height: Self.controlSize)
+            .disabled(!canSend)
     }
 
     /// `/name ` in front of what's written, in place of any command already there.

@@ -221,8 +221,9 @@ public final class RemoteServer {
 
     private func run(_ command: RemoteCommand, on model: AppModel) async -> Result<RemoteResult, Error> {
         switch command {
-        case .createTask(let projectID, let prompt, let attachments, let agent):
-            return .success(.taskID(model.createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: agent)))
+        case .createTask(let projectID, let prompt, let attachments, let agent, let base):
+            return .success(.taskID(model.createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: agent,
+                                                     baseBranch: base)))
         case .sendPrompt(let id, let text, let attachments): model.sendPrompt(taskID: id, text: text, attachments: attachments)
         case .answerApproval(let id, let allow): model.answerApproval(taskID: id, allow: allow)
         case .stop(let id): model.stop(taskID: id)

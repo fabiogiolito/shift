@@ -221,8 +221,9 @@ final class RemoteModel {
     }
 
     /// The new task, with the project's default agent. nil if it couldn't be started, having said why.
-    func createTask(projectID: UUID, prompt: String, attachments: [String]) async -> Int? {
-        guard case .taskID(let id)? = await perform(.createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: nil)) else { return nil }
+    func createTask(projectID: UUID, prompt: String, attachments: [String], baseBranch: String? = nil) async -> Int? {
+        guard case .taskID(let id)? = await perform(.createTask(projectID: projectID, prompt: prompt, attachments: attachments, agent: nil,
+                                                                baseBranch: baseBranch)) else { return nil }
         if id == nil { lastError = "Your Mac couldn't start this task." }
         return id
     }
