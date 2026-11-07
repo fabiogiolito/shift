@@ -387,7 +387,6 @@ const MARK = {
   input: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#0a84ff"/><text x="8" y="12" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="-apple-system,sans-serif">?</text></svg>',
   ready: check("#30d158", "#fff"),
   merged: check("#8e8e93", "#1f1f20"),
-  done: '<svg viewBox="0 0 16 16"><path d="m3.5 8.3 2.8 2.8 6-6.3" stroke="#6e6e73" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 }
 const mark = (s) => `<span class="st">${MARK[s]}</span>`
 
@@ -493,8 +492,8 @@ const HEAD = {
 const files = (t) => `<div style="display:flex;align-items:center"><span class="label">${t.files.length} files changed · <span class="plus">${t.total[0]}</span> <span class="minus">${t.total[1]}</span></span><span class="ub" style="margin-left:auto;height:26px">View diff</span></div>
   <ul class="box files">${t.files.map(([k, f, a, d]) => `<li>${ic(k, "color:#9a9a9e")}${f}<span class="r">${d ? `<span class="plus">${a}</span> <span class="minus">${d}</span>` : `<span class="plus">${a}</span>`}</span></li>`).join("")}</ul>`
 const promptsBox = (list) => `<div class="label">Prompt history</div><ul class="box prompts" id="prompts">${list.map((p) => `<li>${p}</li>`).join("")}</ul>`
-const actsList = (n) => `<ul class="acts" id="acts">${ACTIONS.slice(Math.max(0, n - 4), n).map((a, i, all) =>
-  i === all.length - 1 ? `<li><span class="st">${rays()}</span>${a}…</li>` : `<li><span class="st">${MARK.done}</span>${a}</li>`).join("")}</ul>`
+// One working line at a time; each new action replaces the last
+const actsList = (n) => `<ul class="acts" id="acts"><li><span class="st">${rays()}</span>${ACTIONS[n - 1]}…</li></ul>`
 const server = (id) => `<span class="ub" id="server"><i class="dot"></i>localhost:${3000 + id}${ic("ext", "width:12px;height:12px")}<span class="split">${ic("chev")}</span></span>`
 
 function detailHTML() {
