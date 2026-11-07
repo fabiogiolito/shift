@@ -559,7 +559,7 @@ private struct PromptBar: View {
     var focusesOnAppear = false
     /// False inside the response panel: no margins of its own.
     var inset = true
-    /// Offered in the + menu, under Photos: each starts the message with its `/command`.
+    /// Offered in the + menu, under Photos and Files: each starts the message with its `/command`.
     var commands: [PromptCommand] = []
     /// Beside Send. With one, the text has the full width and the buttons go on a row under it.
     var accessory: AnyView?
@@ -567,6 +567,7 @@ private struct PromptBar: View {
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
     @State private var text = ""
     @State private var showsPhotos = false
+    @State private var showsFiles = false
     @State private var picked: [PhotosPickerItem] = []
     @State private var images: [PromptImage] = []
     @State private var viewing: PromptImage?
@@ -585,11 +586,23 @@ private struct PromptBar: View {
                     HStack(spacing: 8) {
                         ForEach(images) { image in
                             Button { viewing = image } label: {
-                                Image(uiImage: image.image).resizable().scaledToFill()
-                                    .frame(width: 56, height: 56)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                Group {
+                                    if let picture = image.image {
+                                        Image(uiImage: picture).resizable().scaledToFill()
+                                    } else {
+                                        VStack(spacing: 2) {
+                                            Image(systemName: "doc").font(.title3)
+                                            Text(image.file?.name ?? "").font(.caption2).lineLimit(1).padding(.horizontal, 4)
+                                        }
+                                        .foregroundStyle(Color.secondary)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .background(.fill.tertiary)
+                                    }
+                                }
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                            .accessibilityLabel("Attached picture")
+                            .accessibilityLabel(image.file?.name ?? "Attached picture")
                         }
                     }
                     .padding(.horizontal, 4)
@@ -638,6 +651,14 @@ private struct PromptBar: View {
                 }
             }
         }
+        .fileImporter(isPresented: $showsFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            for url in (try? result.get()) ?? [] {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                guard let data = try? Data(contentsOf: url) else { continue }
+                images.append(PromptImage(image: UIImage(data: data), file: (url.lastPathComponent, data)))
+            }
+        }
         .sheet(isPresented: $isExpanded) {
             VStack(alignment: .trailing, spacing: 12) {
                 Button("Collapse", systemImage: "arrow.up.right.and.arrow.down.left") { isExpanded = false }
@@ -646,7 +667,7 @@ private struct PromptBar: View {
                     .foregroundStyle(Color.primary)
                     .frame(width: 44, height: 44)
                 PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: true, maxLines: nil) { pasted in
-                    images += pasted.map(PromptImage.init)
+                    images += pasted.map { PromptImage(image: $0) }
                 }
                 .padding(.horizontal, 8)
                 sendButton
@@ -654,13 +675,14 @@ private struct PromptBar: View {
             .padding(16)
         }
         .sheet(item: $viewing) { image in
-            PromptImageViewer(image: image.image) { images.removeAll { $0.id == image.id } }
+            PromptImageViewer(image: image.image, name: image.file?.name) { images.removeAll { $0.id == image.id } }
         }
     }
 
     private var addMenu: some View {
         Menu {
-            Button("Photos", systemImage: "photo.on.rectangle") { showsPhotos = true }
+            Button("Photos", systemImage: "photo.on.rectangle") { present($showsPhotos) }
+            Button("Files", systemImage: "folder") { present($showsFiles) }
             if !commands.isEmpty {
                 Section {
                     ForEach(commands, id: \.name) { command in
@@ -678,7 +700,7 @@ private struct PromptBar: View {
 
     private var textView: some View {
         PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
-            images += pasted.map(PromptImage.init)
+            images += pasted.map { PromptImage(image: $0) }
         }
         .onGeometryChange(for: Bool.self) { $0.size.height > UIFont.preferredFont(forTextStyle: .body).lineHeight * 2.5 } action: { isTall = $0 }
         .padding(.vertical, 4)
@@ -706,6 +728,15 @@ private struct PromptBar: View {
         .disabled(!canSend)
     }
 
+    /// After the menu has gone: presenting while it's still closing is dropped, which took several taps.
+    // ponytail: fixed delay, tied to the menu's close animation.
+    private func present(_ shows: Binding<Bool>) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            shows.wrappedValue = true
+        }
+    }
+
     /// `/name ` in front of what's written, in place of any command already there.
     private func start(_ command: PromptCommand) {
         var rest = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -723,8 +754,12 @@ private struct PromptBar: View {
             do {
                 var paths: [String] = []
                 for image in images {
+                    if let file = image.file {
+                        paths.append(try await model.upload(file.data, name: file.name))
+                        continue
+                    }
                     // JPEG whatever the library holds: agents can't read HEIC.
-                    guard let jpeg = image.image.jpegData(compressionQuality: 0.8) else { continue }
+                    guard let jpeg = image.image?.jpegData(compressionQuality: 0.8) else { continue }
                     paths.append(try await model.upload(jpeg, name: "photo.jpg"))
                 }
                 if await onSend(text, paths) {
@@ -732,27 +767,38 @@ private struct PromptBar: View {
                     images = []
                 }
             } catch {
-                model.lastError = "Couldn't send the pictures to your Mac: \(error.localizedDescription)"
+                model.lastError = "Couldn't send the attachments to your Mac: \(error.localizedDescription)"
             }
         }
     }
 }
 
+/// A picture, or a file from Files (sent as is, under its own name).
 private struct PromptImage: Identifiable, Equatable {
     let id = UUID()
-    let image: UIImage
+    var image: UIImage?
+    var file: (name: String, data: Data)?
+
+    static func == (a: Self, b: Self) -> Bool { a.id == b.id }
 }
 
 /// A picture about to be sent, large. Swipe down or Close to go back.
 private struct PromptImageViewer: View {
-    let image: UIImage
+    let image: UIImage?
+    var name: String?
     let onRemove: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            Image(uiImage: image).resizable().scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Group {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFit()
+                } else {
+                    ContentUnavailableView(name ?? "File", systemImage: "doc")
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
