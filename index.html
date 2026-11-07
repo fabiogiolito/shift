@@ -97,11 +97,6 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 /* The light edge sits above the columns, so every column gets it */
 .win::after { content: ""; position: absolute; inset: 0; z-index: 10; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); pointer-events: none; }
 .win svg.g { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.win.compact { grid-template-columns: 250px 1fr; }
-.compact .sb { display: none; }
-.compact .bar { grid-column: 1 / 3; }
-.compact .bar > :nth-child(n+4) { display: none; }
-.compact .browser { left: 20px; width: 600px; }
 .sec { color: #9a9a9e; }
 .sb { grid-row: 1 / 3; display: flex; flex-direction: column; padding: 12px 10px; background: #2a2a2c; border-right: 1px solid #111; }
 .sb-top { display: flex; align-items: center; gap: 8px; height: 30px; padding-left: 6px; }
@@ -185,7 +180,6 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .bar > span { display: flex; align-items: center; gap: 6px; }
 .bar svg.g { width: 13px; height: 13px; }
 .bar > .path { align-self: stretch; width: 310px; padding-left: 16px; border-right: 1px solid #2c2c2e; }
-.compact .bar > .path { width: 250px; }
 .bar > .lim { margin-left: auto; color: #8e8e93; }
 .bar span { flex-shrink: 0; }
 .bar > span > span:last-child svg.g { width: 10px; color: #8e8e93; }
@@ -230,7 +224,6 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .th3 { background: linear-gradient(200deg, #ffcad4, #b5838d 50%, #4a4e69); }
 .th.more { display: grid; place-items: center; font-size: 12px; font-style: normal; color: #c7c7cc; }
 .thumbs { display: flex; gap: 6px; }
-.compact .thumbs .th { width: 34px; height: 34px; }
 .thumbs.enter .th { animation: drop-in .4s var(--ease) both; }
 .thumbs.enter .th:nth-child(2) { animation-delay: 50ms; } .thumbs.enter .th:nth-child(3) { animation-delay: 100ms; }
 .thumbs.enter .th:nth-child(4) { animation-delay: 150ms; } .thumbs.enter .th:nth-child(5) { animation-delay: 200ms; }
@@ -721,7 +714,8 @@ function stateAfter(beat) {
 // ---------- Rendering ----------
 const $ = (id) => document.getElementById(id)
 const win = $("win"), rowsEl = $("rows"), dbody = $("dbody")
-let S, W = 1120, rowEls = new Map()
+const W = 1120, H = 700
+let S, rowEls = new Map()
 const status = (id) => S.tasks.find(([t]) => t === id)?.[1]
 const scale = () => win.getBoundingClientRect().width / W || 1
 const SECTIONS = [["Review", ["ready"]], ["Tasks", ["working", "input"]], ["Recently Merged", ["merged"]]]
@@ -850,7 +844,6 @@ async function tap(el) {
 }
 
 function renderAll() {
-  win.classList.toggle("compact", W < 1120)
   renderProjects()
   rowEls = new Map()
   renderRows()
@@ -901,8 +894,8 @@ const BEATS = [
   null,
   // 1. A new project; a stack of photos is dragged onto the new task input and the task is written, not sent
   async () => {
-    const add = W < 1120 ? null : $("newproj")
-    if (add) { cursor.style.transform = `translate(${W / 2}px, 560px)`; await point(add, .3); await click(add) }
+    const add = $("newproj")
+    cursor.style.transform = `translate(${W / 2}px, 560px)`; await point(add, .3); await click(add)
     S.projects = [...new Set([...S.projects, "portfolio"])]; S.project = "portfolio"; S.tasks = []; S.sel = null
     renderProjects("portfolio"); renderRows(); renderDetail()
     await wait(600)
@@ -1059,8 +1052,7 @@ for (const e of ["wheel", "touchstart", "keydown", "pointerdown"]) addEventListe
 const story = $("story"), scene = $("scene"), mac = $("mac"), heads = [...document.querySelectorAll(".head")]
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
 function layout() {
-  const w = scene.clientWidth, h = scene.clientHeight, nextW = w < 760 ? 640 : 1120, H = nextW < 1120 ? 940 : 700
-  if (nextW !== W) { W = nextW; if (!running) { S = stateAfter(shown); renderAll() } }
+  const w = scene.clientWidth, h = scene.clientHeight
   // Steps have a shorter heading than the opening, so once upright the window moves up by the difference
   const lift = Math.max(0, heads[0].offsetHeight - Math.max(...heads.slice(1).map((e) => e.offsetHeight)))
   const fit = Math.min((w - 40) / W, (h + lift - 56) / H, .8)
