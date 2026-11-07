@@ -358,6 +358,7 @@ struct ScheduleForm: View {
                         Stepper(value: self.rule(\.interval, 1), in: 1...99) {
                             steady(every(rule), widest: every(.init(rule.frequency, interval: 99)))
                         }
+                        .modifier(FieldBox())
                         if rule.frequency == .hourly {
                             HStack {
                                 Toggle("Only between", isOn: Binding { draft.timing.between != nil } set: {
@@ -525,6 +526,7 @@ struct ScheduleForm: View {
                     Stepper(value: Binding { count } set: { draft.timing.endAfter = $0 }, in: 1...999) {
                         steady(count == 1 ? "1 time" : "\(count) times", widest: "999 times")
                     }
+                    .modifier(FieldBox())
                 }
                 if let date = draft.timing.endOn {
                     DateField(date: Binding { date } set: { draft.timing.endOn = $0 }, part: .date)
@@ -751,6 +753,16 @@ struct ScheduleSettings: View {
 
 /// A date or a time as a plain field, the way Calendar and Reminders show them: no stepper, and clicking a date
 /// opens a small calendar under it. SwiftUI's DatePicker can't show that calendar, so this is AppKit's.
+/// A stepper and its value in one white, bordered box, like the date fields beside it.
+private struct FieldBox: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.leading, 8).padding(.trailing, 2).padding(.vertical, 2)
+            .background(.background, in: .rect(cornerRadius: 6))
+            .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
+    }
+}
+
 struct DateField: NSViewRepresentable {
     enum Part { case date, time, dateTime }
     @Binding var date: Date
