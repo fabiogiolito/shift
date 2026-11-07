@@ -365,5 +365,20 @@
 - Click a task's title to scroll its details back to the top]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.11/Shift-0.2.11.zip" sparkle:edSignature="Vr0UwBD52BLHsvsJ+VvIwrSyjeO64sazZiHEI45PeikD5URghUnZfb87CMtMAeVKq2h6cFZ8U28ZfrKiVSgTAA==" length="5447882" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.12</title>
+      <pubDate>Sat, 07 Nov 2026 13:25:24 +0000</pubDate>
+      <sparkle:version>29</sparkle:version>
+      <sparkle:shortVersionString>0.2.12</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Click the usage limits in the bottom right to see each limit (session, week) with a progress bar and its reset time, and switch to see the other agent's limits
+- Usage limits show right away at launch, using the last known reading
+- Prompt fields have a + menu to add files or create a new schedule, and you pick the base branch next to Start
+- Selecting a task puts the cursor in its instruction field, ready to type
+- Tasks based on gh-pages run as static websites, with no setup or build
+- Merging, archiving or deleting a task quits its build of the app, if open, and deletes that build's files
+- In a task's prompt field, slash commands only suggest /tag]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.12/Shift-0.2.12.zip" sparkle:edSignature="MMFX82S49dXO4Uy0HzwoRsUsXQ3fpnyyus7OjHw+r0VDHAqOuwZbMFVP/SuF8bUQHr31AgYa9b2cCILqHZXnDQ==" length="5493510" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
