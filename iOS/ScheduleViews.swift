@@ -21,7 +21,7 @@ struct ScheduleRow: View {
                     .frame(width: 18)
                     .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(schedule.title).lineLimit(2).lineHeight(.tight)
+                    Text(schedule.title).lineLimit(2).lineSpacing(-2) // Not .lineHeight(.tight): it clips g, p and y.
                         .alignmentGuide(.firstLineCenter) { $0[.firstTextBaseline] - 6 }
                     // Next run moves on as time passes.
                     TimelineView(.everyMinute) { _ in

@@ -289,7 +289,7 @@ private struct TaskRow: View {
                     .alignmentGuide(.firstLineCenter) { $0[VerticalAlignment.center] }
                 VStack(alignment: .leading, spacing: 2) {
                     // A title can wrap: center on its first line, a little above the baseline.
-                    Text(task.title).lineLimit(2).lineHeight(.tight)
+                    Text(task.title).lineLimit(2).lineSpacing(-2) // Not .lineHeight(.tight): it clips g, p and y.
                         .alignmentGuide(.firstLineCenter) { $0[.firstTextBaseline] - 6 }
                     if task.tags?.isEmpty == false { TaskTags(tags: task.tags, project: model.state.projects.first { $0.id == task.projectID }) }
                     Text(task.status == .working ? (model.state.isOffline == true ? TaskItem.offlineActivity : nil) ?? task.activity ?? task.status.label : task.status.label)
