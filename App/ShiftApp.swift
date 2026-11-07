@@ -99,12 +99,17 @@ private struct OpenWindowHandoff: View {
 /// content, which updated the field again, on every event (scrolling included).
 private struct NewTaskCommand: Commands {
     @FocusedValue(\.focusNewTask) private var focusNewTask
+    @FocusedValue(\.newSchedule) private var newSchedule
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Task") { focusNewTask?() }
                 .keyboardShortcut("n")
                 .disabled(focusNewTask == nil)
+            // The same empty form as `/schedule` alone in the New task field.
+            Button("New Schedule…") { newSchedule?() }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+                .disabled(newSchedule == nil)
         }
     }
 }
@@ -218,6 +223,8 @@ struct TitledAction {
 extension FocusedValues {
     /// Moves focus to the New task field. Published by the task list.
     @Entry var focusNewTask: (() -> Void)?
+    /// Opens the empty schedule form for the selected project. Published by the window.
+    @Entry var newSchedule: (() -> Void)?
     /// Moves focus to the open task's or the chat's prompt field. Published by the field.
     @Entry var focusPrompt: (() -> Void)?
     /// Moves focus to the projects search field. Published by the sidebar.
