@@ -25,6 +25,10 @@ final class DemoProjectTests: XCTestCase {
         let red = try await git.diff(worktree: state.tasks[1].worktreeURL, base: "main")
         XCTAssertEqual(blue.flatMap(\.hunks).flatMap(\.lines).filter { $0.kind == .added }.map { $0.text.trimmingCharacters(in: .whitespaces) }, [#"background: "blue","#])
         XCTAssertEqual(red.flatMap(\.hunks).flatMap(\.lines).filter { $0.kind == .added }.map { $0.text.trimmingCharacters(in: .whitespaces) }, [#"color: "red","#])
+        let remote = await git.remote(repo: repo, branch: "main")
+        XCTAssertEqual(remote, "origin")
+        let unpushed = try await git.unpushedCount(repo: repo, branch: "main", remote: "origin")
+        XCTAssertEqual(unpushed, 0, "starts in sync, so merging is what gives it something to push")
         let cleanBlue = try await git.canMergeCleanly(repo: repo, branch: state.tasks[0].branch, base: "main")
         XCTAssertTrue(cleanBlue)
 
