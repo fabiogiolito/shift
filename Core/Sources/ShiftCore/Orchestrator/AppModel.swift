@@ -9,8 +9,12 @@ public final class AppModel {
     public private(set) var projects: [Project] = []
     public private(set) var tasks: [TaskItem] = []
     public private(set) var installedAgents: [AgentKind: AgentInstallation] = [:]
-    /// Subscription limits per agent, as of the last `refreshUsage`.
-    public private(set) var usage: [AgentKind: AgentUsage] = [:]
+    /// Subscription limits per agent, as of the last `refreshUsage` that got an answer. Kept across launches:
+    /// Claude's usage endpoint often answers 429, and a fresh launch would otherwise show nothing until it doesn't.
+    public private(set) var usage: [AgentKind: AgentUsage] = UserDefaults.standard.data(forKey: "usage")
+        .flatMap { try? JSONDecoder().decode([AgentKind: AgentUsage].self, from: $0) } ?? [:] {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(usage), forKey: "usage") }
+    }
     /// The models each installed agent offers, besides its default.
     public private(set) var models: [AgentKind: [AgentModel]] = [:]
     /// The Mac can't reach the internet while an agent runs. Working tasks and chats show
