@@ -293,6 +293,21 @@ final class RemoteModel {
     }
 
     func merge(taskID: Int) async { await perform(.merge(taskID: taskID)) }
+    func rename(taskID: Int, to title: String) async { await perform(.rename(taskID: taskID, title: title)) }
+    func delete(taskID: Int) async { await perform(.delete(taskID: taskID)) }
+    func archive(taskID: Int) async { await perform(.archive(taskID: taskID)) }
+    func addTags(taskID: Int, _ tags: String) async { await perform(.addTags(taskID: taskID, tags: tags)) }
+    func removeTag(taskID: Int, _ tag: String) async { await perform(.removeTag(taskID: taskID, tag: tag)) }
+
+    func serverLog(taskID: Int) async -> String? {
+        guard case .text(let text)? = await perform(.serverLog(taskID: taskID)) else { return nil }
+        return text
+    }
+
+    func buildLog(taskID: Int, target: UUID) async -> String? {
+        guard case .text(let text)? = await perform(.buildLog(taskID: taskID, target: target)) else { return nil }
+        return text
+    }
     func push(taskID: Int) async { await perform(.pushBranch(taskID: taskID)) }
     func resolveConflict(taskID: Int) async { await perform(.resolveConflict(taskID: taskID)) }
     func changeBase(taskID: Int, to base: String) async { await perform(.changeBase(taskID: taskID, to: base)) }
