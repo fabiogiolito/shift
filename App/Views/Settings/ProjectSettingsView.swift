@@ -7,8 +7,6 @@ struct ProjectSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     private let projectID: Project.ID
     @State private var draft: Project?
-    @State private var branches: [String] = []
-    @State private var creatingBranch = false
     /// Other projects: chosen in the picker; nil follows the project (an app has a build command).
     @State private var isApp: Bool?
 
@@ -49,7 +47,6 @@ struct ProjectSettingsView: View {
         }
         .task {
             if draft == nil { draft = model.project(projectID) }
-            branches = await model.branches(for: projectID)
             await model.refreshPushState(projectID: projectID)
         }
     }
@@ -141,51 +138,10 @@ struct ProjectSettingsView: View {
 
     private func form(_ project: Binding<Project>) -> some View {
         let current = project.wrappedValue
-        // The current value is always offered, so the picker is valid before branches load.
-        let branchOptions = branches.contains(current.baseBranch) ? branches : [current.baseBranch] + branches
 
         return Form {
             Section("General") {
                 TextField("Name", text: project.name)
-                LabeledContent("Folder") {
-                    Text(current.repoPath).textSelection(.enabled).lineLimit(1).truncationMode(.head)
-                    Button("Show in Finder") {
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: current.repoPath)
-                    }
-                }
-                HStack {
-                    Picker("Base branch for new tasks", selection: project.baseBranch) {
-                        ForEach(branchOptions, id: \.self) { Text($0) }
-                    }
-                    Button("New Branch…") { creatingBranch = true }
-                }
-                .sheet(isPresented: $creatingBranch) {
-                    NewBranchSheet(projectID: projectID, branches: branches, source: current.baseBranch) { name in
-                        project.wrappedValue.baseBranch = name
-                        Task { branches = await model.branches(for: projectID) }
-                    }
-                }
-            }
-
-            Section {
-                Picker("Default agent", selection: project.defaultAgent) {
-                    ForEach(AgentKind.allCases) { kind in
-                        let installed = model.installedAgents[kind] != nil
-                        Label(installed ? kind.displayName : "\(kind.displayName) (not installed)", image: kind.icon)
-                            .tag(kind)
-                            .disabled(!installed)
-                    }
-                }
-                ModelPicker(agent: current.defaultAgent, selection: project.defaultModel)
-                Picker("Permissions", selection: project.permissions) {
-                    ForEach(AgentPermissions.allCases) { Text($0.displayName).tag($0) }
-                }
-            } header: {
-                Text("Agent")
-            } footer: {
-                Text(current.permissions.summary)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Section {
