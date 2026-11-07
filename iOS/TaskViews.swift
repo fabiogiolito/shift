@@ -1000,6 +1000,10 @@ private struct PromptResponseView: View {
     let task: TaskItem
     @Environment(RemoteModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var scroll = ScrollPosition(edge: .top)
+    @State private var atBottom = true
+
+    private struct Extent: Equatable { var height: CGFloat; var below: CGFloat }
 
     var body: some View {
         NavigationStack {
@@ -1018,6 +1022,29 @@ private struct PromptResponseView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollPosition($scroll)
+            // Was at the very bottom and more arrived: stays there. Otherwise, whether it's at the bottom now.
+            .onScrollGeometryChange(for: Extent.self) { geo in
+                Extent(height: geo.contentSize.height, below: geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY)
+            } action: { old, new in
+                if old.below <= 4 && new.height > old.height {
+                    scroll.scrollTo(edge: .bottom)
+                } else {
+                    atBottom = new.below <= 4
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if !atBottom {
+                    Button("Scroll to Bottom", systemImage: "arrow.down") { withAnimation { scroll.scrollTo(edge: .bottom) } }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.large)
+                        .padding(.bottom, 8)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .animation(.default, value: atBottom)
             .navigationTitle("Response")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
