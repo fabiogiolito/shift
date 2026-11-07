@@ -309,8 +309,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .extras { max-width: 72rem; margin: 0 auto; padding: 8rem 1.5rem 4rem; text-align: center; }
 .bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 3.5rem; text-align: left; }
 .card { display: flex; flex-direction: column; padding: 1.5rem; border: 1px solid var(--line); border-radius: 24px; background: #0c0c0d; }
-.card.wide { grid-column: span 2; grid-row: span 2; }
-.card.span2 { grid-column: span 2; }
+.card.wide { grid-column: span 2; }
 .span2 .mem { width: min(100%, 26rem); }
 .card h3 { margin-top: auto; padding-top: 1.5rem; font-size: 1.0625rem; font-weight: 500; letter-spacing: -.01em; }
 .card p { margin-top: .25rem; font-size: .9375rem; line-height: 1.4; color: var(--muted); }
@@ -320,8 +319,8 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .srow b { display: block; font-weight: 500; }
 .srow small { color: var(--muted); font-size: 12px; }
 .sic { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(10,132,255,.18); color: var(--blue); font-size: 15px; }
-.sched .week { margin-top: 2rem; }
-.sched .clock { margin-top: 1rem; }
+.sched .week { margin-top: 1.25rem; font-size: 13px; gap: 8px; }
+.sched .clock { margin-top: .75rem; font-size: clamp(2.75rem, 5vw, 4rem); }
 .ui.menu { min-height: 0; margin-top: 1rem; }
 .menu { align-self: center; width: min(100%, 15rem); padding: 5px; border-radius: 10px; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 12px 30px rgba(0,0,0,.5); }
 .mi { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; }
@@ -353,7 +352,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .mrow b { font-weight: 400; }
 .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 48rem; margin: 2.5rem auto 0; list-style: none; padding: 0; }
 .tags li { padding: .4rem .9rem; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: 14px; }
-@media (max-width: 900px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .card.span2 { grid-column: span 2; } }
 @media (max-width: 600px) { .bento { grid-template-columns: minmax(0, 1fr); } .card.wide, .card.span2 { grid-column: auto; grid-row: auto; } .extras { padding-top: 5rem; } }
 @supports (animation-timeline: view()) {
   .extras h2, .card, .tags { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
