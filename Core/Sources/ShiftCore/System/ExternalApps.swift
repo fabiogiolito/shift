@@ -69,18 +69,31 @@ public struct ExternalApps: Sendable {
     /// A new instance even if another copy with the same bundle identifier (such as an installed one) runs.
     @MainActor
     public func relaunch(_ app: URL, environment: [String: String] = [:]) async {
-        let running = NSWorkspace.shared.runningApplications
-            .filter { $0.bundleURL?.standardizedFileURL == app.standardizedFileURL }
+        await Self.quit { $0.standardizedFileURL == app.standardizedFileURL }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.environment = environment
+        _ = try? await NSWorkspace.shared.openApplication(at: app, configuration: configuration)
+    }
+
+    /// Quits every app running from inside `folder`, such as a task's build of Shift, and waits for them to go.
+    /// Apps elsewhere, the installed Shift included, are left alone.
+    @MainActor
+    public static func quitApps(in folder: URL) async {
+        let prefix = folder.standardizedFileURL.path + "/"
+        await quit { $0.standardizedFileURL.path.hasPrefix(prefix) }
+    }
+
+    /// Asks the matching apps to quit and waits up to 5 s for them to.
+    @MainActor
+    private static func quit(where matches: (URL) -> Bool) async {
+        let running = NSWorkspace.shared.runningApplications.filter { $0.bundleURL.map(matches) ?? false }
         running.forEach { $0.terminate() }
         var waited = 0
         while running.contains(where: { !$0.isTerminated }), waited < 50 {
             try? await Task.sleep(for: .milliseconds(100))
             waited += 1
         }
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        configuration.environment = environment
-        _ = try? await NSWorkspace.shared.openApplication(at: app, configuration: configuration)
     }
 
     public func appURL(_ app: ExternalApp) -> URL? {

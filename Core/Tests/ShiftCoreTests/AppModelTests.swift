@@ -763,6 +763,27 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(Project.summary(of: model.tasks(in: project.id)), "No tasks")
     }
 
+    func testClosingOrDeletingATaskRemovesItsBuildData() async throws {
+        let builds = temp.appendingPathComponent("builds")
+        let first = await createCompletedTask()
+        let firstData = ShiftPaths.build(taskID: first, root: builds)
+        try FileManager.default.createDirectory(at: firstData.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
+        await model.archive(taskID: first)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstData.path))
+        XCTAssertNil(model.lastError)
+
+        // Already closed: deleting it skips the rest of the clean up but still removes data a later build made.
+        try FileManager.default.createDirectory(at: firstData, withIntermediateDirectories: true)
+        await model.delete(taskID: first)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstData.path))
+
+        // No data at all is fine.
+        let second = await createCompletedTask()
+        await model.delete(taskID: second)
+        XCTAssertNil(model.task(second))
+        XCTAssertNil(model.lastError)
+    }
+
     func testArchiveKeepsTheWorkOfATaskWithChangesOnItsBranch() async {
         let id = await createCompletedTask()
         git.pendingChanges = DiffSummary(files: [FileChange(path: "a.txt", kind: .modified)])

@@ -132,6 +132,8 @@ public final class AppModel {
     }
 
     private let worktreesRoot: URL
+    /// Where tasks' builds keep their data (`ShiftPaths.build`).
+    private let buildsRoot: URL
     /// What happened to the tasks each chat follows, until its agent has been told.
     @ObservationIgnored private var chatReports: [Project.ID: [String]] = [:]
     /// Where the chats' agents reach `shiftctl`'s server, and which project each one's access is for.
@@ -184,18 +186,21 @@ public final class AppModel {
     public init(services: Services) {
         self.services = services
         self.worktreesRoot = ShiftPaths.worktrees
+        self.buildsRoot = ShiftPaths.builds
     }
 
-    /// `worktrees`: where new tasks' worktrees go (tests).
+    /// `worktrees`: where new tasks' worktrees go (tests). Builds' data goes in `builds` next to it.
     init(services: Services, worktrees: URL) {
         self.services = services
         self.worktreesRoot = worktrees
+        self.buildsRoot = worktrees.deletingLastPathComponent().appendingPathComponent("builds")
     }
 
     /// In-memory model with fixed data, for previews and UI work. Actions are no-ops.
     public init(previewProjects: [Project], tasks: [TaskItem]) {
         self.services = nil
         self.worktreesRoot = ShiftPaths.worktrees
+        self.buildsRoot = ShiftPaths.builds
         self.projects = previewProjects
         self.tasks = tasks
         self.installedAgents = [.claudeCode: .init(path: "/usr/local/bin/claude"), .codex: .init(path: "/usr/local/bin/codex")]
@@ -1290,7 +1295,7 @@ public final class AppModel {
         busy.insert(taskID)
         defer { busy.remove(taskID) }
         // Resources first, the record last: if the app dies halfway the task is still there to retry.
-        if !task.status.isClosed { await cleanUp(taskID) }
+        if !task.status.isClosed { await cleanUp(taskID) } else { await removeBuild(task) }
         for shot in self.task(taskID)?.screenshots ?? [] { try? FileManager.default.removeItem(at: shot.url) }
         tasks.removeAll { $0.id == taskID }
         changed()
@@ -2394,6 +2399,7 @@ public final class AppModel {
             // Not one of ours from this launch; harmless if it is already gone.
             await services.servers.stopOrphan(pid: pid)
         }
+        await removeBuild(task)
         guard let project = project(task.projectID) else { return }
         var deleteBranch: String? = deletingBranch ? task.branch : nil
         if let base, (try? await services.git.isContained(repo: project.repoURL, branch: task.branch, in: base)) != true {
@@ -2406,6 +2412,20 @@ public final class AppModel {
         } catch {
             lastError = "Could not remove the worktree of \(task.title): \(Self.describe(error))"
         }
+    }
+
+    /// Quits the task's build of the app if it's open, then deletes the data its builds kept.
+    private func removeBuild(_ task: TaskItem) async {
+        await ExternalApps.quitApps(in: task.worktreeURL)
+        let folder = ShiftPaths.build(taskID: task.id, root: buildsRoot)
+        // Off the main thread: with a demo project's node_modules it can be several GB.
+        let failure: String? = await Task.detached {
+            do { try FileManager.default.removeItem(at: folder) } catch CocoaError.fileNoSuchFile { } catch {
+                return error.localizedDescription
+            }
+            return nil
+        }.value
+        if let failure { lastError = "Could not remove the build data of \(task.title): \(failure)" }
     }
 
     private func markMerged(_ id: TaskItem.ID) { markClosed(id, as: .merged) }
