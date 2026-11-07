@@ -144,6 +144,7 @@ final class AgentAdapterTests: XCTestCase {
         XCTAssertEqual(OutcomeProtocol.parse(finalMessage: "SHIFT_TAGS: auth\nDone.\nSHIFT_STATUS: completed\nFixed.", exitCode: 0),
                        .completed(summary: "Fixed."))
         XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: true, tags: ["auth"]).contains("The project's tags: auth."))
+        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: true, tags: []).contains("make one up"))
         XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: true).contains("SHIFT_TAGS"))
     }
 

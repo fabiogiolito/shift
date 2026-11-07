@@ -166,16 +166,20 @@ extension OutcomeProtocol {
     """
 
     static func tagRules(_ existing: [String]) -> String {
-        let list = existing.isEmpty ? "The project has no tags yet." : "The project's tags: " + existing.joined(separator: ", ") + "."
+        let pick = existing.isEmpty
+            ? "The project has no tags yet, so make one up: you are starting its list."
+            : "The project's tags: " + existing.joined(separator: ", ") + ". Use one of these if it fits; otherwise make up a new one."
         return """
-        Tags help the user filter and find tasks by the feature or area of the codebase they touch. Right after the \
-        lines above, before doing any work, write this line once, on a line of its own:
+        Tags help the user filter and find tasks by the feature or area of the product they touch. Right after the \
+        lines above, before doing any work, write this line once, on a line of its own, with one tag, or two if the \
+        task clearly spans two areas:
 
-        SHIFT_TAGS: <tag>, <tag>
+        SHIFT_TAGS: <tag>
 
-        \(list) Pick the one or two that fit best, and prefer one. Only if none fits, make up a new one: one or two \
-        lowercase words naming a lasting feature or area of this codebase, such as "checkout" or "auth", never the \
-        kind of work ("bugfix", "refactor", "ui") or something only this task is about. Write `none` if nothing fits well.
+        \(pick) A new tag is one or two lowercase words naming a lasting feature or area of this codebase, such as \
+        "checkout", "auth", "home page" or "theme", broad enough for other tasks to share. Never the kind of work \
+        ("bugfix", "refactor", "ui") or something only this task is about. Write `none` only when the task isn't \
+        about any part of the product, such as a dependency update or a question.
         """
     }
 
