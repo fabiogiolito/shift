@@ -67,7 +67,7 @@ nav .gh:hover { color: var(--fg); }
 .head { grid-area: 1 / 1; opacity: 0; translate: 0 16px; filter: blur(6px); pointer-events: none; transition: opacity .4s, translate .7s var(--ease), filter .4s; }
 .head:not([data-i="0"]) { align-self: center; }
 .head.on { opacity: 1; translate: 0 0; filter: none; pointer-events: auto; }
-.head[data-i="0"] .actions { animation: rise .8s var(--ease) .9s both; }
+.head[data-i="0"] .actions { margin-top: 2.75rem; animation: rise .8s var(--ease) .9s both; }
 h1 .w { display: inline-block; white-space: nowrap; }
 h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(--i) * 25ms + 100ms) both; }
 .scene { position: relative; flex: 1; margin-top: clamp(1.5rem, 4.5vh, 3rem); perspective: 1800px; animation: rise 1.4s var(--ease) .3s both; }
@@ -283,6 +283,8 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 /* Replay is secondary: dimmer than the arrows */
 .ctrl #replay { background: rgba(28, 28, 30, .6); color: #6e6e73; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
 .ctrl #replay:hover { background: rgba(44, 44, 46, .8); color: #aeaeb2; }
+.ctrl #next.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { 30% { background: rgba(86, 86, 90, .85); } }
 .ctrl #replay.spin svg { animation: spin-back .6s var(--ease); }
 @keyframes spin-back { to { rotate: -360deg; } }
 @media (max-width: 639px) {
@@ -303,8 +305,64 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .week span { display: grid; place-items: center; width: 2.5em; height: 2.5em; border-radius: 50%; border: 1px solid var(--line); color: #555; }
 .week .on { border-color: var(--fg); background: var(--fg); color: var(--bg); }
 .clock { margin-top: 1.5rem; font-family: var(--mono); font-size: clamp(4rem, 12vw, 8.5rem); font-weight: 500; letter-spacing: -.06em; line-height: 1; background: linear-gradient(var(--fg), #3a3a3c); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.agents { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; margin-top: 3rem; }
-.agents span { padding: .75rem 1.5rem; border: 1px solid var(--line); border-radius: 99px; font-family: var(--mono); font-size: clamp(1rem, 2vw, 1.25rem); }
+/* And much more */
+.extras { max-width: 72rem; margin: 0 auto; padding: 8rem 1.5rem 4rem; text-align: center; }
+.bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 3.5rem; text-align: left; }
+.card { display: flex; flex-direction: column; padding: 1.5rem; border: 1px solid var(--line); border-radius: 24px; background: #0c0c0d; }
+.card.wide { grid-column: span 2; grid-row: span 2; }
+.card.span2 { grid-column: span 2; }
+.span2 .mem { width: min(100%, 26rem); }
+.card h3 { margin-top: auto; padding-top: 1.5rem; font-size: 1.0625rem; font-weight: 500; letter-spacing: -.01em; }
+.card p { margin-top: .25rem; font-size: .9375rem; line-height: 1.4; color: var(--muted); }
+.ui { display: flex; flex-direction: column; justify-content: center; min-height: 140px; font-size: 13px; }
+.sched { align-items: center; flex: 1; }
+.srow { display: flex; align-items: center; gap: 10px; align-self: stretch; max-width: 22rem; margin: 0 auto; padding: 10px 12px; border-radius: 12px; background: #1c1c1e; }
+.srow b { display: block; font-weight: 500; }
+.srow small { color: var(--muted); font-size: 12px; }
+.sic { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(10,132,255,.18); color: var(--blue); font-size: 15px; }
+.sched .week { margin-top: 2rem; }
+.sched .clock { margin-top: 1rem; }
+.menu { align-self: center; width: min(100%, 15rem); padding: 5px; border-radius: 10px; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 12px 30px rgba(0,0,0,.5); }
+.mi { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; }
+.mi img { width: 16px; height: 16px; }
+.mi span { margin-left: auto; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.mi.on { background: var(--blue); }
+.mi.on span { color: #fff; }
+.mi.dim { color: var(--muted); }
+.menu .sep { height: 1px; margin: 4px 9px; background: rgba(255,255,255,.1); }
+.lims { gap: 12px; }
+.lim { display: grid; grid-template-columns: 4.5rem 1fr 2.5rem; align-items: center; gap: 10px; }
+.lim span { color: var(--muted); }
+.lim b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.lim i { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--fg) calc(var(--v) * 100%), #2c2c2e 0); }
+.lims small { color: #555; font-size: 12px; }
+.chat { gap: 8px; }
+.msg { max-width: 85%; padding: 8px 12px; border-radius: 14px; background: #1c1c1e; line-height: 1.35; }
+.msg.me { align-self: flex-end; background: var(--blue); }
+.split { flex-direction: row; align-items: center; justify-content: center; }
+.split .b { padding: 7px 14px; background: #2c2c2e; font-weight: 500; }
+.split .b:first-child { border-radius: 8px 0 0 8px; background: var(--fg); color: var(--bg); }
+.split .b:last-child { border-radius: 0 8px 8px 0; margin-left: 1px; }
+.url { flex-direction: row; align-items: center; justify-content: center; gap: 8px; font-family: var(--mono); font-size: 12px; }
+.url .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
+.mem { gap: 2px; }
+.mrow { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.mrow:first-child { background: #1c1c1e; font-weight: 500; }
+.mrow.kid { padding-left: 22px; color: var(--muted); }
+.mrow b { font-weight: 400; }
+.tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 48rem; margin: 2.5rem auto 0; list-style: none; padding: 0; }
+.tags li { padding: .4rem .9rem; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: 14px; }
+@media (max-width: 900px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .bento { grid-template-columns: minmax(0, 1fr); } .card.wide, .card.span2 { grid-column: auto; grid-row: auto; } .extras { padding-top: 5rem; } }
+@supports (animation-timeline: view()) {
+  .extras h2, .card, .tags { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
+}
+/* Closing call to action */
+.actions:has(.soon) { align-items: flex-start; gap: 12px; }
+.soon { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.actions .soon small { margin: 0; font-size: 12px; }
+.btn.dashed { border: 1.5px dashed #48484a; color: var(--muted); cursor: default; }
+.btn.dashed:active { transform: none; }
 .cta .mono { margin-top: 1.5rem; }
 body > footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
 body > footer a:hover { color: var(--fg); }
@@ -332,6 +390,7 @@ body > footer a:hover { color: var(--fg); }
 <body>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol>
 </svg>
 
@@ -361,6 +420,7 @@ body > footer a:hover { color: var(--fg); }
           <h1 aria-label="Agents as easy as a to-do list."><span class="w" aria-hidden="true"><span class="l" style="--i:0">A</span><span class="l" style="--i:1">g</span><span class="l" style="--i:2">e</span><span class="l" style="--i:3">n</span><span class="l" style="--i:4">t</span><span class="l" style="--i:5">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:6">a</span><span class="l" style="--i:7">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:8">e</span><span class="l" style="--i:9">a</span><span class="l" style="--i:10">s</span><span class="l" style="--i:11">y</span></span><br><span class="w" aria-hidden="true"><span class="l" style="--i:12">a</span><span class="l" style="--i:13">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:14">a</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:15">t</span><span class="l" style="--i:16">o</span><span class="l" style="--i:17">-</span><span class="l" style="--i:18">d</span><span class="l" style="--i:19">o</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:20">l</span><span class="l" style="--i:21">i</span><span class="l" style="--i:22">s</span><span class="l" style="--i:23">t</span><span class="l" style="--i:24">.</span></span></h1>
           <div class="actions">
             <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
+            <div class="soon"><span class="btn dashed" aria-disabled="true"><svg class="i"><use href="#i-phone"/></svg>Download for iPhone</span><small class="mono">Coming soon</small></div>
           </div>
         </div>
         <div class="head" data-i="1"><h3>Work on your local environment</h3><p>Add a project folder and tell it what you need, files and all.</p></div>
@@ -410,8 +470,8 @@ body > footer a:hover { color: var(--fg); }
               <div class="chrome"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="url"><span data-ic="lock"></span>localhost:3201</span></div>
               <div class="page"><span class="arrow" id="bprev" style="left:22px" data-ic="left"></span><div class="photo" id="photo"></div><span class="arrow" id="bnext" style="right:22px" data-ic="right"></span><span class="cap" id="cap"></span></div>
             </div>
-            <div class="cursor" id="cursor"><div class="stack"><i class="th th2"></i><i class="th th1"></i><i class="th th0"></i><b>6</b></div><svg viewBox="0 0 22 30"><path d="M2 2v22l5.5-5.2 3.6 8.4 3.6-1.6-3.5-8.2H18Z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
           </div>
+          <div class="cursor" id="cursor"><div class="stack"><i class="th th2"></i><i class="th th1"></i><i class="th th0"></i><b>6</b></div><svg viewBox="0 0 22 30"><path d="M2 2v22l5.5-5.2 3.6 8.4 3.6-1.6-3.5-8.2H18Z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
         </div>
         <div class="iphone phone"><img src="screens/iphone-ready.webp" alt="" width="603" height="1311"></div>
         <div class="rphone phone" id="rphone">
@@ -435,27 +495,88 @@ body > footer a:hover { color: var(--fg); }
     </div>
   </section>
 
-  <section class="screen">
-    <h2>Wake up <span>to work done.</span></h2>
-    <p class="sub">Schedule a prompt. Each run is a task, ready when you are.</p>
-    <div class="visual">
-      <div class="week" aria-hidden="true"><span class="on">M</span><span class="on">T</span><span class="on">W</span><span class="on">T</span><span class="on">F</span><span>S</span><span>S</span></div>
-      <div class="clock" aria-hidden="true">06:00</div>
+  <section class="extras">
+    <h2>And much <span>more.</span></h2>
+    <div class="bento">
+      <article class="card wide">
+        <div class="ui sched" aria-hidden="true">
+          <div class="srow"><span class="sic">↻</span><div><b>Update dependencies</b><small>Weekdays at 06:00 · Storefront</small></div></div>
+          <div class="week"><span class="on">M</span><span class="on">T</span><span class="on">W</span><span class="on">T</span><span class="on">F</span><span>S</span><span>S</span></div>
+          <div class="clock">06:00</div>
+        </div>
+        <h3>Scheduled and recurring tasks</h3>
+        <p>Each run is a new task, ready when you wake up. It even wakes the Mac for it.</p>
+      </article>
+      <article class="card">
+        <div class="ui menu" aria-hidden="true">
+          <div class="mi on"><img src="screens/agent-claude.png" alt="">Claude Code<span>✓</span></div>
+          <div class="mi"><img src="screens/agent-codex.png" alt="">Codex</div>
+          <div class="sep"></div>
+          <div class="mi dim">Default model<span>›</span></div>
+        </div>
+        <h3>Claude Code or Codex</h3>
+        <p>Uses the agents you already have, per task.</p>
+      </article>
+      <article class="card">
+        <div class="ui lims" aria-hidden="true">
+          <div class="lim"><span>Session</span><i style="--v:.4"></i><b>40%</b></div>
+          <div class="lim"><span>Weekly</span><i style="--v:.32"></i><b>32%</b></div>
+          <small>Resets Thursday 9:00</small>
+        </div>
+        <h3>Know your limits</h3>
+        <p>See how much of your plan is left before you start.</p>
+      </article>
+      <article class="card">
+        <div class="ui chat" aria-hidden="true">
+          <div class="msg me">Run the tests every night and fix what breaks</div>
+          <div class="msg">Scheduled “Nightly tests”, daily at 2:00.</div>
+        </div>
+        <h3>A chat for every project</h3>
+        <p>Ask about the code, or have it plan and schedule tasks.</p>
+      </article>
+      <article class="card">
+        <div class="ui split" aria-hidden="true">
+          <span class="b">Merge</span><span class="b">Open pull request</span>
+        </div>
+        <h3>Merge or open a PR</h3>
+        <p>Merge locally, or push and review on GitHub.</p>
+      </article>
+      <article class="card">
+        <div class="ui menu" aria-hidden="true">
+          <div class="mi">Cursor<span>⇧⌘E</span></div>
+          <div class="mi">Ghostty<span>⇧⌘T</span></div>
+          <div class="mi">Finder<span>⇧⌘O</span></div>
+        </div>
+        <h3>Open in your tools</h3>
+        <p>Jump into any task’s folder in your editor or terminal.</p>
+      </article>
+      <article class="card">
+        <div class="ui url" aria-hidden="true"><span class="dot"></span>https://studio.tail.ts.net:5173</div>
+        <h3>Share on your tailnet</h3>
+        <p>Open a task’s preview from any of your devices.</p>
+      </article>
+      <article class="card span2">
+        <div class="ui mem" aria-hidden="true">
+          <div class="mrow"><span>Storefront</span><b>1.2 GB</b></div>
+          <div class="mrow kid"><span>Checkout redesign</span><b>640 MB</b></div>
+          <div class="mrow kid"><span>Faster page loads</span><b>410 MB</b></div>
+        </div>
+        <h3>See what uses memory</h3>
+        <p>Every agent and dev server, heaviest first, ready to stop.</p>
+      </article>
     </div>
-  </section>
-
-  <section class="screen">
-    <h2>Your agent. <span>Your call.</span></h2>
-    <p class="sub">Uses the coding agents you already have.</p>
-    <div class="agents visual"><span>Claude Code</span><span>Codex</span></div>
+    <ul class="tags" aria-label="Also">
+      <li>Slash commands</li><li>Diffs</li><li>Branch per task</li><li>Dev server per task</li><li>Installs dependencies</li><li>Runs iOS apps in Simulator</li><li>Keeps the Mac awake</li><li>Keyboard first</li><li>Auto updates</li><li>Free &amp; open source</li>
+    </ul>
   </section>
 
   <section class="screen cta">
     <h2>What’s first <span>on your list?</span></h2>
     <div class="actions">
       <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
+      <div class="soon"><span class="btn dashed" aria-disabled="true"><svg class="i"><use href="#i-phone"/></svg>Download for iPhone</span><small class="mono">Coming soon</small></div>
     </div>
-    <p class="mono">Free &amp; open source · macOS 26+ · iPhone app</p>
+    <p class="mono">Free &amp; open source · macOS 26+</p>
   </section>
 </main>
 
@@ -737,10 +858,11 @@ const BEATS = [
     S.projects = [...new Set([...S.projects, "portfolio"])]; S.project = "portfolio"; S.tasks = []; S.sel = null
     renderProjects("portfolio"); renderRows(); renderDetail()
     await wait(600)
-    // The photos come in from the right, as if dragged from Finder
-    cursor.style.transition = "none"; cursor.style.transform = `translate(${W - 90}px, 330px)`; void cursor.offsetWidth; cursor.style.transition = ""
+    // The photos come up from below the bottom of the screen, as if dragged from Finder
+    const mr = mac.getBoundingClientRect(), k = mr.width / W
+    cursor.style.transition = "none"; cursor.style.transform = `translate(${W * .62}px, ${(innerHeight - mr.top) / k + 60}px)`; void cursor.offsetWidth; cursor.style.transition = ""
     cursor.classList.add("on", "dragging")
-    await wait(350)
+    await wait(150)
     const f = $("nfield")
     await point(f, .45, .5)
     cursor.classList.remove("dragging")
@@ -855,7 +977,17 @@ async function run() {
   }
   speed = 1
   running = false
+  if (shown === target && target > 0) idle()
 }
+// When a step's animation ends, flash the down arrow; with no click or scroll for 5s, go on by itself
+let idleTimer = 0
+function idle() {
+  clearTimeout(idleTimer)
+  const n = $("next"); n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash")
+  idleTimer = setTimeout(() => go(1), 5000)
+}
+function stopIdle() { clearTimeout(idleTimer); $("next").classList.remove("flash") }
+for (const e of ["wheel", "touchstart", "keydown", "pointerdown"]) addEventListener(e, stopIdle, { passive: true })
 
 // ---------- Scroll: tilt in, then one beat per screen ----------
 const story = $("story"), scene = $("scene"), mac = $("mac"), heads = [...document.querySelectorAll(".head")]
@@ -881,7 +1013,7 @@ function onScroll() {
   const beat = Math.min(8, Math.max(0, Math.floor(p + .1)))
   heads.forEach((h, i) => h.classList.toggle("on", i === beat))
   $("ctrl").classList.toggle("on", beat > 0)
-  if (beat !== target) { target = beat; run() }
+  if (beat !== target) { stopIdle(); target = beat; run() }
 }
 
 // Step controls
