@@ -31,62 +31,52 @@ body { background: var(--bg); color: var(--fg); overflow-x: clip; }
 a { color: inherit; text-decoration: none; }
 img, svg { display: block; max-width: 100%; }
 img { height: auto; }
+ul { list-style: none; }
 .i { width: 1rem; height: 1rem; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .mono { font-family: var(--mono); font-size: .8125rem; color: var(--muted); }
 
-/* Big type: one idea per screen */
-h1, h2 { font-weight: 600; letter-spacing: -.05em; line-height: .95; text-wrap: balance; }
-h1, h2 { font-size: clamp(2.5rem, min(7vw, 9vh), 6rem); }
-h2 span, h1 .m { color: var(--muted); }
-.sub { max-width: 30rem; margin: 1.5rem auto 0; font-size: clamp(1.0625rem, 1.6vw, 1.3125rem); line-height: 1.4; color: var(--muted); text-wrap: balance; }
+h1, h2 { font-weight: 600; letter-spacing: -.045em; line-height: 1; text-wrap: balance; }
+h1 { font-size: clamp(2.25rem, min(5vw, 7vh), 4rem); }
+h2 { font-size: clamp(2rem, min(5vw, 7vh), 4rem); }
+.story h2 { font-size: clamp(1.75rem, min(3.4vw, 5.5vh), 3rem); }
+h2 span, h1 span { color: var(--muted); }
+.sub { max-width: 30rem; margin: 1.25rem auto 0; font-size: clamp(1.0625rem, 1.5vw, 1.25rem); line-height: 1.4; color: var(--muted); text-wrap: balance; }
 
-/* Buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; height: 3rem; padding: 0 1.5rem; border: 1px solid var(--line); border-radius: 99px; font-size: 15px; font-weight: 500; white-space: nowrap; transition: background .2s, border-color .2s, transform .2s var(--ease); }
 .btn:active { transform: scale(.97); }
 .btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
 .btn.primary { border-color: var(--fg); background: var(--fg); color: var(--bg); }
 .btn.primary:hover { background: #fff; }
-.btn:not(.primary):hover { border-color: #555; }
 .btn.sm { height: 2.25rem; padding: 0 1rem; font-size: 14px; }
 .btn .i { width: 18px; height: 18px; }
-.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; margin-top: 2.5rem; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; margin-top: 1.75rem; }
 
-/* Nav */
 header { position: fixed; inset: 0 0 auto; z-index: 50; background: rgba(0, 0, 0, .6); -webkit-backdrop-filter: saturate(1.8) blur(20px); backdrop-filter: saturate(1.8) blur(20px); }
 nav { display: flex; align-items: center; justify-content: space-between; max-width: 72rem; height: 3.5rem; margin-inline: auto; padding-inline: 1.5rem; }
 .brand { display: flex; align-items: center; gap: .5rem; font-weight: 600; letter-spacing: -.02em; }
 .brand img { width: 22px; height: 22px; }
 nav div { display: flex; align-items: center; gap: .25rem; }
 nav .gh { display: none; color: var(--muted); border-color: transparent; }
-nav .gh:hover { color: var(--fg); border-color: transparent; }
+nav .gh:hover { color: var(--fg); }
 
-/* The story: one Mac window and one iPhone stay pinned; each screen of scrolling changes the headline and what they show */
+/* The story: the Mac app, rebuilt in HTML, pinned while each screen of scrolling plays one beat */
 .story { position: relative; height: calc(var(--n) * 100vh); }
-.pin { position: sticky; top: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(2rem, 6vh, 4rem); height: 100vh; height: 100svh; padding: 5rem 1.5rem 2.5rem; overflow: hidden; text-align: center; isolation: isolate; }
-.pin > :not(.gitcmds) { position: relative; z-index: 1; }
-.heads { display: grid; width: 100%; }
-.head { grid-area: 1 / 1; align-self: end; opacity: 0; translate: 0 24px; filter: blur(8px); pointer-events: none; transition: opacity .45s, translate .8s var(--ease), filter .45s; }
-.story[data-step="0"] .head[data-i="0"], .story[data-step="1"] .head[data-i="1"], .story[data-step="2"] .head[data-i="2"], .story[data-step="3"] .head[data-i="3"] { opacity: 1; translate: 0 0; filter: none; pointer-events: auto; }
+.pin { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; height: 100svh; padding-top: 6.5rem; overflow: hidden; text-align: center; }
+.heads { position: relative; z-index: 2; display: grid; padding-inline: 1.5rem; }
+.head { grid-area: 1 / 1; opacity: 0; translate: 0 16px; filter: blur(6px); pointer-events: none; transition: opacity .4s, translate .7s var(--ease), filter .4s; }
+.head:not([data-i="0"]) { align-self: center; }
+.head.on { opacity: 1; translate: 0 0; filter: none; pointer-events: auto; }
+.head[data-i="0"] .actions { animation: rise .8s var(--ease) .9s both; }
 h1 .w { display: inline-block; white-space: nowrap; }
 h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(--i) * 25ms + 100ms) both; }
-.head[data-i="0"] .actions { margin-top: clamp(1.5rem, 3.5vh, 2.5rem); animation: rise .8s var(--ease) 1s both; }
-/* The app's own status marks, sized to the headline */
-.glyph { display: inline-grid; place-items: center; width: .6em; height: .6em; margin-right: .2em; vertical-align: .05em; border-radius: 50%; color: #fff; font-style: normal; }
-.glyph b { font-size: .45em; font-weight: 700; letter-spacing: 0; }
-.glyph .i { width: 62%; height: 62%; stroke-width: 3.5; }
-.glyph.working { border: .07em solid #3a3a3c; border-top-color: var(--fg); animation: spin 1s linear infinite; }
-.glyph.input { background: var(--blue); }
-.glyph.ready { background: var(--green); }
-
-/* The Mac screenshot carries its own window and shadow; the iPhone stands in front of its corner */
-.devices { position: relative; flex-shrink: 0; width: min(100% - 12rem, 72rem, (100svh - 19rem) * 1.594); margin-right: 4%; animation: shot-rise 1.4s var(--ease) .3s both; }
-.mac, .iphone-screen { display: grid; }
-.mac img, .iphone-screen img { grid-area: 1 / 1; width: 100%; opacity: 0; transition: opacity .6s; }
-.story[data-step="0"] img[data-i="0"], .story[data-step="1"] img[data-i="1"], .story[data-step="2"] img[data-i="2"], .story[data-step="3"] img[data-i="3"] { opacity: 1; }
-.iphone { position: absolute; right: -11%; bottom: -1%; width: 23%; padding: 1.4%; border-radius: 18% / 8.4%; background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 60px -10px #000; }
-.iphone-screen { overflow: hidden; border-radius: 15% / 6.9%; }
-.iphone-screen img { transition-delay: .1s; }
-
+.scene { position: relative; flex: 1; margin-top: clamp(1.5rem, 4.5vh, 3rem); perspective: 1800px; animation: rise 1.4s var(--ease) .3s both; }
+/* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene */
+.mac { position: absolute; top: 0; left: 50%; width: var(--w); height: var(--h); transform-origin: 50% 0;
+  transform: translateX(-50%) translateY(calc((1 - var(--t)) * var(--drop))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * (.84 + .16 * var(--t)))); }
+.phone { width: var(--pw); padding: calc(var(--pw) * .045); border-radius: calc(var(--pw) * .17); background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 70px -10px #000; }
+.phone img { border-radius: calc(var(--pw) * .13); }
+.iphone { position: absolute; z-index: 3; left: calc(50% + var(--mw) * .5 - var(--pw) * .7); top: calc(var(--drop) * .5); width: var(--pw);
+  opacity: calc(1 - var(--t) * 1.8); transform: translateY(calc(var(--t) * 240px)) rotate(calc(var(--t) * 8deg)); }
 .gitcmds { position: absolute; inset: 0; z-index: 0; pointer-events: none; animation: cmds-burst 1.2s cubic-bezier(.16, .84, .24, 1) .1s both; }
 .gitcmd { position: absolute; display: inline-flex; gap: .5rem; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #0d0d0e; font-family: var(--mono); font-size: 13px; line-height: 1; white-space: nowrap; color: #c7c7cc; transform: rotate(var(--r)); animation: cmd-float 7s ease-in-out infinite; }
 .gitcmd:nth-child(2n) { animation-duration: 9s; animation-delay: -3s; }
@@ -96,44 +86,146 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
   .gitcmd { animation: cmd-float 7s ease-in-out infinite, cmd-scatter linear both; animation-timeline: auto, scroll(root); animation-range: normal, 0 420px; }
 }
 
+/* ---- The Mac app, dark appearance, drawn at 1120 × 700 (640 wide on phones, without the sidebar) ---- */
+.win { position: absolute; inset: 0; display: grid; grid-template-columns: 220px 310px 1fr; grid-template-rows: 1fr 38px; overflow: hidden; border-radius: 14px; background: #1e1e1e; color: #e8e8e8; text-align: left;
+  font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 0 0 1px #000, 0 50px 120px -20px rgba(0, 0, 0, .9); }
+.win svg.g { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.win.compact { grid-template-columns: 250px 1fr; }
+.compact .sb { display: none; }
+.compact .bar { grid-column: 1 / 3; }
+.compact .bar > :nth-child(n+4) { display: none; }
+.compact .browser { left: 20px; width: 600px; }
+.sec { color: #9a9a9e; }
+.sb { grid-row: 1 / 3; display: flex; flex-direction: column; padding: 12px 10px; background: #2a2a2c; border-right: 1px solid #111; }
+.sb-top { display: flex; align-items: center; gap: 8px; height: 30px; padding-left: 6px; }
+.tl { width: 12px; height: 12px; border-radius: 50%; }
+.sb-top .tog { display: grid; place-items: center; width: 30px; height: 30px; margin-left: auto; border-radius: 50%; background: #3a3a3c; color: #c7c7cc; }
+.search { display: flex; align-items: center; gap: 6px; height: 28px; margin: 12px 0 10px; padding: 0 8px; border-radius: 8px; background: #3a3a3c; color: #8e8e93; }
+.projects li { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 8px; }
+.projects li.sel { background: #3d3d40; }
+.projects li svg.g { width: 18px; height: 18px; }
+.projects li b { display: block; font-weight: 500; }
+.projects li.sel b { font-weight: 600; }
+.projects li small { display: block; font-size: 11.5px; color: #8e8e93; }
+.projects li .n { margin-left: auto; font-size: 11px; color: #8e8e93; }
+.projects li.enter { animation: slide-in .5s var(--ease) both; }
+.newproj { display: flex; align-items: center; gap: 6px; margin-top: auto; padding: 6px 8px; border-radius: 6px; color: #9a9a9e; transition: background .15s; }
+.newproj.press { background: #3a3a3c; }
+.list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #111; background: #1f1f20; }
+.hbar { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px 0 16px; border-bottom: 1px solid #2c2c2e; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.caps { display: flex; align-items: center; gap: 12px; margin-left: auto; height: 30px; padding: 0 12px; border-radius: 99px; background: #3a3a3c; font-size: 12px; font-weight: 400; color: #d1d1d6; }
+.rows { flex: 1; min-height: 0; overflow: hidden; padding: 8px; }
+.rows h6 { padding: 12px 8px 4px; font-size: 11px; font-weight: 600; color: #6e6e73; }
+.rows .chat { display: flex; align-items: center; gap: 8px; padding: 6px 8px; color: #d1d1d6; }
+.row { position: relative; display: grid; grid-template-columns: 16px 1fr auto; column-gap: 8px; padding: 6px 8px 7px; border-radius: 8px; transition: background .2s; }
+.row.sel { background: #2f2f32; }
+.row .st { margin-top: 1px; }
+.row b { font-weight: 500; font-size: 13.5px; }
+.row .id { font-size: 11px; color: #6e6e73; }
+.row p { grid-column: 2 / 4; font-size: 11.5px; color: #8e8e93; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row.merged b { color: #8e8e93; }
+.row.enter { animation: slide-in .55s var(--ease) both; }
+.field { position: relative; min-height: 62px; margin: 10px; padding: 10px 40px 10px 14px; border: 1px solid #3a3a3c; border-radius: 12px; background: #232325; color: #e8e8e8; transition: border-color .2s; }
+.field .ph, .field:empty::before { content: attr(data-ph); color: #6e6e73; }
+.field.typing { border-color: #545458; }
+.field.typing::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; margin-left: 1px; vertical-align: -2px; background: var(--blue); animation: blink 1s steps(1) infinite; }
+.field .send { position: absolute; right: 10px; bottom: 9px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #3a3a3c; color: #8e8e93; }
+.field .send svg.g { width: 13px; height: 13px; }
+.field .send.go { background: var(--blue); color: #fff; }
+.detail { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.hbar .right { display: flex; align-items: center; gap: 14px; margin-left: auto; font-size: 12px; font-weight: 400; color: #9a9a9e; }
+.hbar .right > span { display: flex; align-items: center; gap: 6px; }
+.more { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #3a3a3c; color: #c7c7cc; }
+.dbody { flex: 1; min-height: 0; overflow: hidden; padding: 16px 18px; }
+.dbody > * + * { margin-top: 14px; }
+.dbody.fade { animation: fade .35s ease both; }
+.summary { font-size: 14.5px; line-height: 1.45; color: #ececec; }
+.btns { display: flex; gap: 8px; }
+.ub { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 7px; background: #3a3a3c; color: #f2f2f7; font-size: 13px; white-space: nowrap; transition: transform .12s, filter .12s, background .2s; }
+.ub.blue { background: var(--blue); color: #fff; }
+.ub .split { display: flex; align-items: center; height: 100%; margin-right: -11px; padding: 0 8px; border-left: 1px solid rgba(255, 255, 255, .18); }
+.ub .split svg.g { width: 12px; height: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.press { transform: scale(.95); filter: brightness(1.3); }
+.label { font-size: 12px; font-weight: 600; color: #8e8e93; }
+.box { border-radius: 9px; background: #2a2a2c; }
+.box li { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 6px 14px; }
+.box li + li { border-top: 1px solid #3a3a3c; }
+.box li .r { margin-left: auto; font-size: 11.5px; }
+.files { background: none; border: 1px solid #3a3a3c; }
+.plus { color: var(--green); }
+.minus { color: #ff453a; }
+.prompts li.enter { animation: drop-in .5s var(--ease) both; }
+.acts li { display: flex; align-items: center; gap: 8px; min-height: 26px; color: #8e8e93; }
+.acts li:last-child { color: #e8e8e8; animation: drop-in .4s var(--ease) both; }
+.ask { position: absolute; z-index: 2; inset: auto 10px 10px; padding: 14px 16px; border: 1.5px solid var(--blue); border-radius: 14px; background: #2a2a2c; box-shadow: 0 -20px 40px #1e1e1e; transform: translateY(130%); transition: transform .5s var(--ease); }
+.ask.on { transform: none; }
+.ask .q { margin-top: 4px; font-size: 14px; font-weight: 500; }
+.ask ul { margin-top: 10px; }
+.ask li { display: flex; align-items: center; gap: 9px; height: 28px; }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #636366; transition: border .2s, background .2s; }
+.ask li.pick .radio { border: 5px solid var(--blue); background: #fff; }
+.ask .ub { position: absolute; right: 14px; bottom: 14px; color: #8e8e93; }
+.ask .ub.go { background: var(--blue); color: #fff; }
+.bar { grid-column: 2 / 4; display: flex; align-items: center; gap: 22px; padding: 0 16px; border-top: 1px solid #2c2c2e; font-size: 12px; color: #c7c7cc; white-space: nowrap; }
+.bar > span { display: flex; align-items: center; gap: 6px; }
+.bar svg.g { width: 13px; height: 13px; }
+.bar svg.g:last-child { width: 10px; color: #8e8e93; }
+/* Status marks, as in the app */
+.st { display: grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0; }
+.st svg { width: 100%; height: 100%; }
+.rays { animation: spin .9s steps(8) infinite; }
+/* Overlays: notification, browser, cursor */
+.notif { position: absolute; z-index: 5; top: 14px; right: 14px; display: flex; gap: 10px; width: 330px; padding: 12px 14px; border-radius: 18px; background: rgba(58, 58, 60, .85); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 12px 40px rgba(0, 0, 0, .5); transform: translateX(120%); opacity: 0; transition: transform .6s var(--ease), opacity .3s; }
+.notif.on { transform: none; opacity: 1; }
+.notif img { width: 34px; height: 34px; }
+.notif b { display: block; font-size: 13px; }
+.notif p { font-size: 13px; color: #d1d1d6; }
+.notif small { position: absolute; top: 12px; right: 14px; font-size: 11px; color: #9a9a9e; }
+.browser { position: absolute; z-index: 4; left: 300px; top: 70px; width: 700px; height: 470px; overflow: hidden; border-radius: 12px; background: #111; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 40px 90px rgba(0, 0, 0, .7);
+  transform: scale(.6); opacity: 0; transition: transform .5s var(--ease), opacity .3s; pointer-events: none; }
+.browser.on { transform: none; opacity: 1; }
+.browser .chrome { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; background: #2c2c2e; }
+.browser .url { display: flex; align-items: center; gap: 6px; margin: 0 auto; padding: 4px 60px; border-radius: 7px; background: #1c1c1e; font-size: 12px; color: #c7c7cc; }
+.browser .url svg.g { width: 11px; height: 11px; }
+.page { position: relative; height: calc(100% - 40px); display: grid; place-items: center; background: #0b0b0c; }
+.page .photo { width: 62%; aspect-ratio: 4 / 3; border-radius: 4px; background: radial-gradient(120% 90% at 30% 20%, #f6c177 0%, #e07a5f 30%, #3d405b 70%, #1b1b2f 100%); box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+.page .cap { position: absolute; bottom: 22px; font-size: 13px; color: #c7c7cc; }
+.page .arrow { position: absolute; top: 50%; display: grid; place-items: center; width: 34px; height: 34px; margin-top: -17px; border-radius: 50%; background: rgba(255, 255, 255, .1); color: #fff; }
+.cursor { position: absolute; z-index: 6; left: 0; top: 0; width: 22px; height: 30px; pointer-events: none; opacity: 0; transition: transform .75s cubic-bezier(.65, 0, .35, 1), opacity .3s; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.cursor.on { opacity: 1; }
+.cursor svg { width: 100%; height: 100%; transition: transform .12s; transform-origin: 20% 15%; }
+.cursor.down svg { transform: scale(.82); }
+
 /* Full-screen sections */
 .screen { display: flex; flex-direction: column; justify-content: center; min-height: 100vh; min-height: 100svh; padding: 6rem 1.5rem; text-align: center; }
 @supports (animation-timeline: view()) {
   .screen h2, .screen .sub, .screen .visual { animation: rise linear both; animation-timeline: view(); animation-range: entry 10% cover 35%; }
 }
-
-.week { display: flex; justify-content: center; gap: clamp(.5rem, 2vw, 1rem); margin-top: 4rem; font-family: var(--mono); font-size: clamp(1rem, 2.5vw, 1.5rem); }
+.screen .phone { --pw: min(17rem, 60vw); margin: 3rem auto 0; }
+.week { display: flex; justify-content: center; gap: clamp(.5rem, 2vw, 1rem); margin-top: 3.5rem; font-family: var(--mono); font-size: clamp(1rem, 2.3vw, 1.375rem); }
 .week span { display: grid; place-items: center; width: 2.5em; height: 2.5em; border-radius: 50%; border: 1px solid var(--line); color: #555; }
 .week .on { border-color: var(--fg); background: var(--fg); color: var(--bg); }
-.clock { margin-top: 1.5rem; font-family: var(--mono); font-size: clamp(4rem, 14vw, 10rem); font-weight: 500; letter-spacing: -.06em; line-height: 1; background: linear-gradient(var(--fg), #3a3a3c); -webkit-background-clip: text; background-clip: text; color: transparent; }
-
+.clock { margin-top: 1.5rem; font-family: var(--mono); font-size: clamp(4rem, 12vw, 8.5rem); font-weight: 500; letter-spacing: -.06em; line-height: 1; background: linear-gradient(var(--fg), #3a3a3c); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .agents { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; margin-top: 3rem; }
 .agents span { padding: .75rem 1.5rem; border: 1px solid var(--line); border-radius: 99px; font-family: var(--mono); font-size: clamp(1rem, 2vw, 1.25rem); }
-
 .cta .mono { margin-top: 1.5rem; }
-footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
-footer a:hover { color: var(--fg); }
+body > footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
+body > footer a:hover { color: var(--fg); }
 
-@media (min-width: 640px) {
-  nav .gh { display: inline-flex; }
-}
-@media (max-width: 959px) {
-  .gitcmd:nth-child(n+3) { display: none; }
-  .gitcmd { padding: 7px 10px; font-size: 11px; }
-}
-@media (max-width: 639px) {
-  .gitcmds { display: none; }
-  /* Phones: the Mac runs off the left edge, the iPhone stands large in front */
-  .pin { justify-content: flex-start; padding-top: 7.5rem; }
-  .devices { width: 100%; margin: 0; }
-  .mac { width: 160%; margin-left: -70%; }
-  .iphone { right: 0; bottom: auto; top: 12%; width: 48%; }
-}
+@media (min-width: 640px) { nav .gh { display: inline-flex; } }
+@media (max-width: 1279px) { .gitcmd:nth-child(n+3) { display: none; } }
+@media (max-width: 959px) { .gitcmds { display: none; } }
 
 @keyframes spin { to { rotate: 360deg; } }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes slide-in { from { opacity: 0; translate: 40px 0; } }
+@keyframes drop-in { from { opacity: 0; translate: 0 -8px; } }
 @keyframes letter-rise { from { opacity: 0; transform: translateY(.4em); filter: blur(10px); } }
 @keyframes rise { from { opacity: 0; translate: 0 40px; } }
-@keyframes shot-rise { from { opacity: 0; translate: 0 120px; } }
 @keyframes cmds-burst { 0% { scale: .12; opacity: 0; } 25% { opacity: 1; } }
 @keyframes cmd-float { 50% { translate: 0 -8px; } }
 @keyframes cmd-scatter { to { transform: translate(var(--dx), var(--dy)) rotate(calc(var(--r) * 3)) scale(.8); opacity: 0; filter: blur(6px); } }
@@ -147,7 +239,6 @@ footer a:hover { color: var(--fg); }
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
 </svg>
 
 <header>
@@ -161,7 +252,7 @@ footer a:hover { color: var(--fg); }
 </header>
 
 <main>
-  <section class="story" id="story" data-step="0" style="--n:4">
+  <section class="story" id="story" style="--n:8">
     <div class="pin">
       <div class="gitcmds" aria-hidden="true">
         <span class="gitcmd" style="--dx:-220px;--dy:-160px;--r:-6deg;top:38%;left:2%"><b>$</b> git worktree add ../wt-101</span>
@@ -172,37 +263,65 @@ footer a:hover { color: var(--fg); }
         <span class="gitcmd" style="--dx:240px;--dy:170px;--r:7deg;top:72%;right:2%"><b>$</b> git branch -D shift/101</span>
       </div>
       <div class="heads">
-        <div class="head" data-i="0">
+        <div class="head on" data-i="0">
           <h1 aria-label="Agents as easy as a to-do list."><span class="w" aria-hidden="true"><span class="l" style="--i:0">A</span><span class="l" style="--i:1">g</span><span class="l" style="--i:2">e</span><span class="l" style="--i:3">n</span><span class="l" style="--i:4">t</span><span class="l" style="--i:5">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:6">a</span><span class="l" style="--i:7">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:8">e</span><span class="l" style="--i:9">a</span><span class="l" style="--i:10">s</span><span class="l" style="--i:11">y</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:12">a</span><span class="l" style="--i:13">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:14">a</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:15">t</span><span class="l" style="--i:16">o</span><span class="l" style="--i:17">-</span><span class="l" style="--i:18">d</span><span class="l" style="--i:19">o</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:20">l</span><span class="l" style="--i:21">i</span><span class="l" style="--i:22">s</span><span class="l" style="--i:23">t</span><span class="l" style="--i:24">.</span></span></h1>
           <div class="actions">
             <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
           </div>
         </div>
-        <div class="head" data-i="1"><h2><i class="glyph working" aria-hidden="true"></i>Run them <span>all at once.</span></h2></div>
-        <div class="head" data-i="2"><h2><i class="glyph input" aria-hidden="true"><b>?</b></i>It asks only <span>when it must.</span></h2></div>
-        <div class="head" data-i="3"><h2><i class="glyph ready" aria-hidden="true"><svg class="i"><use href="#i-check"/></svg></i>Merge from <span>anywhere.</span></h2></div>
+        <div class="head" data-i="1"><h2>Add a project. <span>List the work.</span></h2></div>
+        <div class="head" data-i="2"><h2>Every task <span>runs on its own.</span></h2></div>
+        <div class="head" data-i="3"><h2>Add to it <span>anytime.</span></h2></div>
+        <div class="head" data-i="4"><h2>It asks only <span>when it must.</span></h2></div>
+        <div class="head" data-i="5"><h2>Come back to <span>a checkmark.</span></h2></div>
+        <div class="head" data-i="6"><h2>Test it. <span>Merge it.</span></h2></div>
       </div>
-      <div class="devices">
-        <div class="mac">
-          <img data-i="0" src="screens/mac-ready.webp" alt="Shift on a Mac: Tighter board spacing, ready to test" width="2630" height="1650" fetchpriority="high">
-          <img data-i="1" src="screens/mac-working.webp" alt="Shift on a Mac: several Storefront tasks working at once" width="2630" height="1650">
-          <img data-i="2" src="screens/mac-needs.webp" alt="Shift on a Mac: Empty cart illustration, waiting for an answer" width="2630" height="1650">
-          <img data-i="3" src="screens/mac-merge.webp" alt="Shift on a Mac: Dark mode for product pages, ready to merge" width="2630" height="1650">
-        </div>
-        <div class="iphone">
-          <div class="iphone-screen">
-            <img data-i="0" src="screens/iphone-ready.webp" alt="The same task on iPhone" width="603" height="1311">
-            <img data-i="1" src="screens/iphone-working.webp" alt="The Storefront task list on iPhone" width="603" height="1311">
-            <img data-i="2" src="screens/iphone-needs.webp" alt="The agent's question on iPhone" width="603" height="1311">
-            <img data-i="3" src="screens/iphone-merge.webp" alt="Merge into main on iPhone" width="603" height="1311">
+      <div class="scene" id="scene" aria-hidden="true">
+        <div class="mac" id="mac">
+          <div class="win" id="win">
+            <aside class="sb">
+              <div class="sb-top"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="tog" data-ic="sidebar"></span></div>
+              <div class="search"><span data-ic="search"></span>Search</div>
+              <ul class="projects" id="projects"></ul>
+              <div class="newproj" id="newproj"><span data-ic="plus"></span>New Project</div>
+            </aside>
+            <section class="list">
+              <div class="hbar"><span id="pname"></span><span class="caps"><span data-ic="list"></span><span data-ic="globe"></span><span style="display:flex;align-items:center;gap:3px"><span data-ic="up"></span>2</span></span></div>
+              <div class="rows" id="rows"></div>
+              <div class="field" style="margin-top:0"><span class="ph">New task or ‘/’ for commands</span><span class="send" data-ic="up"></span></div>
+            </section>
+            <section class="detail">
+              <div class="hbar"><span id="dtitle"></span><span class="right" id="dstatus"></span><span class="more" data-ic="dots"></span></div>
+              <div class="dbody" id="dbody"></div>
+              <div class="field" id="dfield" data-ph="Ask for changes…"></div>
+              <div class="ask" id="ask">
+                <span class="sec" style="font-size:11.5px">The agent needs a decision</span>
+                <div class="q">Should the lightbox show each photo’s caption?</div>
+                <ul><li id="opt"><i class="radio"></i>Show captions</li><li><i class="radio"></i>No captions</li><li><i class="radio"></i>Something else</li></ul>
+                <span class="ub" id="asksend">Send</span>
+              </div>
+            </section>
+            <div class="bar"><span><span data-ic="folder"></span><span id="path"></span><span data-ic="chev"></span></span><span><span data-ic="branch"></span>main<span data-ic="chev"></span></span><span><span data-ic="claude"></span>Claude Code<span data-ic="chev"></span></span><span><span data-ic="cpu"></span>Default model<span data-ic="chev"></span></span><span><span data-ic="shield"></span>Bypass permissions<span data-ic="chev"></span></span></div>
+            <div class="notif" id="notif"><img src="icon.png" alt=""><div><b>Portfolio</b><p>Gallery lightbox is ready for review.</p></div><small>now</small></div>
+            <div class="browser" id="browser">
+              <div class="chrome"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="url"><span data-ic="lock"></span>localhost:3201</span></div>
+              <div class="page"><span class="arrow" style="left:22px" data-ic="left"></span><div class="photo"></div><span class="arrow" style="right:22px" data-ic="right"></span><span class="cap">Morning light, Lisbon · 3 of 12</span></div>
+            </div>
+            <div class="cursor" id="cursor"><svg viewBox="0 0 22 30"><path d="M2 2v22l5.5-5.2 3.6 8.4 3.6-1.6-3.5-8.2H18Z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
           </div>
         </div>
+        <div class="iphone phone"><img src="screens/iphone-ready.webp" alt="" width="603" height="1311"></div>
       </div>
     </div>
   </section>
 
   <section class="screen">
-    <h2>Wake up<br><span>to work done.</span></h2>
+    <h2>Answer it <span>from your iPhone.</span></h2>
+    <div class="phone visual"><img src="screens/iphone-needs.webp" alt="Shift on iPhone, showing a task that asks a question" width="603" height="1311" loading="lazy"></div>
+  </section>
+
+  <section class="screen">
+    <h2>Wake up <span>to work done.</span></h2>
     <p class="sub">Schedule a prompt. Each run is a task, ready when you are.</p>
     <div class="visual">
       <div class="week" aria-hidden="true"><span class="on">M</span><span class="on">T</span><span class="on">W</span><span class="on">T</span><span class="on">F</span><span>S</span><span>S</span></div>
@@ -211,13 +330,13 @@ footer a:hover { color: var(--fg); }
   </section>
 
   <section class="screen">
-    <h2>Your agent.<br><span>Your call.</span></h2>
+    <h2>Your agent. <span>Your call.</span></h2>
     <p class="sub">Uses the coding agents you already have.</p>
     <div class="agents visual"><span>Claude Code</span><span>Codex</span></div>
   </section>
 
   <section class="screen cta">
-    <h2>What’s first<br><span>on your list?</span></h2>
+    <h2>What’s first <span>on your list?</span></h2>
     <div class="actions">
       <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
     </div>
@@ -231,16 +350,328 @@ footer a:hover { color: var(--fg); }
 </footer>
 
 <script>
-// Each screen of scrolling through the story is one step
-const story = document.getElementById("story")
-const steps = +story.style.getPropertyValue("--n")
-function step() {
-  const at = Math.round(-story.getBoundingClientRect().top / innerHeight)
-  story.dataset.step = Math.min(steps - 1, Math.max(0, at))
+// ---------- Icons (Lucide paths) and status marks ----------
+const ICONS = {
+  sidebar: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  up: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  list: '<circle cx="12" cy="12" r="10"/><path d="M8 10h8"/><path d="M8 14h5"/>',
+  dots: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  branch: '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  claude: '<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/>',
+  cpu: '<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  chat: '<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>',
+  ext: '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
+  code: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  doc: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  stop: '<rect width="12" height="12" x="6" y="6" rx="1" fill="currentColor"/>',
+  lock: '<rect width="16" height="10" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+  merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
 }
-addEventListener("scroll", step, { passive: true })
-addEventListener("resize", step)
-step()
+const svg = (paths, style = "") => `<svg class="g" viewBox="0 0 24 24"${style && ` style="${style}"`}>${paths}</svg>`
+const ic = (name, style) => svg(ICONS[name], style)
+document.querySelectorAll("[data-ic]").forEach((el) => (el.innerHTML = ic(el.dataset.ic)))
+
+const rays = (c = "#c7c7cc") => `<svg class="rays" viewBox="0 0 16 16">${[...Array(8)].map((_, i) =>
+  `<path d="M8 1.6v3.1" stroke="${c}" stroke-width="1.6" stroke-linecap="round" opacity="${(0.25 + i * 0.1).toFixed(2)}" transform="rotate(${i * 45} 8 8)"/>`).join("")}</svg>`
+const check = (bg, fg) => `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="${bg}"/><path d="m4.6 8.3 2.2 2.2 4.6-4.9" stroke="${fg}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+const MARK = {
+  working: rays(),
+  input: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#0a84ff"/><text x="8" y="12" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="-apple-system,sans-serif">?</text></svg>',
+  ready: check("#30d158", "#fff"),
+  merged: check("#8e8e93", "#1f1f20"),
+  done: '<svg viewBox="0 0 16 16"><path d="m3.5 8.3 2.8 2.8 6-6.3" stroke="#6e6e73" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+}
+const mark = (s) => `<span class="st">${MARK[s]}</span>`
+
+// ---------- Data (Storefront matches the app's demo data, so the iPhone shows the same task) ----------
+const PROJECTS = {
+  storefront: { name: "Storefront", sub: "5 of 9 tasks running", n: 4, color: "#30d158", path: "~/Sites/storefront",
+    icon: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>' },
+  api: { name: "Checkout API", sub: "2 of 3 tasks running", n: 1, color: "#0a84ff", icon: '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>' },
+  admin: { name: "Admin", sub: "2 of 3 tasks running", n: 1, color: "#ff9f0a", icon: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>' },
+  docs: { name: "Docs", sub: "2 of 2 tasks running", n: 0, color: "#ff375f", icon: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>' },
+  portfolio: { name: "Portfolio", sub: "4 tasks running", n: 0, color: "#64d2ff", path: "~/Sites/portfolio",
+    icon: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>' },
+}
+const TASKS = {
+  101: { title: "Tighter board spacing", desc: "Tightens the space between board items and makes the gap one variable.",
+    summary: "Board items now sit 8px apart (12px on phones), set by a single --board-gap variable that is documented in docs/spacing.md.",
+    files: [["code", "src/styles/board.css", "+4", "−1"], ["code", "src/components/BoardItem.tsx", "+2", "−2"], ["doc", "docs/spacing.md", "Added"]], total: ["+9", "−3"],
+    prompts: ["Add a short note to the docs explaining the variable.", "8px is right on desktop, but keep 12px on phones.", "Board items feel too far apart. Tighten the gap and make it a single variable."] },
+  102: { title: "Dark mode for product pages", desc: "Product pages now follow the system's light or dark appearance." },
+  108: { title: "Gift card balance", desc: "Shows a gift card's remaining balance at checkout." },
+  103: { title: "Wishlist button", desc: "Lets shoppers save any product to their wishlist from the grid." },
+  107: { title: "Empty cart illustration", desc: "Replaces the plain empty cart message with an illustration and suggestions." },
+  104: { title: "Faster hero images", desc: "Serves smaller, responsive hero images with a blurred placeholder." },
+  105: { title: "Saved addresses at checkout", desc: "Lets returning customers pick a saved address at checkout." },
+  201: { title: "Gallery lightbox", desc: "Opens project photos full screen, one at a time.",
+    summary: "Photos in the gallery open full screen with their captions. Arrow keys move between them and Esc closes the lightbox.",
+    files: [["code", "src/components/Lightbox.tsx", "Added"], ["code", "src/components/Gallery.tsx", "+14", "−3"], ["code", "src/styles/lightbox.css", "Added"]], total: ["+92", "−3"],
+    prompts: ["Open gallery photos full screen when clicked."] },
+  202: { title: "Contact form", desc: "Lets visitors send a message without leaving the site." },
+  203: { title: "Case study pages", desc: "Gives each project its own page with the full story." },
+  204: { title: "Faster page loads", desc: "Serves smaller images and preloads the fonts." },
+}
+const SECOND = "Let arrow keys move between photos."
+const ACTIONS = ["Reading Gallery.tsx", "Creating Lightbox.tsx", "Editing Gallery.tsx", "Writing tests for Lightbox", "Adding keyboard navigation", "Adding captions", "Running the tests"]
+
+// The state after each beat. Beats only animate one step forward; anything else jumps straight to the state.
+function stateAfter(beat) {
+  if (beat === 0) return {
+    projects: ["storefront", "api", "admin", "docs"], project: "storefront", sel: 101, prompts: TASKS[101].prompts,
+    tasks: [[101, "ready"], [102, "ready"], [108, "ready"], [103, "working"], [107, "input"], [104, "working"], [105, "working"]],
+  }
+  const s = {
+    projects: ["storefront", "api", "admin", "docs", "portfolio"], project: "portfolio", sel: 201, prompts: TASKS[201].prompts,
+    tasks: [[201, "working"], [202, "working"], [203, "working"], [204, "working"]], acts: 1,
+  }
+  if (beat >= 2) s.acts = 4
+  if (beat >= 3) { s.acts = 5; s.prompts = [SECOND, ...s.prompts] }
+  if (beat >= 4) s.acts = 6
+  if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true }
+  if (beat >= 6) { s.tasks[0][1] = "merged"; s.notif = false }
+  return s
+}
+
+// ---------- Rendering ----------
+const $ = (id) => document.getElementById(id)
+const win = $("win"), rowsEl = $("rows"), dbody = $("dbody")
+let S, W = 1120, rowEls = new Map()
+const status = (id) => S.tasks.find(([t]) => t === id)?.[1]
+const scale = () => win.getBoundingClientRect().width / W || 1
+const SECTIONS = [["Review", ["ready"]], ["Tasks", ["working", "input"]], ["Recently Merged", ["merged"]]]
+
+function renderProjects(enter) {
+  $("projects").innerHTML = S.projects.map((k) => {
+    const p = PROJECTS[k]
+    return `<li class="${k === S.project ? "sel" : ""}${k === enter ? " enter" : ""}">${svg(p.icon, `color:${p.color}`)}<span><b>${p.name}</b><small>${p.sub}</small></span><span class="n">${p.n || ""}</span></li>`
+  }).join("")
+  $("pname").textContent = PROJECTS[S.project].name
+  $("path").textContent = PROJECTS[S.project].path
+}
+
+// Rows keep their element across renders, so a task moving between sections can glide there (FLIP)
+function renderRows(enter = []) {
+  const before = new Map([...rowEls].map(([id, el]) => [id, el.getBoundingClientRect().top]))
+  const out = [Object.assign(document.createElement("div"), { className: "chat", innerHTML: `${ic("chat", "color:#0a84ff")}Chat` })]
+  const next = new Map()
+  for (const [name, kinds] of SECTIONS) {
+    const ids = S.tasks.filter(([, st]) => kinds.includes(st)).map(([id]) => id)
+    if (!ids.length) continue
+    out.push(Object.assign(document.createElement("h6"), { textContent: name }))
+    for (const id of ids) {
+      const el = rowEls.get(id) || document.createElement("div"), st = status(id), i = enter.indexOf(id)
+      el.className = `row ${st}${id === S.sel ? " sel" : ""}${i >= 0 ? " enter" : ""}`
+      el.style.animationDelay = i >= 0 ? `${i * 170}ms` : ""
+      el.innerHTML = `${mark(st)}<b>${TASKS[id].title}</b><span class="id">${id}</span><p>${TASKS[id].desc}</p>`
+      next.set(id, el); out.push(el)
+    }
+  }
+  rowEls = next
+  rowsEl.replaceChildren(...out)
+  const k = scale()
+  for (const [id, top] of before) {
+    const el = rowEls.get(id), dy = el && (top - el.getBoundingClientRect().top) / k
+    if (Math.abs(dy) > 1) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 700, easing: "cubic-bezier(.65,0,.35,1)" })
+  }
+}
+
+const HEAD = {
+  working: () => "Working · 2m",
+  input: () => `${mark("input")}Needs Input`,
+  ready: () => `${mark("ready")}Ready to Test`,
+  merged: () => `${mark("merged")}Merged`,
+}
+const files = (t) => `<div style="display:flex;align-items:center"><span class="label">${t.files.length} files changed · <span class="plus">${t.total[0]}</span> <span class="minus">${t.total[1]}</span></span><span class="ub" style="margin-left:auto;height:26px">View diff</span></div>
+  <ul class="box files">${t.files.map(([k, f, a, d]) => `<li>${ic(k, "color:#9a9a9e")}${f}<span class="r">${d ? `<span class="plus">${a}</span> <span class="minus">${d}</span>` : `<span class="plus">${a}</span>`}</span></li>`).join("")}</ul>`
+const promptsBox = (list) => `<div class="label">Prompt history</div><ul class="box prompts" id="prompts">${list.map((p) => `<li>${p}</li>`).join("")}</ul>`
+const actsList = (n) => `<ul class="acts" id="acts">${ACTIONS.slice(Math.max(0, n - 4), n).map((a, i, all) =>
+  i === all.length - 1 ? `<li><span class="st">${rays()}</span>${a}…</li>` : `<li><span class="st">${MARK.done}</span>${a}</li>`).join("")}</ul>`
+const server = (id) => `<span class="ub" id="server"><i class="dot"></i>localhost:${3000 + id}${ic("ext", "width:12px;height:12px")}<span class="split">${ic("chev")}</span></span>`
+
+function detailHTML() {
+  const id = S.sel, t = TASKS[id], st = status(id)
+  if (st === "ready") return `<p class="summary">${t.summary}</p>
+    <div class="btns"><span class="ub blue" id="merge">Merge into main<span class="split">${ic("chev")}</span></span>${server(id)}</div>
+    ${files(t)}${promptsBox(S.prompts)}`
+  if (st === "merged") return `<p class="summary">${t.summary}</p><p class="sec" style="display:flex;align-items:center;gap:6px">${ic("merge")}Merged into main. Its branch, worktree and server are cleaned up.</p>${files(t)}${promptsBox(S.prompts)}`
+  return `<p class="summary">${t.desc}</p>
+    <div class="btns"><span class="ub">${ic("stop", "width:11px;height:11px")}Stop Task</span>${server(id)}</div>
+    ${actsList(S.acts)}${promptsBox(S.prompts)}`
+}
+function renderDetail(fade = true) {
+  const st = status(S.sel)
+  $("dtitle").textContent = TASKS[S.sel].title
+  $("dstatus").innerHTML = `<span>${HEAD[st]()}</span><span>main ← shift/${S.sel}</span>`
+  dbody.innerHTML = detailHTML()
+  dbody.classList.remove("fade"); void dbody.offsetWidth; dbody.classList.toggle("fade", fade)
+  $("dfield").dataset.ph = st === "working" || st === "input" ? "Add instructions…" : "Ask for changes…"
+  $("ask").classList.toggle("on", st === "input")
+}
+
+function renderAll() {
+  win.classList.toggle("compact", W < 1120)
+  renderProjects()
+  rowEls = new Map()
+  renderRows()
+  renderDetail(false)
+  $("notif").classList.toggle("on", !!S.notif)
+  $("browser").classList.remove("on")
+  $("cursor").classList.remove("on", "down")
+  $("dfield").textContent = ""
+  $("dfield").className = "field"
+  $("opt").classList.remove("pick")
+  $("asksend").classList.remove("go")
+}
+
+// ---------- Choreography ----------
+let shown = 0, target = 0, running = false, speed = 1
+const ABORT = Symbol()
+const wait = (ms) => new Promise((r) => setTimeout(r, ms / speed)).then(() => { if (target <= shown) throw ABORT })
+const cursor = $("cursor")
+// Moves the pointer over an element of the window, in the window's own coordinates
+async function point(el, fx = .5, fy = .55) {
+  const w = win.getBoundingClientRect(), r = el.getBoundingClientRect(), k = scale()
+  cursor.style.transitionDuration = `${.75 / speed}s`
+  cursor.classList.add("on")
+  cursor.style.transform = `translate(${(r.left - w.left + r.width * fx) / k}px, ${(r.top - w.top + r.height * fy) / k}px)`
+  await wait(850)
+}
+async function click(el) {
+  cursor.classList.add("down"); el.classList.add("press")
+  await wait(150)
+  cursor.classList.remove("down"); el.classList.remove("press")
+  await wait(150)
+}
+async function type(el, text) {
+  el.classList.add("typing")
+  for (const ch of text) { el.textContent += ch; await wait(36) }
+  el.classList.remove("typing")
+  el.insertAdjacentHTML("beforeend", `<span class="send go">${ic("up")}</span>`)
+}
+function addAct() { S.acts++; $("acts").outerHTML = actsList(S.acts) }
+
+const BEATS = [
+  null,
+  // 1. A new project is added, its tasks slide in one by one, then the first one is opened
+  async () => {
+    const add = W < 1120 ? null : $("newproj")
+    if (add) { cursor.style.transform = `translate(${W / 2}px, 560px)`; await point(add, .3); await click(add) }
+    S.projects = [...new Set([...S.projects, "portfolio"])]; S.project = "portfolio"; S.tasks = []
+    renderProjects("portfolio"); renderRows()
+    $("dtitle").textContent = ""; $("dstatus").innerHTML = ""; dbody.innerHTML = ""
+    await wait(450)
+    S.tasks = stateAfter(1).tasks; S.sel = null
+    renderRows([201, 202, 203, 204])
+    await wait(1300)
+    await point(rowEls.get(201), .35); await click(rowEls.get(201))
+    S.sel = 201; S.prompts = TASKS[201].prompts; S.acts = 1
+    renderRows(); renderDetail()
+    cursor.classList.remove("on")
+  },
+  // 2. It works: actions show up one after another
+  async () => { for (let i = 0; i < 3; i++) { await wait(800); addAct() } },
+  // 3. A second prompt is typed and sent while it works
+  async () => {
+    const f = $("dfield")
+    await point(f, .3, .4); await click(f)
+    await type(f, SECOND)
+    const send = f.querySelector(".send")
+    await point(send); await click(send)
+    f.textContent = ""
+    S.prompts = [SECOND, ...TASKS[201].prompts]
+    $("prompts").insertAdjacentHTML("afterbegin", `<li class="enter">${SECOND}</li>`)
+    cursor.classList.remove("on")
+    await wait(500); addAct()
+  },
+  // 4. It asks; the cursor picks an answer and sends it; work goes on
+  async () => {
+    await wait(300)
+    S.tasks[0][1] = "input"
+    renderRows(); renderDetail(false)
+    await wait(1000)
+    await point($("opt"), .25); await click($("opt"))
+    $("opt").classList.add("pick"); $("asksend").classList.add("go")
+    await point($("asksend")); await click($("asksend"))
+    S.tasks[0][1] = "working"
+    renderRows(); renderDetail(false)
+    $("opt").classList.remove("pick"); $("asksend").classList.remove("go")
+    cursor.classList.remove("on")
+    await wait(500); addAct()
+  },
+  // 5. Done: it moves to Review and a notification says so
+  async () => {
+    await wait(500)
+    S.tasks[0][1] = "ready"
+    renderRows(); renderDetail()
+    await wait(800)
+    S.notif = true; $("notif").classList.add("on")
+  },
+  // 6. Open the preview, close it, merge
+  async () => {
+    S.notif = false; $("notif").classList.remove("on")
+    await point($("server"), .45); await click($("server"))
+    $("browser").classList.add("on"); cursor.classList.remove("on")
+    await wait(2200)
+    $("browser").classList.remove("on")
+    await wait(400)
+    await point($("merge"), .4); await click($("merge"))
+    $("merge").innerHTML = `<span class="st" style="width:13px;height:13px">${rays("#fff")}</span>Merging…`
+    await wait(900)
+    S.tasks[0][1] = "merged"
+    renderRows(); renderDetail()
+    cursor.classList.remove("on")
+  },
+]
+
+async function run() {
+  if (running) return
+  running = true
+  while (shown !== target) {
+    const next = shown + 1
+    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; break }
+    speed = target > next ? 2.5 : 1
+    try { await BEATS[next](); shown = next }
+    catch (e) { if (e !== ABORT) throw e; S = stateAfter(target); renderAll(); shown = target }
+  }
+  speed = 1
+  running = false
+}
+
+// ---------- Scroll: tilt in, then one beat per screen ----------
+const story = $("story"), scene = $("scene"), mac = $("mac"), heads = [...document.querySelectorAll(".head")]
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
+function layout() {
+  const w = scene.clientWidth, h = scene.clientHeight, nextW = w < 760 ? 640 : 1120, H = nextW < 1120 ? 940 : 700
+  if (nextW !== W) { W = nextW; if (!running) { S = stateAfter(shown); renderAll() } }
+  const fit = Math.min((w - 40) / W, (h - 40) / H, .8)
+  mac.style.setProperty("--w", `${W}px`); mac.style.setProperty("--h", `${H}px`)
+  scene.style.setProperty("--fit", fit)
+  scene.style.setProperty("--drop", `${h * .4}px`)
+  scene.style.setProperty("--mw", `${W * fit * .84}px`)
+  scene.style.setProperty("--pw", `${Math.round(Math.max(130, Math.min(260, W * fit * .28, h * .5)))}px`)
+  onScroll()
+}
+function onScroll() {
+  const p = -story.getBoundingClientRect().top / innerHeight
+  scene.style.setProperty("--t", reduced ? 1 : Math.min(1, Math.max(0, p)).toFixed(3))
+  const beat = Math.min(6, Math.max(0, Math.floor(p + .1)))
+  heads.forEach((h, i) => h.classList.toggle("on", i === beat))
+  if (beat !== target) { target = beat; run() }
+}
+S = stateAfter(0)
+addEventListener("scroll", onScroll, { passive: true })
+addEventListener("resize", layout)
+layout()
+renderAll()
 </script>
 </body>
 </html>
