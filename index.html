@@ -71,6 +71,7 @@ nav .gh:hover { color: var(--fg); }
 .head[data-i="0"] { opacity: max(0, 1 - var(--t, 0) * 2.5); translate: 0 calc(var(--t, 0) * -160px); filter: none; transition: none; }
 .head[data-i="0"] .actions { margin-top: 2.75rem; animation: rise .8s var(--ease) .9s both; }
 h1 .w { display: inline-block; white-space: nowrap; }
+h1 .w:first-child, h1 .w:first-child .l { color: var(--fg); }
 h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(--i) * 25ms + 100ms) both; }
 .scene { position: relative; flex: 1; margin-top: clamp(1.5rem, 4.5vh, 3rem); perspective: 1800px; animation: rise 1.4s var(--ease) .3s both; }
 /* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene */
@@ -360,12 +361,16 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .mrow:first-child { background: #1c1c1e; font-weight: 500; }
 .mrow.kid { padding-left: 22px; color: var(--muted); }
 .mrow b { font-weight: 400; }
-.tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 48rem; margin: 2.5rem auto 0; list-style: none; padding: 0; }
-.tags li { padding: .4rem .9rem; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: 14px; }
+.card.full { grid-column: 1 / -1; }
+/* Twelve tags: 4, 3 or 2 to a row, every row full */
+.tags { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.tags li { padding: .6rem .75rem; border-radius: 10px; background: #1c1c1e; color: #c7c7cc; font-size: 14px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { .tags { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .tags { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tags li { display: grid; place-items: center; font-size: 13px; line-height: 1.25; padding-inline: .5rem; white-space: normal; } }
 @media (max-width: 900px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .card.span2 { grid-column: span 2; } }
 @media (max-width: 600px) { .bento { grid-template-columns: minmax(0, 1fr); } .card.wide, .card.span2 { grid-column: auto; grid-row: auto; } .extras { padding-top: 5rem; } }
 @supports (animation-timeline: view()) {
-  .extras h2, .card, .tags { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
+  .extras h2, .card { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
 }
 /* Closing call to action */
 .actions:has(.soon) { align-items: flex-start; gap: 12px; }
@@ -373,7 +378,8 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .actions .soon small { margin: 0; font-size: 12px; }
 .btn.dashed { border: 1.5px dashed #48484a; color: var(--muted); cursor: default; }
 .btn.dashed:active { transform: none; }
-.cta .mono { margin-top: 1.5rem; }
+.cta .actions { margin-top: 2.75rem; }
+.cta > .mono { margin-top: 2rem; }
 body > footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
 body > footer a:hover { color: var(--fg); }
 
@@ -568,10 +574,16 @@ body > footer a:hover { color: var(--fg); }
         <h3>See what uses memory</h3>
         <p>Every agent and dev server, heaviest first, ready to stop.</p>
       </article>
+      <article class="card full">
+        <ul class="tags" aria-label="Also">
+          <li>Branch per task</li><li>Dev server per task</li><li>Slash commands</li><li>Keyboard first</li>
+          <li>Installs dependencies</li><li>Runs iOS apps in Simulator</li><li>Server logs per task</li><li>Diffs</li>
+          <li>Finds project icons</li><li>Keeps the Mac awake</li><li>Auto updates</li><li>Free &amp; open source</li>
+        </ul>
+        <h3>And all the details</h3>
+        <p>Small things that keep each task out of your way.</p>
+      </article>
     </div>
-    <ul class="tags" aria-label="Also">
-      <li>Slash commands</li><li>Diffs</li><li>Branch per task</li><li>Dev server per task</li><li>Installs dependencies</li><li>Runs iOS apps in Simulator</li><li>Keeps the Mac awake</li><li>Keyboard first</li><li>Auto updates</li><li>Free &amp; open source</li>
-    </ul>
   </section>
 
   <section class="screen cta">
