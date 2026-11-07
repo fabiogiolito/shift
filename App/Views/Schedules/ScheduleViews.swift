@@ -290,13 +290,6 @@ struct ScheduleForm: View {
                         }
                     }
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
-                Picker("When done", selection: $draft.finish) {
-                    ForEach(Schedule.FinishAction.allCases, id: \.self) {
-                        Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
-                    }
-                }
-                .fixedSize()
-                .padding(.top, 4)
             }
             // When it runs, set apart on a light gray panel.
             timing
@@ -358,6 +351,15 @@ struct ScheduleForm: View {
     @ViewBuilder private var timing: some View {
         let rule = draft.timing.repeat
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 14) {
+            row("When done") {
+                Picker("When done", selection: $draft.finish) {
+                    ForEach(Schedule.FinishAction.allCases, id: \.self) {
+                        Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
             row("Starts") { DateField(date: $draft.timing.start, part: .dateTime) }
             row("Repeat") {
                 Picker("Repeat", selection: frequency) {
