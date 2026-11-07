@@ -163,7 +163,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .ask.on { transform: none; }
 .ask .q { margin-top: 4px; font-size: 14px; font-weight: 500; }
 .ask ul { margin-top: 10px; }
-.ask li { display: flex; align-items: center; gap: 9px; height: 28px; }
+.ask li { transform-origin: left center; display: flex; align-items: center; gap: 9px; height: 28px; }
 .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #636366; transition: border .2s, background .2s; }
 .ask li.pick .radio { border: 5px solid var(--blue); background: #fff; }
 .ask .ub { position: absolute; right: 14px; bottom: 14px; color: #8e8e93; }
@@ -252,7 +252,7 @@ body > footer a:hover { color: var(--fg); }
 </header>
 
 <main>
-  <section class="story" id="story" style="--n:8">
+  <section class="story" id="story" style="--n:9">
     <div class="pin">
       <div class="gitcmds" aria-hidden="true">
         <span class="gitcmd" style="--dx:-220px;--dy:-160px;--r:-6deg;top:38%;left:2%"><b>$</b> git worktree add ../wt-101</span>
@@ -264,7 +264,7 @@ body > footer a:hover { color: var(--fg); }
       </div>
       <div class="heads">
         <div class="head on" data-i="0">
-          <h1 aria-label="Agents as easy as a to-do list."><span class="w" aria-hidden="true"><span class="l" style="--i:0">A</span><span class="l" style="--i:1">g</span><span class="l" style="--i:2">e</span><span class="l" style="--i:3">n</span><span class="l" style="--i:4">t</span><span class="l" style="--i:5">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:6">a</span><span class="l" style="--i:7">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:8">e</span><span class="l" style="--i:9">a</span><span class="l" style="--i:10">s</span><span class="l" style="--i:11">y</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:12">a</span><span class="l" style="--i:13">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:14">a</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:15">t</span><span class="l" style="--i:16">o</span><span class="l" style="--i:17">-</span><span class="l" style="--i:18">d</span><span class="l" style="--i:19">o</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:20">l</span><span class="l" style="--i:21">i</span><span class="l" style="--i:22">s</span><span class="l" style="--i:23">t</span><span class="l" style="--i:24">.</span></span></h1>
+          <h1 aria-label="Agents as easy as a to-do list."><span class="w" aria-hidden="true"><span class="l" style="--i:0">A</span><span class="l" style="--i:1">g</span><span class="l" style="--i:2">e</span><span class="l" style="--i:3">n</span><span class="l" style="--i:4">t</span><span class="l" style="--i:5">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:6">a</span><span class="l" style="--i:7">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:8">e</span><span class="l" style="--i:9">a</span><span class="l" style="--i:10">s</span><span class="l" style="--i:11">y</span></span><br><span class="w" aria-hidden="true"><span class="l" style="--i:12">a</span><span class="l" style="--i:13">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:14">a</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:15">t</span><span class="l" style="--i:16">o</span><span class="l" style="--i:17">-</span><span class="l" style="--i:18">d</span><span class="l" style="--i:19">o</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:20">l</span><span class="l" style="--i:21">i</span><span class="l" style="--i:22">s</span><span class="l" style="--i:23">t</span><span class="l" style="--i:24">.</span></span></h1>
           <div class="actions">
             <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
           </div>
@@ -274,7 +274,8 @@ body > footer a:hover { color: var(--fg); }
         <div class="head" data-i="3"><h2>Add to it <span>anytime.</span></h2></div>
         <div class="head" data-i="4"><h2>It asks only <span>when it must.</span></h2></div>
         <div class="head" data-i="5"><h2>Come back to <span>a checkmark.</span></h2></div>
-        <div class="head" data-i="6"><h2>Test it. <span>Merge it.</span></h2></div>
+        <div class="head" data-i="6"><h2>Test it <span>in one click.</span></h2></div>
+        <div class="head" data-i="7"><h2>Then <span>merge it.</span></h2></div>
       </div>
       <div class="scene" id="scene" aria-hidden="true">
         <div class="mac" id="mac">
@@ -436,7 +437,8 @@ function stateAfter(beat) {
   if (beat >= 3) { s.acts = 5; s.prompts = [SECOND, ...s.prompts] }
   if (beat >= 4) s.acts = 6
   if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true }
-  if (beat >= 6) { s.tasks[0][1] = "merged"; s.notif = false }
+  if (beat >= 6) { s.notif = false; s.preview = true }
+  if (beat >= 7) { s.tasks[0][1] = "merged"; s.preview = false }
   return s
 }
 
@@ -523,7 +525,7 @@ function renderAll() {
   renderRows()
   renderDetail(false)
   $("notif").classList.toggle("on", !!S.notif)
-  $("browser").classList.remove("on")
+  $("browser").classList.toggle("on", !!S.preview)
   $("cursor").classList.remove("on", "down")
   $("dfield").textContent = ""
   $("dfield").className = "field"
@@ -614,14 +616,16 @@ const BEATS = [
     await wait(800)
     S.notif = true; $("notif").classList.add("on")
   },
-  // 6. Open the preview, close it, merge
+  // 6. Open the preview and stay there until the next scroll
   async () => {
     S.notif = false; $("notif").classList.remove("on")
     await point($("server"), .45); await click($("server"))
-    $("browser").classList.add("on"); cursor.classList.remove("on")
-    await wait(2200)
-    $("browser").classList.remove("on")
-    await wait(400)
+    S.preview = true; $("browser").classList.add("on"); cursor.classList.remove("on")
+  },
+  // 7. Close the preview, merge
+  async () => {
+    S.preview = false; $("browser").classList.remove("on")
+    await wait(500)
     await point($("merge"), .4); await click($("merge"))
     $("merge").innerHTML = `<span class="st" style="width:13px;height:13px">${rays("#fff")}</span>Merging…`
     await wait(900)
@@ -665,7 +669,7 @@ function layout() {
 function onScroll() {
   const p = -story.getBoundingClientRect().top / innerHeight
   scene.parentElement.style.setProperty("--t", reduced ? 1 : Math.min(1, Math.max(0, p)).toFixed(3))
-  const beat = Math.min(6, Math.max(0, Math.floor(p + .1)))
+  const beat = Math.min(7, Math.max(0, Math.floor(p + .1)))
   heads.forEach((h, i) => h.classList.toggle("on", i === beat))
   if (beat !== target) { target = beat; run() }
 }
