@@ -184,7 +184,9 @@ struct BaseBranchMenu: View {
         } label: {
             // Drawn by SwiftUI, like the folder menu, so it takes the secondary color.
             HStack(spacing: 4) {
-                Label(project.baseBranch, systemImage: "arrow.triangle.branch").labelStyle(.titleAndIcon)
+                // Body is 13pt; the icon 2pt smaller.
+                Image(systemName: "arrow.triangle.branch").font(.system(size: 11))
+                Text(project.baseBranch)
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
             }
             .contentShape(Rectangle())
