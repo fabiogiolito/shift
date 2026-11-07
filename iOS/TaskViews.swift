@@ -105,21 +105,16 @@ struct TaskListView: View {
         }
         .navigationTitle(project?.name ?? "Tasks")
         .toolbar {
-            if let push = model.state.pushStates?[projectID], push.unpushed > 0 || push.isPushing {
+            // As on the Mac: there whenever the project has a remote, the count of commits its merged tasks left to push.
+            if let push = model.state.pushStates?[projectID] {
                 Button { Task { await model.push(projectID: projectID) } } label: {
-                    if push.isPushing {
-                        ProgressView()
-                    } else {
-                        Label { Text(push.title) } icon: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.up")
-                                Text(String(push.unpushed)).monospacedDigit()
-                            }
-                        }
-                        .labelStyle(.iconOnly)
+                    HStack(spacing: 4) {
+                        if push.isPushing { ProgressView() } else { Image(systemName: "arrow.up") }
+                        if push.unpushed > 0 { Text(String(push.unpushed)).monospacedDigit() }
                     }
                 }
-                .disabled(push.isPushing)
+                .disabled(push.unpushed == 0 || push.isPushing)
+                .accessibilityLabel(push.title)
             }
             if let project, !project.isApp {
                 Button(action: openSite) {
@@ -936,14 +931,14 @@ private struct TaskActions: View {
             let merge = Action(title: "Merge into \(task.base(in: project))") { await model.merge(taskID: id) }
             if pullRequest?.state == .open {
                 let push = Action(title: "Push Changes") { await model.push(taskID: id) }
-                return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
+                return [merge] + (pullRequest?.hasNewWork == true ? [push] : []) + viewing
             }
             // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
             if pullRequest?.state == .merged { return [merge] + viewing }
             let open = Action(title: "Open Pull Request") {
                 if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
             }
-            return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
+            return [merge, open] + viewing
         case .conflict:
             return [Action(title: "Resolve") { await model.resolveConflict(taskID: id) }] + viewing
         default:
