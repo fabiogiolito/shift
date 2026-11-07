@@ -629,7 +629,7 @@ private struct PromptBar: View {
         }
         .sheet(isPresented: $isExpanded) {
             VStack(alignment: .trailing, spacing: 12) {
-                Button("Collapse", systemImage: "arrow.down.right.and.arrow.up.left") { isExpanded = false }
+                Button("Collapse", systemImage: "arrow.up.right.and.arrow.down.left") { isExpanded = false }
                     .labelStyle(.iconOnly)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(Color.primary)
@@ -676,7 +676,7 @@ private struct PromptBar: View {
     /// Three lines or more: open the text in a sheet.
     @ViewBuilder private var expandButton: some View {
         if isTall {
-            Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") { isExpanded = true }
+            Button("Expand", systemImage: "arrow.down.left.and.arrow.up.right") { isExpanded = true }
                 .labelStyle(.iconOnly)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Color.secondary)
@@ -776,6 +776,18 @@ private struct PromptTextView: UIViewRepresentable {
             return super.canPerformAction(action, withSender: sender)
         }
 
+        /// Scrolls once the text is taller than the field: decided here, from the field's real size, as SwiftUI
+        /// also measures it at other widths. Turning scrolling on leaves the offset at the top, so the line being
+        /// typed would sit below the edge: bring the caret into view; turning it off goes back to the top.
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard bounds.width > 0, bounds.height > 0 else { return }
+            let scrolls = sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height > bounds.height + 1
+            guard isScrollEnabled != scrolls else { return }
+            isScrollEnabled = scrolls
+            if scrolls { scrollRangeToVisible(selectedRange) } else { contentOffset = .zero }
+        }
+
         override func paste(_ sender: Any?) {
             if UIPasteboard.general.hasImages, let images = UIPasteboard.general.images, !images.isEmpty {
                 onPasteImages(images)
@@ -834,20 +846,23 @@ private struct PromptTextView: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView view: TextView, context: Context) -> CGSize? {
         let width = proposal.width ?? 200
-        let lineHeight = view.font?.lineHeight ?? 20
-        let fitting = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
-        let height = maxLines.map { min(max(fitting, lineHeight), lineHeight * CGFloat($0)) } ?? (proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? fitting)
-        let scrolls = fitting > height + 1
-        // Past six lines it scrolls. Turning scrolling on leaves the offset at the top, so the line being typed
-        // would sit below the edge: bring the caret into view; turning it off goes back to the top.
-        if view.isScrollEnabled != scrolls {
-            DispatchQueue.main.async {
-                view.isScrollEnabled = scrolls
-                if scrolls { view.scrollRangeToVisible(view.selectedRange) } else { view.contentOffset = .zero }
-            }
-        }
+        let measure = { (textView: UITextView) in textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height }
+        let fitting = measure(view)
+        guard let maxLines else { return CGSize(width: width, height: proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? fitting) }
+        // As tall as `maxLines` lines really are: laid out, a line is taller than the font's lineHeight.
+        Self.probe.font = view.font
+        Self.probe.text = Array(repeating: "X", count: maxLines).joined(separator: "\n")
+        let height = min(fitting, measure(Self.probe))
         return CGSize(width: width, height: ceil(height))
     }
+
+    /// Measures how tall `maxLines` lines are, set up as the field is.
+    private static let probe: UITextView = {
+        let view = UITextView()
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        return view
+    }()
 }
 
 /// The status's main action, the rest under the button beside it, as in the Mac's split button.
