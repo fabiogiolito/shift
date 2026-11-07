@@ -276,7 +276,7 @@ struct ScheduleForm: View {
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     // Inside the scroll view, so text scrolls up to the border instead of being cut short of it.
-                    .contentMargins(.vertical, 7, for: .scrollContent)
+                    .safeAreaPadding(.vertical, 7)
                     .padding(.horizontal, 3)
                     .frame(height: 120)
                     .background(.background, in: .rect(cornerRadius: 6))
