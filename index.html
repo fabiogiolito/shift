@@ -74,9 +74,12 @@ h1 .w { display: inline-block; white-space: nowrap; }
 h1 .w:first-child, h1 .w:first-child .l { color: var(--fg); }
 h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(--i) * 25ms + 100ms) both; }
 .scene { position: relative; flex: 1; margin-top: clamp(1.5rem, 4.5vh, 3rem); perspective: 1800px; animation: rise 1.4s var(--ease) .3s both; }
-/* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene */
-.mac { position: absolute; top: 0; left: 50%; width: var(--w); height: var(--h); transform-origin: 50% 0;
-  transform: translateX(-50%) translateY(calc((1 - var(--t)) * var(--drop) - var(--t) * var(--lift, 0px))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * (.84 + .16 * var(--t)))); }
+/* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene.
+   --z, --zx: on phones, a zoom and pan onto the part of the window where the step happens */
+@property --z { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --zx { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.mac { position: absolute; top: 0; left: 50%; width: var(--w); height: var(--h); transform-origin: 50% 0; transition: --z .9s var(--ease), --zx .9s var(--ease);
+  transform: translateX(calc(-50% + var(--zx))) translateY(calc((1 - var(--t)) * var(--drop) - var(--t) * var(--lift, 0px))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * var(--z) * (.84 + .16 * var(--t)))); }
 .phone { width: var(--pw); padding: calc(var(--pw) * .025); border-radius: calc(var(--pw) * .17); background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 70px -10px #000; }
 .phone img { border-radius: calc(var(--pw) * .145); }
 .iphone { position: absolute; z-index: 3; left: calc(50% + var(--mw) * .5 - var(--pw) * .7); top: calc(var(--drop) * 1.1); width: var(--pw);
@@ -296,6 +299,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 @keyframes spin-back { to { rotate: -360deg; } }
 @media (max-width: 639px) {
   .scene { margin-bottom: 60px; }
+  .rphone { left: calc(50% - var(--pw) / 2); }
   .ctrl { right: 12px; bottom: 12px; flex-direction: row; gap: 8px; }
   .ctrl .grp { flex-direction: row; }
   .ctrl .grp button + button { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .08); }
@@ -890,6 +894,21 @@ async function type(field, text) {
 }
 function addAct() { S.acts++; $("acts").outerHTML = actsList(S.acts) }
 
+// On phones the window is zoomed in, panned so window x `f` sits mid-screen (clamped to its edges); "phone" zooms out for the iPhone
+// Where each step's activity is, in window x: sidebar and list, list, detail, the preview
+const FOCUS = [null, 0, 560, W, W, W, 650, W, "phone", 560]
+let fit = 1, fx = null
+function aim(f) {
+  fx = f
+  let z = 1, zx = 0
+  if (innerWidth < 640 && f != null) {
+    z = f === "phone" ? .85 : 1.5
+    const k = fit * z, half = Math.min(W / 2, scene.clientWidth / k / 2)
+    if (f !== "phone") zx = -(Math.min(W - half, Math.max(half, f)) - W / 2) * k
+  }
+  mac.style.setProperty("--z", z); mac.style.setProperty("--zx", `${zx}px`)
+}
+
 const BEATS = [
   null,
   // 1. A new project; a stack of photos is dragged onto the new task input and the task is written, not sent
@@ -1029,10 +1048,11 @@ async function run() {
   running = true
   while (shown !== target) {
     const next = shown + 1
-    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; break }
+    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]); break }
     speed = target > next ? 2.5 : 1
+    aim(FOCUS[next])
     try { await BEATS[next](); shown = next }
-    catch (e) { if (e !== ABORT) throw e; S = stateAfter(target); renderAll(); shown = target }
+    catch (e) { if (e !== ABORT) throw e; S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]) }
   }
   speed = 1
   running = false
@@ -1055,9 +1075,9 @@ function layout() {
   const w = scene.clientWidth, h = scene.clientHeight
   // Steps have a shorter heading than the opening, so once upright the window moves up by the difference
   const lift = Math.max(0, heads[0].offsetHeight - Math.max(...heads.slice(1).map((e) => e.offsetHeight)))
-  const fit = Math.min((w - 40) / W, (h + lift - 56) / H, .8)
-  // Whatever room is left below the window is split, so title and window sit centered together
-  const bal = Math.max(0, (h + lift - 56 - H * fit) / 2)
+  fit = Math.min((w - 40) / W, (h + lift - 56) / H, .8)
+  // Whatever room is left below the window is split, so title and window sit centered together (zoomed in, on phones)
+  const bal = Math.max(0, (h + lift - 56 - H * fit * (innerWidth < 640 ? 1.5 : 1)) / 2)
   scene.style.setProperty("--lift", `${lift - bal}px`)
   scene.parentElement.style.setProperty("--bal", `${bal}px`)
   mac.style.setProperty("--w", `${W}px`); mac.style.setProperty("--h", `${H}px`)
@@ -1069,6 +1089,7 @@ function layout() {
   const hs = document.querySelector(".heads"), hh = heads[0].offsetHeight
   scene.parentElement.style.setProperty("--hy", `${Math.max(0, (56 + scene.offsetTop + h * .4) / 2 - (hs.offsetTop + hh / 2))}px`)
   scene.style.setProperty("--pw", `${Math.round(Math.max(130, Math.min(260, W * fit * .28, h * .5)))}px`)
+  aim(fx)
   onScroll()
 }
 function onScroll() {
