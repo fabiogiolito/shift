@@ -298,19 +298,17 @@ struct ScheduleForm: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.quinary, in: .rect(cornerRadius: 10))
                 .padding(.top, 16)
-            // Apart from the schedule itself, at the bottom left, like a dialog's option beside its buttons.
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Wake up Mac for runs", isOn: Binding { draft.wakeMac } set: {
-                        draft.wakeMac = $0
-                        if $0 { draft.keepAwake = false }
-                    })
-                    if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
-                }
-                Spacer()
-                buttons
+            // Just under the schedule's timing, then a line, then the buttons.
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Wake up Mac for runs", isOn: Binding { draft.wakeMac } set: {
+                    draft.wakeMac = $0
+                    if $0 { draft.keepAwake = false }
+                })
+                if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
             }
-            .padding(.top, 24)
+            .padding(.top, 12)
+            Divider().padding(.vertical, 20)
+            HStack { Spacer(); buttons }
         }
         .frame(width: 560)
         .padding(24)
