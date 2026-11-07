@@ -65,7 +65,7 @@ nav .gh:hover { color: var(--fg); }
 .pin { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; height: 100svh; padding-top: 6.5rem; overflow: hidden; text-align: center; }
 .heads { position: relative; z-index: 2; display: grid; padding-inline: 1.5rem; translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px) + var(--t, 0) * var(--bal, 0px)); }
 .head { grid-area: 1 / 1; opacity: 0; translate: 0 16px; filter: blur(6px); pointer-events: none; transition: opacity .4s, translate .7s var(--ease), filter .4s; }
-.head:not([data-i="0"]) { align-self: start; }
+.head:not([data-i="0"]) { align-self: start; margin-top: -32px; }
 .head.on { opacity: 1; translate: 0 0; filter: none; pointer-events: auto; }
 /* The opening headline slides up and fades as the window rises, gone before they would meet */
 .head[data-i="0"] { opacity: max(0, 1 - var(--t, 0) * 2.5); translate: 0 calc(var(--t, 0) * -160px); filter: none; transition: none; }
