@@ -339,7 +339,8 @@ struct TaskDetailView: View {
     @Environment(RemoteModel.self) private var model
     let taskID: Int
     @State private var stream: LogStream?
-    @State private var showsPreview = false
+    @State private var previewURL: URL?
+    @State private var startingPreview = false
     @State private var changes: DiffSummary?
     @State private var openPrompt: Prompt?
     @State private var scroll = ScrollPosition(edge: .top)
@@ -381,15 +382,25 @@ struct TaskDetailView: View {
             .toolbar {
                 StatusIcon(status: task.status, pullRequestOpen: model.state.pullRequests[task.id]?.state == .open,
                            mergedByPullRequest: task.mergedPullRequest != nil).accessibilityLabel(task.status.label)
-                if model.previewURL(task) != nil {
-                    Button("Preview", systemImage: "safari") { showsPreview = true }
+                if model.canPreview(task) {
+                    if startingPreview {
+                        ProgressView()
+                    } else {
+                        Button("Preview", systemImage: "safari") {
+                            startingPreview = true
+                            Task {
+                                previewURL = await model.startPreview(taskID: taskID)
+                                startingPreview = false
+                            }
+                        }
+                    }
                 }
                 if task.status == .working || task.approvalRequest != nil {
                     Button("Stop", systemImage: "stop.fill") { Task { await model.stop(taskID: taskID) } }
                 }
             }
-            .sheet(isPresented: $showsPreview) {
-                if let url = model.previewURL(task) { SafariView(url: url).ignoresSafeArea() }
+            .sheet(isPresented: Binding(get: { previewURL != nil }, set: { if !$0 { previewURL = nil } })) {
+                if let previewURL { SafariView(url: previewURL).ignoresSafeArea() }
             }
             .sheet(item: $openPrompt) { prompt in
                 PromptResponseView(prompt: prompt, turns: responses[prompt.id] ?? [], task: task)

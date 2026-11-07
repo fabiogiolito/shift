@@ -270,6 +270,28 @@ final class RemoteModel {
         return pairing?.preview(port: port)
     }
 
+    /// Whether the task has a dev server to preview. Servers start on demand, so a stopped one counts.
+    func canPreview(_ task: TaskItem) -> Bool {
+        guard !task.status.isClosed, let project = state.projects.first(where: { $0.id == task.projectID }) else { return false }
+        return !project.isApp && !project.serversOff
+    }
+
+    /// The task's dev server, started first if it was stopped, as the Mac's server button does.
+    /// Up to 30 seconds for it to answer; nil if it doesn't.
+    func startPreview(taskID: Int) async -> URL? {
+        if task(taskID)?.serverPID == nil { await perform(.restartServer(taskID: taskID)) }
+        for _ in 0..<30 {
+            if let url = task(taskID).flatMap(previewURL) {
+                var request = URLRequest(url: url, timeoutInterval: 2)
+                request.httpMethod = "HEAD"
+                if (try? await URLSession.shared.data(for: request)) != nil { return url }
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        lastError = "The server didn't start. Its log is on your Mac."
+        return nil
+    }
+
     func merge(taskID: Int) async { await perform(.merge(taskID: taskID)) }
     func push(taskID: Int) async { await perform(.pushBranch(taskID: taskID)) }
     func resolveConflict(taskID: Int) async { await perform(.resolveConflict(taskID: taskID)) }
