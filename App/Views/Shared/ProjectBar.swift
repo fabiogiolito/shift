@@ -36,7 +36,7 @@ struct ProjectBar: View {
     }
 
     private var newTaskSide: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 8) {
             Menu {
                 Button("Show in Finder") {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.repoPath)
@@ -53,9 +53,11 @@ struct ProjectBar: View {
             }
             .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
             .help("Repository")
+            // Takes the room before the Spacer does, so the path only truncates when it must.
+            .layoutPriority(1)
             Spacer(minLength: 0)
             Button { showingSettings = true } label: {
-                Image(systemName: "gearshape").contentShape(Rectangle())
+                Image(systemName: "slider.horizontal.3").contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Project Settings")
