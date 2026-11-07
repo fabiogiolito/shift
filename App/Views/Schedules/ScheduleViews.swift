@@ -122,6 +122,7 @@ struct ScheduleDetailView: View {
                         }
                         .id(schedule.id)
                         ScheduleRunMenus(schedule: Binding { schedule } set: { model.saveSchedule($0) })
+                            .padding(.top, 4)
                     }
                     // Changed here, without the form; saved right away.
                     runs(schedule)
