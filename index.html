@@ -248,23 +248,30 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .pc { display: grid; place-items: center; width: 2.4em; height: 2.4em; border-radius: 50%; background: #1c1c1e; }
 .pc svg.g, .pprompt svg.g { width: 1.1em; height: 1.1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .pc .st { width: 1.25em; height: 1.25em; }
-.ps h4 { margin-top: 8%; font-size: 1.15em; font-weight: 600; }
-.pdesc { margin-top: .5em; font-size: .9em; color: #d1d1d6; }
-.pprompt { display: flex; align-items: center; gap: .5em; margin-top: 8%; padding: .7em .8em; border-radius: .7em; background: #1c1c1e; font-size: .9em; }
-.pprompt svg.g { flex-shrink: 0; margin-left: auto; color: #636366; }
-.pwork { display: flex; align-items: center; gap: .5em; margin-top: 6%; font-size: .9em; color: #d1d1d6; opacity: 0; transition: opacity .4s; }
-.pwork.on { opacity: 1; }
-.pwork .st { width: 1.1em; height: 1.1em; }
-.pask { margin-top: auto; padding: .9em; border: 1.5px solid var(--blue); border-radius: 1em; background: #111; transition: translate .5s var(--ease), opacity .4s; }
-.pask.gone { translate: 0 30%; opacity: 0; }
-.pask small { font-size: .8em; color: #8e8e93; }
-.pask p { margin-top: .2em; font-size: .92em; }
-.pask ul { margin: .5em 0 .8em; }
-.pask li { display: flex; align-items: center; gap: .6em; height: 2em; font-size: .9em; }
-.pask .radio { width: 1.1em; height: 1.1em; }
-.pask li.pick .radio { border: .32em solid var(--blue); background: #fff; }
-.psend { display: grid; place-items: center; height: 2.4em; border-radius: 99px; background: #2c2c2e; color: #636366; font-size: .92em; transition: background .2s, color .2s, transform .12s; }
-.psend.go { background: var(--blue); color: #fff; }
+.pnav { align-items: center; }
+.pnav b { font-size: 1em; font-weight: 600; }
+.pchat { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: .45em; min-height: 0; margin-top: 6%; overflow: hidden; font-size: .86em; }
+.pmsg { max-width: 82%; padding: .55em .8em; border-radius: 1.1em; background: #1c1c1e; line-height: 1.3; }
+.pmsg.me { align-self: flex-end; background: var(--blue); color: #fff; }
+.pmsg.enter { animation: slide-in .5s var(--ease) both; }
+.pmsg.pcard { display: flex; gap: .6em; align-items: center; border: 1px solid #2c2c2e; background: #111; }
+.pmsg.pcard svg.g { flex-shrink: 0; width: 1.9em; height: 1.9em; padding: .3em; border-radius: .5em; background: rgba(10, 132, 255, .18); color: var(--blue); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pmsg.pcard b, .pmsg.pcard small { display: block; }
+.pmsg.pcard small { color: #8e8e93; font-size: .88em; }
+.pcomp { display: flex; align-items: flex-end; gap: .5em; margin-top: .7em; padding: .45em .45em .45em .9em; border: 1px solid #2c2c2e; border-radius: 1.3em; font-size: .86em; }
+.ptxt { flex: 1; min-height: 1.6em; padding: .15em 0; line-height: 1.3; }
+.ptxt:empty::before { content: "Message"; color: #636366; }
+.psnd { display: grid; place-items: center; flex-shrink: 0; width: 1.9em; height: 1.9em; border-radius: 50%; background: #2c2c2e; color: #636366; transition: background .2s, color .2s; }
+.psnd.go { background: var(--blue); color: #fff; }
+.psnd svg.g { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+/* 11:00 PM: the schedule comes due */
+.clockpop { position: absolute; z-index: 6; left: 50%; top: 42%; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 30px 46px 26px; border-radius: 26px; translate: -50% -50%; scale: .9; opacity: 0;
+  background: rgba(44, 44, 46, .82); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 30px 80px rgba(0, 0, 0, .6);
+  color: #fff; font: 600 52px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Geist", sans-serif; letter-spacing: -.02em; pointer-events: none; transition: opacity .35s, scale .6s var(--ease); }
+.clockpop.on { opacity: 1; scale: 1; }
+.clockpop svg { width: 46px; height: 46px; fill: none; stroke: #ff9f0a; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.clockpop small { font-size: 14px; font-weight: 500; letter-spacing: 0; color: #aeaeb2; }
+.rows .row.schedrow .st svg.g { width: 15px; height: 15px; color: var(--blue); }
 .tap { position: absolute; left: 0; top: 0; width: 2.6em; height: 2.6em; margin: -1.3em 0 0 -1.3em; border-radius: 50%; background: rgba(255, 255, 255, .35); box-shadow: 0 0 0 1px rgba(255, 255, 255, .5); opacity: 0; transition: left .6s cubic-bezier(.65, 0, .35, 1), top .6s cubic-bezier(.65, 0, .35, 1), opacity .25s, scale .15s; pointer-events: none; }
 .tap.on { opacity: 1; }
 .tap.down { scale: .8; }
@@ -408,7 +415,7 @@ body > footer a:hover { color: var(--fg); }
 </header>
 
 <main>
-  <section class="story" id="story" style="--n:10">
+  <section class="story" id="story" style="--n:11">
     <div class="pin">
       <div class="gitcmds" aria-hidden="true">
         <span class="gitcmd" style="--dx:-220px;--dy:-160px;--r:-6deg;top:38%;left:2%"><b>$</b> git worktree add ../wt-101</span>
@@ -433,7 +440,8 @@ body > footer a:hover { color: var(--fg); }
         <div class="head" data-i="5"><h3>Come back to a checkmark</h3><p>You get a notification when it’s ready to review.</p></div>
         <div class="head" data-i="6"><h3>Test it in one click</h3><p>Open the task’s own preview in your browser.</p></div>
         <div class="head" data-i="7"><h3>Then merge it</h3><p>One click merges into main and cleans up.</p></div>
-        <div class="head" data-i="8"><h3>Work remotely from your phone</h3><p>Answer questions, check in and merge from your iPhone.</p></div>
+        <div class="head" data-i="8"><h3>Work remotely from your phone</h3><p>Answer questions, check in and plan from your iPhone.</p></div>
+        <div class="head" data-i="9"><h3>Schedule recurring tasks</h3><p>Each run starts on time as its own task, even while you sleep.</p></div>
       </div>
       <div class="ctrl" id="ctrl">
         <button id="replay" type="button" aria-label="Replay this step" title="Replay"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
@@ -474,23 +482,16 @@ body > footer a:hover { color: var(--fg); }
               <div class="page"><span class="arrow" id="bprev" style="left:22px" data-ic="left"></span><div class="photo" id="photo"></div><span class="arrow" id="bnext" style="right:22px" data-ic="right"></span><span class="cap" id="cap"></span></div>
             </div>
           </div>
+          <div class="clockpop" id="clockpop"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>11:00 PM<small>Dribbble sync starts</small></div>
           <div class="cursor" id="cursor"><div class="stack"><i class="th th2"></i><i class="th th1"></i><i class="th th0"></i><b>6</b></div><svg viewBox="0 0 22 30"><path d="M2 2v22l5.5-5.2 3.6 8.4 3.6-1.6-3.5-8.2H18Z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
         </div>
         <div class="iphone phone"><img src="screens/iphone-ready.webp" alt="" width="603" height="1311"></div>
         <div class="rphone phone" id="rphone">
           <div class="ps">
             <div class="pbar"><b>9:41</b><span><i></i><i></i><i></i><i></i><em></em></span></div>
-            <div class="pnav"><span class="pc" data-ic="left"></span><span class="pc" id="pmark"></span></div>
-            <h4>Case study pages</h4>
-            <p class="pdesc">Gives each project its own page with the full story.</p>
-            <div class="pprompt">Give each project its own page with the full story.<span data-ic="right"></span></div>
-            <div class="pwork" id="pwork"><span class="st"></span>Writing the case study template…</div>
-            <div class="pask" id="pask">
-              <small>The agent needs a decision</small>
-              <p>Should each case study open with a cover photo or a short summary?</p>
-              <ul><li id="popt"><i class="radio"></i>Cover photo</li><li><i class="radio"></i>Short summary</li><li><i class="radio"></i>Something else</li></ul>
-              <span class="psend" id="psend">Send</span>
-            </div>
+            <div class="pnav"><span class="pc" data-ic="left"></span><b>Portfolio</b><span class="pc" data-ic="clock"></span></div>
+            <div class="pchat" id="pchat"></div>
+            <div class="pcomp"><span class="ptxt" id="ptxt"></span><span class="psnd" id="psnd" data-ic="up"></span></div>
             <i class="tap" id="tap"></i>
           </div>
         </div>
@@ -612,6 +613,7 @@ const ICONS = {
   stop: '<rect width="12" height="12" x="6" y="6" rx="1" fill="currentColor"/>',
   lock: '<rect width="16" height="10" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
   merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
 }
@@ -658,7 +660,12 @@ const TASKS = {
   202: { title: "Contact form", desc: "Lets visitors send a message without leaving the site." },
   203: { title: "Case study pages", desc: "Gives each project its own page with the full story." },
   204: { title: "Faster page loads", desc: "Serves smaller images and preloads the fonts." },
+  205: { title: "Dribbble sync", desc: "Adds 2 new Dribbble posts to the gallery." },
 }
+// The project chat on the phone: some history, then a recurring task is asked for
+const CHAT = [["me", "Which photos got the most views this month?"], ["", "Harbor at dusk, then Moss garden. Want them first in the gallery?"], ["me", "Yes, put them first."], ["", "Done. They lead the gallery now."]]
+const ASK = "Every night at 11pm check my Dribbble account for new posts and add them to my portfolio."
+const SCHED = ["Dribbble sync", "Every day at 11:00 PM"]
 const DRAFT = "Add my latest work"
 // After the first task finishes: Faster page loads and Contact form finish, Case study pages asks a question
 const AFTER = [[3, "ready"], [1, "ready"], [2, "input"]]
@@ -682,8 +689,9 @@ function stateAfter(beat) {
   if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true; for (const [i, st] of AFTER) s.tasks[i][1] = st }
   if (beat >= 6) { s.notif = false; s.preview = true; s.photo = 1 }
   if (beat >= 7) { s.tasks[0][1] = "merged"; s.preview = false }
-  // Last, the question waiting on Case study pages is answered from the phone
-  if (beat >= 8) { s.phone = true; s.tasks[2][1] = "working" }
+  // Last, a recurring task is set up from the phone's chat; at 11 PM it runs and merges by itself
+  if (beat >= 8) { s.sched = true; s.phone = true }
+  if (beat >= 9) { s.phone = false; s.tasks.unshift([205, "merged"]) }
   return s
 }
 
@@ -722,6 +730,15 @@ function renderRows(enter = []) {
       el.innerHTML = `${mark(st)}<b>${TASKS[id].title}</b><span class="id">${id}</span><p>${TASKS[id].desc}</p>`
       next.set(id, el); out.push(el)
     }
+  }
+  // Schedules sit after the running tasks, as in the app
+  if (S.sched) {
+    const old = rowEls.get("sched"), el = old || document.createElement("div")
+    el.className = `row schedrow${old ? "" : " enter"}`
+    el.innerHTML = `<span class="st">${ic("clock")}</span><b>${SCHED[0]}</b><span class="id"></span><p>${SCHED[1]}</p>`
+    const at = out.findIndex((x) => x.tagName === "H6" && x.textContent === "Recently Merged")
+    const h = Object.assign(document.createElement("h6"), { textContent: "Schedules" })
+    out.splice(at < 0 ? out.length : at, 0, h, el); next.set("sched", el)
   }
   rowEls = next
   rowsEl.replaceChildren(...out)
@@ -788,13 +805,13 @@ function setPhoto(i) {
   $("cap").textContent = `${PHOTOS[i][0]} · ${i + 1} of 6`
 }
 
-// The phone shows Case study pages: asking, or (once answered) working again
-function renderPhone(on, answered) {
+// The phone shows the project chat; once asked, with the new schedule in it
+const bubble = (who, text, enter) => `<div class="pmsg${who ? " me" : ""}${enter ? " enter" : ""}">${text}</div>`
+const schedCard = (enter) => `<div class="pmsg pcard${enter ? " enter" : ""}">${ic("clock")}<span><b>${SCHED[0]}</b><small>${SCHED[1]}</small></span></div>`
+function renderPhone(on, done) {
   $("rphone").classList.toggle("on", !!on)
-  $("pask").classList.toggle("gone", !!answered)
-  $("pwork").classList.toggle("on", !!answered)
-  $("pmark").innerHTML = answered ? `<span class="st">${rays()}</span>` : `<span class="st">${MARK.input}</span>`
-  $("popt").classList.remove("pick"); $("psend").classList.remove("go")
+  $("pchat").innerHTML = CHAT.map(([w, x]) => bubble(w, x)).join("") + (done ? bubble("me", ASK) + schedCard() : "")
+  $("ptxt").textContent = ""; $("psnd").classList.remove("go")
   $("tap").className = "tap"
 }
 async function tap(el) {
@@ -814,6 +831,7 @@ function renderAll() {
   $("notif").classList.toggle("on", !!S.notif)
   $("browser").classList.toggle("on", !!S.preview)
   renderPhone(S.phone, S.phone)
+  $("clockpop").classList.remove("on")
   setPhoto(S.photo || 0)
   renderDraft()
   $("cursor").classList.remove("on", "down", "dragging")
@@ -953,18 +971,36 @@ const BEATS = [
     renderRows(); renderDetail()
     cursor.classList.remove("on")
   },
-  // 8. The phone slides up over the Mac; the waiting question is answered with a tap and the Mac follows
+  // 8. On the phone, the project chat is asked for a recurring task; it shows up on the Mac too
   async () => {
-    renderPhone(true, false)
-    await wait(1200)
-    await tap($("popt")); $("popt").classList.add("pick"); $("psend").classList.add("go")
-    await wait(300)
-    await tap($("psend"))
+    renderPhone(true)
+    await wait(1100)
+    await tap($("ptxt"))
     $("tap").classList.remove("on")
-    $("pask").classList.add("gone")
-    await wait(400)
-    $("pwork").classList.add("on"); $("pmark").innerHTML = `<span class="st">${rays()}</span>`
-    S.tasks[2][1] = "working"; renderRows(); renderProjects()
+    for (const c of ASK) { $("ptxt").textContent += c; await wait(22) }
+    $("psnd").classList.add("go")
+    await wait(300)
+    await tap($("psnd"))
+    $("tap").classList.remove("on")
+    $("ptxt").textContent = ""; $("psnd").classList.remove("go")
+    $("pchat").insertAdjacentHTML("beforeend", bubble("me", ASK, true))
+    await wait(900)
+    $("pchat").insertAdjacentHTML("beforeend", schedCard(true))
+    S.sched = true; S.phone = true; renderRows()
+  },
+  // 9. At 11 PM the schedule comes due: a task starts on its own, finishes and merges
+  async () => {
+    S.phone = false; $("rphone").classList.remove("on")
+    await wait(900)
+    $("clockpop").classList.add("on")
+    await wait(1600)
+    $("clockpop").classList.remove("on")
+    await wait(300)
+    S.tasks.unshift([205, "working"]); renderRows([205]); renderProjects()
+    await wait(2000)
+    S.tasks[0][1] = "ready"; renderRows(); renderProjects()
+    await wait(1200)
+    S.tasks[0][1] = "merged"; renderRows(); renderProjects()
   },
 ]
 
@@ -1019,7 +1055,7 @@ function layout() {
 function onScroll() {
   const p = -story.getBoundingClientRect().top / innerHeight
   scene.parentElement.style.setProperty("--t", reduced ? 1 : Math.min(1, Math.max(0, p)).toFixed(3))
-  const beat = Math.min(8, Math.max(0, Math.floor(p + .1)))
+  const beat = Math.min(9, Math.max(0, Math.floor(p + .1)))
   heads.forEach((h, i) => h.classList.toggle("on", i === beat))
   $("ctrl").classList.toggle("on", beat > 0)
   if (beat !== target) { stopIdle(); target = beat; run() }
@@ -1037,7 +1073,7 @@ async function replay() {
 // Each step starts just after its own screen of scrolling begins; past the last one is the next section
 function go(d) {
   const top = story.getBoundingClientRect().top + scrollY, k = target + d
-  scrollTo({ top: k > 8 ? top + story.offsetHeight - innerHeight + innerHeight : top + Math.max(0, k) * innerHeight + (k > 0 ? innerHeight * .05 : 0), behavior: reduced ? "auto" : "smooth" })
+  scrollTo({ top: k > 9 ? top + story.offsetHeight - innerHeight + innerHeight : top + Math.max(0, k) * innerHeight + (k > 0 ? innerHeight * .05 : 0), behavior: reduced ? "auto" : "smooth" })
 }
 $("replay").addEventListener("click", replay)
 $("prev").addEventListener("click", () => go(-1))
