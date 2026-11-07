@@ -350,5 +350,20 @@
 - Shift explains notification and folder access before macOS asks for permission]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.10/Shift-0.2.10.zip" sparkle:edSignature="kc9Me+NbNlqSurwzOe/u1TGc/jC0r2HHGcbOTRfuVDyZbeRgmAy3fyIM+qneOzibFezegJr/UQjwI+ao0kWuAA==" length="5044293" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.11</title>
+      <pubDate>Sat, 07 Nov 2026 01:26:01 +0000</pubDate>
+      <sparkle:version>28</sparkle:version>
+      <sparkle:shortVersionString>0.2.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Schedule tasks to run on a timetable: hourly, daily, weekly or monthly, with a page for each schedule showing its runs, Run Now, Pause and Edit
+- Ask the project chat for something like "every weekday at 9" and it drafts the schedule for you, or use Create Schedule from This on a task
+- Create a schedule with File › New Schedule… (⌥⌘N) or by typing /schedule
+- Type / in a prompt field to choose from a menu of commands
+- Archive tasks that have changes: their work is committed and kept on the branch
+- Setup now opens as a sheet on the main window instead of a separate window
+- Click a task's title to scroll its details back to the top]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.11/Shift-0.2.11.zip" sparkle:edSignature="Vr0UwBD52BLHsvsJ+VvIwrSyjeO64sazZiHEI45PeikD5URghUnZfb87CMtMAeVKq2h6cFZ8U28ZfrKiVSgTAA==" length="5447882" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
