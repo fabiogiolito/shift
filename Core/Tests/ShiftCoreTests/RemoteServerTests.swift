@@ -50,7 +50,8 @@ final class WireTests: XCTestCase {
         ]
         server.forEach { roundTrip($0) }
         let commands: [RemoteCommand] = [
-            .createTask(projectID: id, prompt: "p", attachments: ["/a"], agent: nil), .sendPrompt(taskID: 1, text: "t", attachments: []),
+            .createTask(projectID: id, prompt: "p", attachments: ["/a"], agent: nil), .createTask(projectID: id, prompt: "p", attachments: [], agent: .codex, baseBranch: "dev"),
+            .sendPrompt(taskID: 1, text: "t", attachments: []),
             .answerApproval(taskID: 1, allow: false), .stop(taskID: 1), .resume(taskID: 1), .rename(taskID: 1, title: "t"), .merge(taskID: 1),
             .delete(taskID: 1), .resolveConflict(taskID: 1), .conflictedFiles(taskID: 1), .pushBranch(taskID: 1), .pullRequestURL(taskID: 1),
             .branches(projectID: id), .changeBase(taskID: 1, to: "main"), .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1, target: id), .buildLog(taskID: 1, target: id),
