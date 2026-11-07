@@ -695,6 +695,7 @@ private struct PromptTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             (textView as? TextView)?.placeholderLabel.isHidden = !textView.text.isEmpty
+            if textView.isScrollEnabled { textView.scrollRangeToVisible(textView.selectedRange) }
         }
     }
 
@@ -740,7 +741,14 @@ private struct PromptTextView: UIViewRepresentable {
         let fitting = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
         let height = min(max(fitting, lineHeight), lineHeight * 6)
         let scrolls = fitting > height + 1
-        if view.isScrollEnabled != scrolls { DispatchQueue.main.async { view.isScrollEnabled = scrolls } }
+        // Past six lines it scrolls. Turning scrolling on leaves the offset at the top, so the line being typed
+        // would sit below the edge: bring the caret into view; turning it off goes back to the top.
+        if view.isScrollEnabled != scrolls {
+            DispatchQueue.main.async {
+                view.isScrollEnabled = scrolls
+                if scrolls { view.scrollRangeToVisible(view.selectedRange) } else { view.contentOffset = .zero }
+            }
+        }
         return CGSize(width: width, height: ceil(height))
     }
 }
