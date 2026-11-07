@@ -105,6 +105,22 @@ struct TaskListView: View {
         }
         .navigationTitle(project?.name ?? "Tasks")
         .toolbar {
+            if let push = model.state.pushStates?[projectID], push.unpushed > 0 || push.isPushing {
+                Button { Task { await model.push(projectID: projectID) } } label: {
+                    if push.isPushing {
+                        ProgressView()
+                    } else {
+                        Label { Text(push.title) } icon: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up")
+                                Text(String(push.unpushed)).monospacedDigit()
+                            }
+                        }
+                        .labelStyle(.iconOnly)
+                    }
+                }
+                .disabled(push.isPushing)
+            }
             if let project, !project.isApp {
                 Button(action: openSite) {
                     if isOpeningSite { ProgressView() } else { Label("Open \(project.baseBranch)", systemImage: "globe") }

@@ -294,6 +294,7 @@ final class RemoteModel {
 
     func merge(taskID: Int) async { await perform(.merge(taskID: taskID)) }
     func push(taskID: Int) async { await perform(.pushBranch(taskID: taskID)) }
+    func push(projectID: UUID) async { await perform(.push(projectID: projectID)) }
     func resolveConflict(taskID: Int) async { await perform(.resolveConflict(taskID: taskID)) }
     func changeBase(taskID: Int, to base: String) async { await perform(.changeBase(taskID: taskID, to: base)) }
 

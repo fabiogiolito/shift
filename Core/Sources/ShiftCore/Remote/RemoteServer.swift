@@ -137,6 +137,7 @@ public final class RemoteServer {
         snapshot.isOffline = model.isOffline
         snapshot.schedules = model.schedules
         snapshot.scheduleDraft = model.scheduleDraft
+        snapshot.pushStates = model.pushStates
         return snapshot
     }
 
@@ -148,6 +149,10 @@ public final class RemoteServer {
         connection.post(.hello(version: Wire.version))
         // Together with `connections`, on the main actor: nothing can change between this and the next sync.
         post(.snapshot(sent), to: connection)
+        // The Mac only reads these for the project it shows; the phone shows any. Local git, no network.
+        Task { [weak model] in
+            for project in model?.projects ?? [] { await model?.refreshPushState(projectID: project.id) }
+        }
     }
 
     private func post(_ message: ServerMessage, to connection: RemoteConnection) {
@@ -236,6 +241,7 @@ public final class RemoteServer {
         case .resolveConflict(let id): model.resolveConflict(taskID: id)
         case .conflictedFiles(let id): return .success(.files(await model.conflictedFiles(taskID: id)))
         case .pushBranch(let id): await model.pushBranch(taskID: id)
+        case .push(let id): await model.push(projectID: id)
         case .pullRequestURL(let id):
             // Created: the phone sees it open. Otherwise the page to open it there.
             guard case .browser(let url)? = await model.openPullRequest(taskID: id) else { return .success(.url(nil)) }
