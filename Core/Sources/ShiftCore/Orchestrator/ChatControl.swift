@@ -32,7 +32,7 @@ extension AppModel {
       project                  the project's settings, as JSON
       set <setting> "<value>"  change one: name, baseBranch, type, defaultAgent, model, serverCommand,
                                setupCommand, buildCommand, buildTargets, pushTaskBranches, takesScreenshots,
-                               opensPullRequests. buildTargets is a JSON list of {"name", "command", "kind", "paths"};
+                               opensPullRequests, autoTags. buildTargets is a JSON list of {"name", "command", "kind", "paths"};
                                kind is macApp, iOSSimulator, run or script. buildCommand is for a single target.
 
     Schedules start a task by themselves each time they come due (a "run"), from their own prompt, base branch,
@@ -470,6 +470,7 @@ extension AppModel {
         case "pushTaskBranches": project.pushTaskBranches = try flag()
         case "takesScreenshots": project.takesScreenshots = try flag()
         case "opensPullRequests": project.opensPullRequests = try flag()
+        case "autoTags": project.autoTags = try flag()
         case "permissions":
             throw Refusal("Only the user can change the project's permissions, in its settings: they limit what you can do.")
         default:

@@ -137,6 +137,16 @@ final class AgentAdapterTests: XCTestCase {
         XCTAssertNil(none.description)
     }
 
+    func testTagsAreTrimmedCappedAndOptional() {
+        XCTAssertEqual(OutcomeProtocol.tags(in: "SHIFT_TITLE: X\n**SHIFT_TAGS:** `checkout`, Auth, auth, search\nWork."), ["checkout", "Auth"])
+        XCTAssertNil(OutcomeProtocol.tags(in: "SHIFT_TAGS: none"))
+        XCTAssertNil(OutcomeProtocol.tags(in: "Reading the code."))
+        XCTAssertEqual(OutcomeProtocol.parse(finalMessage: "SHIFT_TAGS: auth\nDone.\nSHIFT_STATUS: completed\nFixed.", exitCode: 0),
+                       .completed(summary: "Fixed."))
+        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: true, tags: ["auth"]).contains("The project's tags: auth."))
+        XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: true).contains("SHIFT_TAGS"))
+    }
+
     func testDescribedNeverLeaksIntoTheOutcome() {
         let lines = "SHIFT_TITLE: Greeting file\n**SHIFT_DESCRIPTION:** Adds a file that says hi.\n"
         XCTAssertEqual(OutcomeProtocol.parse(finalMessage: lines + "Added hello.txt.\nSHIFT_STATUS: completed", exitCode: 0),
@@ -731,7 +741,7 @@ final class AgentAdapterTests: XCTestCase {
             case .rawOutput, .screenshots: continue
             case .sessionStarted(let id): sessions.append(id)
             case .activity(let text): activities.append(text)
-            case .described, .approvalRequested: break
+            case .described, .tagged, .approvalRequested: break
             case .finished: finished.append(event)
             }
             events.append(event)

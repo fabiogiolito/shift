@@ -264,6 +264,14 @@ struct ProjectSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            Section {
+                Toggle("Tag tasks automatically", isOn: project.autoTags)
+            } footer: {
+                Text("A new task's agent tags it with the feature or area of the code it's about, one or two at most, reusing the project's tags and adding one only when none fits. Delete a tag from every task to stop it being used.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if let remote = model.pushStates[projectID]?.remote {
                 Section {
                     Toggle("Push task branches to \(remote)", isOn: project.pushTaskBranches)

@@ -9,6 +9,7 @@ extension OutcomeProtocol {
     static let marker = "SHIFT_STATUS:"
     static let titleMarker = "SHIFT_TITLE:"
     static let descriptionMarker = "SHIFT_DESCRIPTION:"
+    static let tagsMarker = "SHIFT_TAGS:"
     static let optionMarker = "SHIFT_OPTION:"
     static let screenshotMarker = "SHIFT_SCREENSHOT:"
 
@@ -17,9 +18,11 @@ extension OutcomeProtocol {
     /// `description`: the one it has, for the agent to build on; a new session has no memory of writing it.
     /// `screenshots`: how this turn's are taken, and what the agent has to do for them.
     /// `server`: the task has a dev server, which the agent starts with `shiftctl server` if it needs it.
+    /// `tags`: non-nil, the agent tags the task, preferring these.
     static func instructions(firstTurn: Bool, description: String? = nil, screenshots: ScreenshotRequest? = nil,
-                             server: Bool = false) -> String {
+                             server: Bool = false, tags: [String]? = nil) -> String {
         var text = (server ? devServer + "\n\n" : "") + outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
+        if let tags { text += "\n\n" + tagRules(tags) }
         switch screenshots {
         case .page: text += "\n\n" + namePage
         case .app(let wantsBefore): text += "\n\n" + shootApp(wantsBefore: wantsBefore)
@@ -162,6 +165,20 @@ extension OutcomeProtocol {
     point of view. It is not a restatement of the latest prompt and not a list of steps.
     """
 
+    static func tagRules(_ existing: [String]) -> String {
+        let list = existing.isEmpty ? "The project has no tags yet." : "The project's tags: " + existing.joined(separator: ", ") + "."
+        return """
+        Tags help the user filter and find tasks by the feature or area of the codebase they touch. Right after the \
+        lines above, before doing any work, write this line once, on a line of its own:
+
+        SHIFT_TAGS: <tag>, <tag>
+
+        \(list) Pick the one or two that fit best, and prefer one. Only if none fits, make up a new one: one or two \
+        lowercase words naming a lasting feature or area of this codebase, such as "checkout" or "auth", never the \
+        kind of work ("bugfix", "refactor", "ui") or something only this task is about. Write `none` if nothing fits well.
+        """
+    }
+
     static let namePage = """
     Shift takes screenshots of the running project so the user can see your change at a glance: one before you \
     start, and when you finish the ones you ask for. They must show the change itself, in the state where it can be \
@@ -286,6 +303,20 @@ extension OutcomeProtocol {
         return (value(titleMarker, limit: 80), value(descriptionMarker, limit: 600))
     }
 
+    /// The tags `message` gives the task: at most 2, trimmed of markdown, no duplicates. Nil if it gives none.
+    static func tags(in message: String) -> [String]? {
+        guard let range = message.range(of: tagsMarker) else { return nil }
+        let markup = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "*_`\"'<>"))
+        var tags: [String] = []
+        for part in message[range.upperBound...].prefix(while: { !$0.isNewline }).split(separator: ",") {
+            let tag = short(part.trimmingCharacters(in: markup), limit: 30)
+            if !tag.isEmpty, tag.lowercased() != "none", !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+                tags.append(tag)
+            }
+        }
+        return tags.isEmpty ? nil : Array(tags.prefix(2))
+    }
+
     /// What `message` asks to screenshot, as `.screenshots`: one target per line, at most 4. Nil if it asks nothing.
     static func screenshots(in message: String) -> AgentEvent? {
         var named = false
@@ -327,7 +358,7 @@ extension OutcomeProtocol {
     /// `message` without the title, description and screenshot lines, which are not for the user to read.
     static func strippingDescribed(_ message: String) -> String {
         message.components(separatedBy: "\n")
-            .filter { !$0.contains(titleMarker) && !$0.contains(descriptionMarker) && !$0.contains(screenshotMarker) }
+            .filter { !$0.contains(titleMarker) && !$0.contains(descriptionMarker) && !$0.contains(tagsMarker) && !$0.contains(screenshotMarker) }
             .joined(separator: "\n")
     }
 }
@@ -533,6 +564,7 @@ func runAgentProcess(kind: AgentKind, request: AgentRequest,
                     if title != nil || description != nil {
                         continuation.yield(.described(title: title, description: description))
                     }
+                    if request.tags != nil, let tags = OutcomeProtocol.tags(in: message) { continuation.yield(.tagged(tags)) }
                     if let shots = OutcomeProtocol.screenshots(in: message) { continuation.yield(shots) }
                 }
                 if let activity { continuation.yield(.activity(activity)) }

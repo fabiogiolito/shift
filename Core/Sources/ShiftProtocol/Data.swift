@@ -69,6 +69,8 @@ public enum AgentEvent: Equatable, Sendable {
     case activity(String)
     /// The agent's own words for what the task will accomplish. Either may be missing.
     case described(title: String?, description: String?)
+    /// Tags the agent picked for the task (`AgentRequest.tags`), at most 2.
+    case tagged([String])
     /// Screenshots are on: what shows this turn's change, empty if nothing visible changes. The first one comes
     /// before the agent's work; a later one replaces it. In an app project, the images the agent took instead.
     case screenshots([ScreenshotTarget])
