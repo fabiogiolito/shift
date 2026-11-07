@@ -42,7 +42,7 @@ struct ResponsePanel: View {
                 if hasChoices {
                     choices
                 } else {
-                    PromptField(placeholder: placeholder, focusOnAppear: true, draftKey: "task \(task.id)", commands: [.task, .tag]) { model.sendPrompt(taskID: task.id, text: $0, attachments: $1) }
+                    PromptField(placeholder: placeholder, focusOnAppear: true, draftKey: "task \(task.id)", commands: [.tag]) { model.sendPrompt(taskID: task.id, text: $0, attachments: $1) }
                 }
             }
             .padding(16)
@@ -132,7 +132,7 @@ struct ResponsePanel: View {
             .focused($choicesFocused)
             if somethingElse {
                 PromptField(placeholder: task.status == .blocked ? "Give instructions…" : "Answer…", focusOnAppear: true,
-                            externalText: $text, externalAttachments: $attachments, commands: [.task, .tag])
+                            externalText: $text, externalAttachments: $attachments, commands: [.tag])
             }
             HStack {
                 Spacer()
