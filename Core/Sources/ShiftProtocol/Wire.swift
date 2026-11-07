@@ -71,6 +71,11 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     case rename(taskID: Int, title: String)
     case merge(taskID: Int)
     case delete(taskID: Int)
+    /// A Mac from before the phone's context menu doesn't know these three.
+    case archive(taskID: Int)
+    /// Comma-separated, as `AppModel.addTags`.
+    case addTags(taskID: Int, tags: String)
+    case removeTag(taskID: Int, tag: String)
     case resolveConflict(taskID: Int)
     case conflictedFiles(taskID: Int)
     case pushBranch(taskID: Int)

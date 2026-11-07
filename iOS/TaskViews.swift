@@ -315,6 +315,13 @@ private struct NewTaskView: View {
 private struct TaskRow: View {
     let task: TaskItem
     @Environment(RemoteModel.self) private var model
+    @Environment(\.openURL) private var openURL
+    @State private var previewURL: URL?
+    @State private var log: TaskLog?
+    @State private var renaming = false
+    @State private var addingTag = false
+    @State private var confirmingDelete = false
+    @State private var text = ""
 
     var body: some View {
         NavigationLink(value: task.id) {
@@ -330,6 +337,123 @@ private struct TaskRow: View {
                     Text(task.status == .working ? (model.state.isOffline == true ? TaskItem.offlineActivity : nil) ?? task.activity ?? task.status.label : task.status.label)
                         .font(.footnote).foregroundStyle(.secondary).lineLimit(model.state.isOffline == true ? 2 : 1)
                 }
+            }
+        }
+        .contextMenu { if model.link == .online { menu } }
+        .sheet(isPresented: Binding(get: { previewURL != nil }, set: { if !$0 { previewURL = nil } })) {
+            if let previewURL { SafariView(url: previewURL).ignoresSafeArea() }
+        }
+        .sheet(item: $log) { LogSheet(log: $0, taskID: task.id) }
+        .alert("Rename Task", isPresented: $renaming) {
+            TextField("Name", text: $text)
+            Button("Rename") { Task { await model.rename(taskID: task.id, to: text) } }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("New Tag", isPresented: $addingTag) {
+            TextField("Name", text: $text)
+            Button("Add") { Task { await model.addTags(taskID: task.id, text) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Separate several tags with commas.")
+        }
+        .confirmationDialog("Delete “\(task.title)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete Task", role: .destructive) { Task { await model.delete(taskID: task.id) } }
+        } message: {
+            Text("Its changes are discarded without merging.")
+        }
+    }
+
+    /// What its status offers, as in the task, then the Mac's context menu, without what only works there
+    /// (Open In, Create Schedule from This).
+    @ViewBuilder private var menu: some View {
+        let project = model.state.projects.first { $0.id == task.projectID }
+        if let project {
+            ForEach(model.actions(for: task, in: project, openURL: openURL), id: \.title) { action in
+                Button(action.title, systemImage: action.systemImage) { Task { await action.run() } }
+            }
+        }
+        if model.canPreview(task) {
+            Button("Preview", systemImage: "safari") { Task { previewURL = await model.startPreview(taskID: task.id) } }
+        }
+        if task.status == .working || task.approvalRequest != nil {
+            Button("Stop", systemImage: "stop.fill") { Task { await model.stop(taskID: task.id) } }
+        }
+        if task.canResume {
+            Button("Resume", systemImage: "play.fill") { Task { await model.resume(taskID: task.id) } }
+        }
+        Divider()
+        if !task.status.isClosed, let project {
+            if project.runsApp {
+                Button("App Log", systemImage: "doc.text") { log = .app }
+            }
+            if project.isApp {
+                let built = project.targets.filter { $0.kind != .run }
+                let title = { (target: BuildTarget) in built.count > 1 ? "Build Log: \(target.name)" : "Build Log" }
+                ForEach(built) { target in
+                    Button(title(target), systemImage: "hammer") { log = .build(target.id, title: title(target)) }
+                }
+            }
+            Button("Archive Task", systemImage: "archivebox") { Task { await model.archive(taskID: task.id) } }
+        }
+        if let project {
+            Menu("Tags", systemImage: "tag") {
+                ForEach(project.tagNames, id: \.self) { name in
+                    Toggle(name, isOn: Binding {
+                        task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
+                    } set: { on in
+                        Task { on ? await model.addTags(taskID: task.id, name) : await model.removeTag(taskID: task.id, name) }
+                    })
+                }
+                Button("New Tag…", systemImage: "plus") { text = ""; addingTag = true }
+            }
+        }
+        Button("Rename Task…", systemImage: "pencil") { text = task.title; renaming = true }
+        Button("Delete Task…", systemImage: "trash", role: .destructive) { confirmingDelete = true }
+    }
+}
+
+/// A task's App Log or a Build Log, from its context menu.
+private enum TaskLog: Hashable, Identifiable {
+    case app
+    case build(UUID, title: String)
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .app: "App Log"
+        case .build(_, let title): title
+        }
+    }
+}
+
+private struct LogSheet: View {
+    @Environment(RemoteModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let log: TaskLog
+    let taskID: Int
+    @State private var text: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(text.map { $0.isEmpty ? "No output." : $0 } ?? "Loading…")
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            // The latest output, where errors are, is at the end.
+            .defaultScrollAnchor(.bottom)
+            .navigationTitle(log.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let text, !text.isEmpty { ShareLink(item: text) }
+                Button("Done", systemImage: "checkmark") { dismiss() }
+            }
+        }
+        .task {
+            text = switch log {
+            case .app: await model.serverLog(taskID: taskID) ?? ""
+            case .build(let target, _): await model.buildLog(taskID: taskID, target: target) ?? ""
             }
         }
     }
@@ -938,6 +1062,42 @@ private struct PromptTextView: UIViewRepresentable {
     }()
 }
 
+struct TaskAction {
+    let title: String
+    let systemImage: String
+    let run: () async -> Void
+}
+
+extension RemoteModel {
+    /// What a task's status offers, its main action first: the detail's buttons and the list's context menu.
+    func actions(for task: TaskItem, in project: Project, openURL: OpenURLAction) -> [TaskAction] {
+        let id = task.id, model = self
+        let pullRequest = state.pullRequests[id]
+        let view = pullRequest.map { pullRequest in
+            TaskAction(title: "View Pull Request #\(pullRequest.number)", systemImage: PullRequest.symbol()) { openURL(pullRequest.url) }
+        }
+        let viewing = view.map { [$0] } ?? []
+        switch task.status {
+        case .completed:
+            let merge = TaskAction(title: "Merge into \(task.base(in: project))", systemImage: "arrow.triangle.merge") { await model.merge(taskID: id) }
+            if pullRequest?.state == .open {
+                let push = TaskAction(title: "Push Changes", systemImage: "arrow.up") { await model.push(taskID: id) }
+                return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
+            }
+            // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
+            if pullRequest?.state == .merged { return [merge] + viewing }
+            let open = TaskAction(title: "Open Pull Request", systemImage: PullRequest.symbol()) {
+                if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
+            }
+            return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
+        case .conflict:
+            return [TaskAction(title: "Resolve", systemImage: "wrench.and.screwdriver") { await model.resolveConflict(taskID: id) }] + viewing
+        default:
+            return []
+        }
+    }
+}
+
 /// The status's main action, the rest under the button beside it, as in the Mac's split button.
 /// Merging and pull requests name the branch they go to, and that menu changes it.
 private struct TaskActions: View {
@@ -949,37 +1109,7 @@ private struct TaskActions: View {
     @State private var branches: [String] = []
     @State private var newBase: String?
 
-    private struct Action {
-        let title: String
-        let run: () async -> Void
-    }
-
-    private var actions: [Action] {
-        let id = task.id, model = model, openURL = openURL
-        let pullRequest = model.state.pullRequests[id]
-        let view = pullRequest.map { pullRequest in
-            Action(title: "View Pull Request #\(pullRequest.number)") { openURL(pullRequest.url) }
-        }
-        let viewing = view.map { [$0] } ?? []
-        switch task.status {
-        case .completed:
-            let merge = Action(title: "Merge into \(task.base(in: project))") { await model.merge(taskID: id) }
-            if pullRequest?.state == .open {
-                let push = Action(title: "Push Changes") { await model.push(taskID: id) }
-                return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
-            }
-            // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
-            if pullRequest?.state == .merged { return [merge] + viewing }
-            let open = Action(title: "Open Pull Request") {
-                if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
-            }
-            return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
-        case .conflict:
-            return [Action(title: "Resolve") { await model.resolveConflict(taskID: id) }] + viewing
-        default:
-            return []
-        }
-    }
+    private var actions: [TaskAction] { model.actions(for: task, in: project, openURL: openURL) }
 
     var body: some View {
         if let main = actions.first {
@@ -991,7 +1121,7 @@ private struct TaskActions: View {
                 .buttonStyle(.borderedProminent)
                 Menu {
                     ForEach(actions.dropFirst(), id: \.title) { action in
-                        Button(action.title) { perform(action) }
+                        Button(action.title, systemImage: action.systemImage) { perform(action) }
                     }
                     Divider()
                     // The current base is always offered, so the picker is valid before branches load.
@@ -1022,7 +1152,7 @@ private struct TaskActions: View {
         }
     }
 
-    private func perform(_ action: Action) {
+    private func perform(_ action: TaskAction) {
         isBusy = true
         Task {
             await action.run()

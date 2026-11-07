@@ -440,7 +440,7 @@ extension Schedule.FinishAction {
         switch self {
         case .review: "eye"
         case .archive: "archivebox"
-        case .pullRequest: "arrow.triangle.pull"
+        case .pullRequest: PullRequest.symbol()
         case .merge: "arrow.triangle.merge"
         }
     }
