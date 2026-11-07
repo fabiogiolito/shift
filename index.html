@@ -77,8 +77,8 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 /* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene */
 .mac { position: absolute; top: 0; left: 50%; width: var(--w); height: var(--h); transform-origin: 50% 0;
   transform: translateX(-50%) translateY(calc((1 - var(--t)) * var(--drop) - var(--t) * var(--lift, 0px))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * (.84 + .16 * var(--t)))); }
-.phone { width: var(--pw); padding: calc(var(--pw) * .045); border-radius: calc(var(--pw) * .17); background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 70px -10px #000; }
-.phone img { border-radius: calc(var(--pw) * .13); }
+.phone { width: var(--pw); padding: calc(var(--pw) * .025); border-radius: calc(var(--pw) * .17); background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 70px -10px #000; }
+.phone img { border-radius: calc(var(--pw) * .145); }
 .iphone { position: absolute; z-index: 3; left: calc(50% + var(--mw) * .5 - var(--pw) * .7); top: calc(var(--drop) * 1.1); width: var(--pw);
   opacity: calc(1 - var(--t) * 1.8); transform: translateY(calc(var(--t) * 240px)) rotate(calc(var(--t) * 8deg)); }
 .gitcmds { position: absolute; inset: 0; z-index: 0; pointer-events: none; animation: cmds-burst 1.2s cubic-bezier(.16, .84, .24, 1) .1s both; }
@@ -238,7 +238,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .rphone { position: absolute; z-index: 3; left: calc(50% + var(--mw1) * .5 - var(--pw) * 1.05); top: calc(4% - var(--lift, 0px)); width: var(--pw);
   translate: 0 115%; opacity: 0; transition: translate .9s var(--ease), opacity .5s; }
 .rphone.on { translate: 0 0; opacity: 1; }
-.ps { position: relative; display: flex; flex-direction: column; aspect-ratio: 603 / 1311; overflow: hidden; padding: 6% 7% 7%; border-radius: calc(var(--pw) * .13); background: #000; color: #f2f2f7; text-align: left;
+.ps { position: relative; display: flex; flex-direction: column; aspect-ratio: 603 / 1311; overflow: hidden; padding: 6% 7% 7%; border-radius: calc(var(--pw) * .145); background: #000; color: #f2f2f7; text-align: left;
   font: calc(var(--pw) * .05) / 1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em; }
 .pbar { display: flex; justify-content: space-between; align-items: center; padding: 0 5%; font-size: .95em; }
 .pbar span { display: flex; align-items: flex-end; gap: 1.5px; }
@@ -362,11 +362,9 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .mrow.kid { padding-left: 22px; color: var(--muted); }
 .mrow b { font-weight: 400; }
 .card.full { grid-column: 1 / -1; }
-/* Twelve tags: 4, 3 or 2 to a row, every row full */
-.tags { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-.tags li { padding: .6rem .75rem; border-radius: 10px; background: #1c1c1e; color: #c7c7cc; font-size: 14px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 900px) { .tags { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .tags { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tags li { display: grid; place-items: center; font-size: 13px; line-height: 1.25; padding-inline: .5rem; white-space: normal; } }
+/* Inline pills; balanced wrapping evens out the rows so none is left with one pill */
+.tags { margin: 0; padding: 0; list-style: none; text-align: center; text-wrap: balance; line-height: 2.6; }
+.tags li { display: inline-block; margin: 0 2px; padding: 0 .9rem; border-radius: 99px; background: #1c1c1e; color: #c7c7cc; font-size: 14px; line-height: 2.2; white-space: nowrap; }
 @media (max-width: 900px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .card.span2 { grid-column: span 2; } }
 @media (max-width: 600px) { .bento { grid-template-columns: minmax(0, 1fr); } .card.wide, .card.span2 { grid-column: auto; grid-row: auto; } .extras { padding-top: 5rem; } }
 @supports (animation-timeline: view()) {
@@ -580,8 +578,6 @@ body > footer a:hover { color: var(--fg); }
           <li>Installs dependencies</li><li>Runs iOS apps in Simulator</li><li>Server logs per task</li><li>Diffs</li>
           <li>Finds project icons</li><li>Keeps the Mac awake</li><li>Auto updates</li><li>Free &amp; open source</li>
         </ul>
-        <h3>And all the details</h3>
-        <p>Small things that keep each task out of your way.</p>
       </article>
     </div>
   </section>
