@@ -150,8 +150,13 @@ private struct ChatRow: View {
     }
 }
 
+/// What opens a project's chat in the navigation stack (a bare UUID opens the project).
+struct ChatLink: Hashable {
+    let projectID: UUID
+}
+
 /// The project's one conversation with its agent. Not a task.
-private struct ChatView: View {
+struct ChatView: View {
     @Environment(RemoteModel.self) private var model
     let project: Project
     @State private var stream: LogStream?
@@ -163,24 +168,11 @@ private struct ChatView: View {
     var body: some View {
         let chat = model.chat(projectID: project.id)
         let replying = model.state.replyingChats.contains(project.id)
+        let draft: Schedule? = model.scheduleDraft(projectID: project.id)
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Conversation(prompts: chat?.prompts ?? [], turns: stream?.turns ?? [])
-                if let request = model.state.chatApprovals[project.id] {
-                    Label { Text(.init("Wants to \(request)")) } icon: { Image(systemName: "hand.raised.fill") }
-                        .foregroundStyle(.blue)
-                    HStack {
-                        Button("Allow") { Task { await model.answerChatApproval(projectID: project.id, allow: true) } }
-                            .buttonStyle(.borderedProminent)
-                        Button("Deny", role: .destructive) { Task { await model.answerChatApproval(projectID: project.id, allow: false) } }
-                            .buttonStyle(.bordered)
-                    }
-                } else if replying {
-                    Label { Text(model.state.isOffline == true ? TaskItem.offlineActivity : "Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
-                }
-            }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
+            messages(chat: chat, replying: replying, draft: draft)
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .defaultScrollAnchor(.bottom)
         .scrollPosition($scroll)
@@ -226,6 +218,26 @@ private struct ChatView: View {
         }
         .onDisappear {
             if let chat { model.closeLog(.chat(chat.id)) }
+        }
+    }
+
+    private func messages(chat: ProjectChat?, replying: Bool, draft: Schedule?) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Conversation(prompts: chat?.prompts ?? [], turns: stream?.turns ?? [])
+            if let request = model.state.chatApprovals[project.id] {
+                Label { Text(.init("Wants to \(request)")) } icon: { Image(systemName: "hand.raised.fill") }
+                    .foregroundStyle(.blue)
+                HStack {
+                    Button("Allow") { Task { await model.answerChatApproval(projectID: project.id, allow: true) } }
+                        .buttonStyle(.borderedProminent)
+                    Button("Deny", role: .destructive) { Task { await model.answerChatApproval(projectID: project.id, allow: false) } }
+                        .buttonStyle(.bordered)
+                }
+            } else if replying {
+                Label { Text(model.state.isOffline == true ? TaskItem.offlineActivity : "Working…") } icon: { ProgressView() }.foregroundStyle(.secondary)
+            }
+            // What the chat drafted, last: under its reply, to save from here.
+            if let draft { ScheduleDraftCard(draft: draft) }
         }
     }
 }

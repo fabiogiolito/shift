@@ -94,6 +94,9 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     /// Answered with `.taskID` of the run's task. A Mac from before schedules doesn't know these.
     case runScheduleNow(scheduleID: UUID)
     case setSchedulePaused(scheduleID: UUID, paused: Bool)
+    /// Saves the open draft (`RemoteSnapshot.scheduleDraft`), if it's still this one, as the Mac's form would.
+    case saveScheduleDraft(scheduleID: UUID)
+    case discardScheduleDraft(scheduleID: UUID)
 }
 
 public enum RemoteResult: Codable, Equatable, Sendable {
@@ -133,6 +136,7 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case offline(Bool)
     /// All of them, whenever any changes. An older phone doesn't know this message and skips it.
     case schedules([Schedule])
+    case scheduleDraft(Schedule?)
     /// One reply per `.command`: a result, or why there is none.
     case reply(id: Int, result: RemoteResult?, error: String?)
     /// Bytes of a subscribed log, from `offset`.
@@ -154,6 +158,8 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
     public var isOffline: Bool?
     /// With their runs. Nil: an older Mac, from before schedules.
     public var schedules: [Schedule]?
+    /// The schedule form open on the Mac, filled in (by the chat, `/schedule`…), not saved yet. Nil: none, or an older Mac.
+    public var scheduleDraft: Schedule?
 
     public init() {}
 
@@ -182,6 +188,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         if replyingChats != old.replyingChats { messages.append(.replyingChats(replyingChats)) }
         if isOffline != old.isOffline { messages.append(.offline(isOffline ?? false)) }
         if schedules != old.schedules { messages.append(.schedules(schedules ?? [])) }
+        if scheduleDraft != old.scheduleDraft { messages.append(.scheduleDraft(scheduleDraft)) }
         return messages
     }
 
@@ -203,6 +210,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         case .replyingChats(let ids): replyingChats = ids
         case .offline(let offline): isOffline = offline
         case .schedules(let schedules): self.schedules = schedules
+        case .scheduleDraft(let draft): scheduleDraft = draft
         case .hello, .reply, .log: break
         }
     }

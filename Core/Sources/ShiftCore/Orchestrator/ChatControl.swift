@@ -265,7 +265,8 @@ extension AppModel {
             let fields = try jsonArgument()
             guard (fields["timing"] as? [String: Any])?["start"] != nil else { throw Refusal("Missing timing.start.") }
             scheduleDraft = try await validSchedule(patching: defaults, with: fields)
-            return "The schedule form is open in Shift for the user, filled in. Nothing is created until they save it "
+            return "The schedule form is open in Shift for the user, filled in (on the Mac, and under this chat on their phone). "
+                + "Nothing is created until they save it "
                 + "(then `schedules` lists it). It runs: \(scheduleDraft?.timing.summary() ?? "")"
         case "edit":
             let old = try scheduleArgument()

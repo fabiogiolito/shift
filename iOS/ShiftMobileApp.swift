@@ -21,7 +21,7 @@ struct RootView: View {
     @State private var path = NavigationPath()
 
     #if DEBUG
-    /// SHIFT_OPEN, to reach a screen without taps (screenshots): `project=<id>,schedule=<id>,task=<number>`, in order.
+    /// SHIFT_OPEN, to reach a screen without taps (screenshots): `project=<id>,schedule=<id>,chat=<project id>,task=<number>`, in order.
     private static func debugPath() -> NavigationPath {
         var path = NavigationPath()
         for item in (ProcessInfo.processInfo.environment["SHIFT_OPEN"] ?? "").split(separator: ",") {
@@ -31,6 +31,7 @@ struct RootView: View {
             case "project": if let id = UUID(uuidString: parts[1]) { path.append(id) }
             case "schedule": if let id = UUID(uuidString: parts[1]) { path.append(ScheduleLink(id: id)) }
             case "task": if let id = Int(parts[1]) { path.append(id) }
+            case "chat": if let id = UUID(uuidString: parts[1]) { path.append(ChatLink(projectID: id)) }
             default: break
             }
         }
@@ -52,6 +53,9 @@ struct RootView: View {
                             .navigationDestination(for: UUID.self) { TaskListView(projectID: $0) }
                             .navigationDestination(for: Int.self) { TaskDetailView(taskID: $0) }
                             .navigationDestination(for: ScheduleLink.self) { ScheduleDetailView(scheduleID: $0.id) }
+                            .navigationDestination(for: ChatLink.self) { link in
+                                if let project = model.state.projects.first(where: { $0.id == link.projectID }) { ChatView(project: project) }
+                            }
                     }
                     #if DEBUG
                     .task { path = Self.debugPath() }

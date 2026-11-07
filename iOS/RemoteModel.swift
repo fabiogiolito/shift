@@ -254,6 +254,14 @@ final class RemoteModel {
     }
 
     func setSchedulePaused(_ id: UUID, _ paused: Bool) async { await perform(.setSchedulePaused(scheduleID: id, paused: paused)) }
+    func saveScheduleDraft(_ id: UUID) async { await perform(.saveScheduleDraft(scheduleID: id)) }
+    func discardScheduleDraft(_ id: UUID) async { await perform(.discardScheduleDraft(scheduleID: id)) }
+
+    /// A new schedule the Mac has filled in for this project (the chat drafted it), waiting to be saved.
+    func scheduleDraft(projectID: UUID) -> Schedule? {
+        guard let draft = state.scheduleDraft, draft.projectID == projectID, schedule(draft.id) == nil else { return nil }
+        return draft
+    }
 
     /// The project's base branch as this phone reaches it, once its server answers on the Mac.
     func baseURL(projectID: UUID) async -> URL? {

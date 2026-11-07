@@ -1,7 +1,8 @@
 import ShiftProtocol
 import SwiftUI
 
-// Schedules on the phone: see them and their runs, Run Now, Pause and Resume. Creating, editing and deleting stay on the Mac.
+// Schedules on the phone: see them and their runs, Run Now, Pause and Resume, and save one the chat drafted.
+// Editing every field and deleting stay on the Mac.
 
 /// What opens a schedule's page in the navigation stack (a bare UUID opens a project).
 struct ScheduleLink: Hashable {
@@ -154,5 +155,48 @@ private struct RunRow: View {
         }
         .padding(12)
         .contentShape(.rect)
+    }
+}
+
+/// Under the chat: the schedule it drafted, as the Mac's form has it, to save from here.
+/// Changes go through the chat ("make it 10:00"), which drafts it again; the form on the Mac edits every field.
+struct ScheduleDraftCard: View {
+    @Environment(RemoteModel.self) private var model
+    let draft: Schedule
+    @State private var isBusy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("New Schedule", systemImage: draft.symbol).font(.subheadline).foregroundStyle(.secondary)
+            Text(draft.title.isEmpty ? "Untitled" : draft.title).font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                TimelineView(.everyMinute) { _ in Text(draft.statusLine) }
+                Label("When done: \(draft.finish.title)", systemImage: draft.finish.symbol)
+            }
+            .font(.subheadline).foregroundStyle(.secondary)
+            if !draft.prompt.isEmpty { Text(draft.prompt).lineLimit(6) }
+            HStack {
+                Button { perform { await model.saveScheduleDraft(draft.id) } } label: {
+                    Text("Save Schedule").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Discard", role: .destructive) { perform { await model.discardScheduleDraft(draft.id) } }
+                    .buttonStyle(.bordered)
+            }
+            .controlSize(.large)
+            .disabled(isBusy || model.link != .online)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
+    }
+
+    private func perform(_ action: @escaping () async -> Void) {
+        isBusy = true
+        Task {
+            await action()
+            isBusy = false
+        }
     }
 }
