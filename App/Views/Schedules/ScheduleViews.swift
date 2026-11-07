@@ -11,7 +11,7 @@ extension Schedule {
     }
 
     /// A calendar for one run, arrows in a circle for a repeating one.
-    var symbol: String { timing.repeat == nil ? "calendar" : "arrow.triangle.2.circlepath" }
+    var symbol: String { paused ? "pause.circle" : timing.repeat == nil ? "calendar" : "arrow.triangle.2.circlepath" }
 
     /// "Mon 9:00", "Today 9:00", "12 Dec 9:00": when it runs next. Nil if paused or it won't run again.
     var nextRunText: String? { nextRun().map(Self.shortDate) }
@@ -56,7 +56,7 @@ struct ScheduleRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                Image(systemName: schedule.paused ? "pause.circle" : schedule.symbol)
+                Image(systemName: schedule.symbol)
                     .resizable().scaledToFit()
                     .frame(width: 14, height: 14)
                     .foregroundStyle(.secondary)
