@@ -378,6 +378,17 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .btn.dashed:active { transform: none; }
 .cta .actions { margin-top: 2.75rem; }
 .cta > .mono { margin-top: 2rem; }
+.cta-icon { width: clamp(88px, 12vw, 128px); height: auto; margin: 0 auto 2.5rem; filter: drop-shadow(0 20px 40px rgba(0,0,0,.6)); }
+/* Icon, title, buttons and note rise in one after another as the section scrolls in */
+@supports (animation-timeline: view()) {
+  .cta { view-timeline: --cta; }
+  .cta > * { animation: rise linear both; animation-timeline: --cta; }
+  .cta-icon { animation-name: icon-in; animation-range: entry 20% entry 70%; }
+  .cta h2 { animation-range: entry 35% entry 85%; }
+  .cta .actions { animation-range: entry 50% cover 45%; }
+  .cta > .mono { animation-range: entry 60% cover 48%; }
+}
+@keyframes icon-in { from { opacity: 0; scale: .6; translate: 0 40px; } }
 body > footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
 body > footer a:hover { color: var(--fg); }
 
@@ -583,6 +594,7 @@ body > footer a:hover { color: var(--fg); }
   </section>
 
   <section class="screen cta">
+    <img class="cta-icon" src="icon.png" alt="">
     <h2>What’s first <span>on your list?</span></h2>
     <div class="actions">
       <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
