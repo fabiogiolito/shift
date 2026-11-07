@@ -299,7 +299,10 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 @keyframes spin-back { to { rotate: -360deg; } }
 @media (max-width: 639px) {
   .scene { margin-bottom: 60px; }
-  .rphone { left: calc(50% - var(--pw) / 2); }
+  /* The phone step: a larger phone, centered, over the window blurred and dimmed */
+  .rphone { --pw: var(--rpw); left: calc(50% - var(--pw) / 2); }
+  .mac { transition: --z .9s var(--ease), --zx .9s var(--ease), filter .5s; }
+  .scene:has(.rphone.on) .mac { filter: blur(5px) brightness(.55); }
   .ctrl { right: 12px; bottom: 12px; flex-direction: row; gap: 8px; }
   .ctrl .grp { flex-direction: row; }
   .ctrl .grp button + button { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .08); }
@@ -894,7 +897,7 @@ async function type(field, text) {
 }
 function addAct() { S.acts++; $("acts").outerHTML = actsList(S.acts) }
 
-// On phones the window is zoomed in, panned so window x `f` sits mid-screen (its edges stop 16px inside the screen); "phone" zooms out for the iPhone
+// On phones the window is zoomed in, panned so window x `f` sits mid-screen (its edges stop 16px inside the screen); "phone" shows it whole, fit to the screen, behind the iPhone
 // Where each step's activity is, in window x: sidebar and list, list, detail, the preview
 const FOCUS = [null, 0, 560, W, W, W, 650, W, "phone", 560]
 let fit = 1, fx = null
@@ -902,7 +905,7 @@ function aim(f) {
   fx = f
   let z = 1, zx = 0
   if (innerWidth < 640 && f != null) {
-    z = f === "phone" ? .85 : 1.5
+    z = f === "phone" ? 1 : 1.5
     const k = fit * z, half = Math.min(W / 2, (scene.clientWidth / 2 - 16) / k)
     if (f !== "phone") zx = -(Math.min(W - half, Math.max(half, f)) - W / 2) * k
   }
@@ -1089,6 +1092,9 @@ function layout() {
   const hs = document.querySelector(".heads"), hh = heads[0].offsetHeight
   scene.parentElement.style.setProperty("--hy", `${Math.max(0, (56 + scene.offsetTop + h * .4) / 2 - (hs.offsetTop + hh / 2))}px`)
   scene.style.setProperty("--pw", `${Math.round(Math.max(130, Math.min(260, W * fit * .28, h * .5)))}px`)
+  // On phones the iPhone is as large as fits between its top and the step controls (it is about 2.12 widths tall)
+  const phoneTop = scene.offsetTop + h * .04 - (lift - bal)
+  scene.style.setProperty("--rpw", `${Math.round(Math.min(w * .7, (scene.parentElement.clientHeight - 72 - phoneTop) / 2.12))}px`)
   aim(fx)
   onScroll()
 }
@@ -1097,7 +1103,8 @@ function onScroll() {
   scene.parentElement.style.setProperty("--t", reduced ? 1 : Math.min(1, Math.max(0, p)).toFixed(3))
   const beat = Math.min(9, Math.max(0, Math.floor(p + .1)))
   heads.forEach((h, i) => h.classList.toggle("on", i === beat))
-  $("ctrl").classList.toggle("on", beat > 0)
+  // Gone just before the story lets go and the next section scrolls in
+  $("ctrl").classList.toggle("on", beat > 0 && p < 9.75)
   if (beat !== target) { stopIdle(); target = beat; run() }
 }
 
