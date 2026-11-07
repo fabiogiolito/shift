@@ -386,13 +386,13 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 @supports (animation-timeline: view()) {
   .cta { view-timeline: --cta; overflow: clip; }
   .cta.screen > * { --dy: 120px; animation: cta-in both cubic-bezier(.2, .7, .3, 1); animation-timeline: --cta; }
-  .cta.screen > .cta-icon { --dy: 160px; animation-name: cta-icon-in; animation-range: entry 20% entry 60%; }
-  .cta.screen > h2 { animation-range: entry 50% entry 85%; }
-  .cta.screen > .actions { animation-range: entry 70% cover 50%; }
-  .cta.screen > .mono { animation-range: entry 78% cover 50%; }
+  .cta.screen > .cta-icon { --dy: 360px; animation-name: cta-icon-in; animation-range: entry 10% entry 75%; }
+  .cta.screen > h2 { animation-range: entry 68% entry 92%; }
+  .cta.screen > .actions { animation-range: entry 80% cover 50%; }
+  .cta.screen > .mono { animation-range: entry 86% cover 50%; }
 }
 @keyframes cta-in { from { opacity: 0; translate: 0 var(--dy); } 60% { opacity: 1; } }
-@keyframes cta-icon-in { from { opacity: 0; translate: 0 var(--dy); rotate: -40deg; scale: .3; } 40% { opacity: 1; } }
+@keyframes cta-icon-in { from { opacity: 0; translate: 0 var(--dy); rotate: -40deg; scale: .3; } 25% { opacity: 1; } }
 body > footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
 body > footer a:hover { color: var(--fg); }
 
