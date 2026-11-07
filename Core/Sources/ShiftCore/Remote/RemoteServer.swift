@@ -135,6 +135,7 @@ public final class RemoteServer {
         }
         snapshot.replyingChats = model.replyingChats
         snapshot.isOffline = model.isOffline
+        snapshot.schedules = model.schedules
         return snapshot
     }
 
@@ -250,6 +251,8 @@ public final class RemoteServer {
         case .projectIcon(let id):
             guard let project = model.projects.first(where: { $0.id == id }) else { return .success(.data(nil)) }
             return .success(.data(await ProjectIconFinder.png(in: URL(fileURLWithPath: project.repoPath))))
+        case .runScheduleNow(let id): return .success(.taskID(model.runScheduleNow(id)))
+        case .setSchedulePaused(let id, let paused): model.setSchedulePaused(id, paused)
         case .baseServerURL(let id):
             let url = await model.baseServerURL(projectID: id)
             // ponytail: stays shared until Tailscale's serve config is reset; it only points at a port on this Mac,

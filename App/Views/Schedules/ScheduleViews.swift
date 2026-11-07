@@ -9,41 +9,6 @@ extension Schedule {
         let high = [bytes.0, bytes.1, bytes.2, bytes.3, bytes.4, bytes.5, bytes.6].reduce(0) { $0 << 8 | Int($1) }
         return -2 - high
     }
-
-    /// A calendar for one run, arrows in a circle for a repeating one.
-    var symbol: String { paused ? "pause.circle" : timing.repeat == nil ? "calendar" : "arrow.triangle.2.circlepath" }
-
-    /// "Mon 9:00", "Today 9:00", "12 Dec 9:00": when it runs next. Nil if paused or it won't run again.
-    var nextRunText: String? { nextRun().map(Self.shortDate) }
-
-    static func shortDate(_ date: Date) -> String {
-        let calendar = Calendar.current
-        let time = date.formatted(date: .omitted, time: .shortened)
-        if calendar.isDateInToday(date) { return "Today \(time)" }
-        if calendar.isDateInTomorrow(date) { return "Tomorrow \(time)" }
-        if calendar.isDateInYesterday(date) { return "Yesterday \(time)" }
-        let days = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: date).day ?? 99)
-        let day = days < 7 ? date.formatted(.dateTime.weekday(.abbreviated)) : date.formatted(.dateTime.day().month(.abbreviated))
-        return "\(day) \(time)"
-    }
-
-    /// The list's line: how often, and when next.
-    var statusLine: String {
-        if paused { return "Paused · " + timing.summary() }
-        guard let next = nextRunText else { return timing.summary() + " · No more runs" }
-        return timing.summary() + " · Next: " + next
-    }
-}
-
-extension Schedule.FinishAction {
-    var title: String {
-        switch self {
-        case .review: "Leave for review"
-        case .archive: "Archive"
-        case .pullRequest: "Open a pull request"
-        case .merge: "Merge"
-        }
-    }
 }
 
 // MARK: - List row
@@ -205,7 +170,7 @@ struct ScheduleDetailView: View {
                 HStack(spacing: 4) {
                     Text(Schedule.shortDate(run.due ?? run.started ?? .now)).monospacedDigit()
                     Text("·").foregroundStyle(.secondary)
-                    Text(outcome(run, task)).foregroundStyle(.secondary)
+                    Text(run.outcomeText(task: task?.status)).foregroundStyle(.secondary)
                 }
                 if let text = run.summary ?? task?.description ?? run.reason, !text.isEmpty {
                     Text(text).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
@@ -227,22 +192,6 @@ struct ScheduleDetailView: View {
         .help(task == nil ? "" : "Open its task")
     }
 
-    private func outcome(_ run: ScheduleRun, _ task: TaskItem?) -> String {
-        switch run.outcome {
-        case .running:
-            switch task?.status {
-            case .needsInput?: "Needs input"
-            case .blocked?: "Blocked"
-            default: run.due == nil ? "Run by hand, running" : "Running"
-            }
-        case .review: "Left for review"
-        case .archived: "Archived"
-        case .pullRequest: "Pull request opened"
-        case .merged: "Merged"
-        case .missed: "Missed: \(run.reason ?? "")"
-        case .failed: "Failed"
-        }
-    }
 }
 
 // MARK: - Form
@@ -297,7 +246,7 @@ struct ScheduleForm: View {
                 label("When done")
                 Picker("When done", selection: $draft.finish) {
                     ForEach(Schedule.FinishAction.allCases, id: \.self) {
-                        Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
+                        Label($0.title, systemImage: $0.symbol).tag($0)
                     }
                 }
                 .labelsHidden()
@@ -686,11 +635,11 @@ struct ScheduleRunMenus: View {
             .help(schedule.permissions == .manual ? "Runs wait for you to allow their commands" : "Permissions")
             Menu {
                 Picker("When done", selection: $schedule.finish) {
-                    ForEach(Schedule.FinishAction.allCases, id: \.self) { Label(Self.title($0), systemImage: Self.symbol($0)).tag($0) }
+                    ForEach(Schedule.FinishAction.allCases, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
                 }
                 .pickerStyle(.inline)
             } label: {
-                Label(Self.title(schedule.finish), systemImage: Self.symbol(schedule.finish))
+                Label(schedule.finish.title, systemImage: schedule.finish.symbol)
             }
             .help(schedule.finish == .archive || schedule.finish == .merge
                   ? "When a run is done. Otherwise it's left for review." : "When a run is done")
@@ -702,23 +651,6 @@ struct ScheduleRunMenus: View {
         .task(id: schedule.projectID) { branches = await model.branches(for: schedule.projectID) }
     }
 
-    static func title(_ action: Schedule.FinishAction) -> String {
-        switch action {
-        case .review: "Leave for review"
-        case .archive: "Archive if no changes"
-        case .pullRequest: "Open a pull request"
-        case .merge: "Merge if clean"
-        }
-    }
-
-    static func symbol(_ action: Schedule.FinishAction) -> String {
-        switch action {
-        case .review: "eye"
-        case .archive: "archivebox"
-        case .pullRequest: "arrow.triangle.pull"
-        case .merge: "arrow.triangle.merge"
-        }
-    }
 }
 
 /// Shared schedule controls.

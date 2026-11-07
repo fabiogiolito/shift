@@ -397,3 +397,71 @@ extension ScheduleTiming {
         return "\(day)\(suffix)"
     }
 }
+
+// MARK: - Display, shared by the Mac and the phone
+
+extension Schedule {
+    /// A calendar for one run, arrows in a circle for a repeating one, pause when paused.
+    public var symbol: String { paused ? "pause.circle" : timing.repeat == nil ? "calendar" : "arrow.triangle.2.circlepath" }
+
+    /// "Mon 9:00", "Today 9:00", "12 Dec 9:00": when it runs next. Nil if paused or it won't run again.
+    public var nextRunText: String? { nextRun().map(Self.shortDate) }
+
+    public static func shortDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if calendar.isDateInToday(date) { return "Today \(time)" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow \(time)" }
+        if calendar.isDateInYesterday(date) { return "Yesterday \(time)" }
+        let days = abs(calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: date).day ?? 99)
+        let day = days < 7 ? date.formatted(.dateTime.weekday(.abbreviated)) : date.formatted(.dateTime.day().month(.abbreviated))
+        return "\(day) \(time)"
+    }
+
+    /// How often, and when next: "Every weekday at 9:00 · Next: Mon 9:00".
+    public var statusLine: String {
+        if paused { return "Paused · " + timing.summary() }
+        guard let next = nextRunText else { return timing.summary() + " · No more runs" }
+        return timing.summary() + " · Next: " + next
+    }
+}
+
+extension Schedule.FinishAction {
+    public var title: String {
+        switch self {
+        case .review: "Leave for review"
+        case .archive: "Archive if no changes"
+        case .pullRequest: "Open a pull request"
+        case .merge: "Merge if clean"
+        }
+    }
+
+    public var symbol: String {
+        switch self {
+        case .review: "eye"
+        case .archive: "archivebox"
+        case .pullRequest: "arrow.triangle.pull"
+        case .merge: "arrow.triangle.merge"
+        }
+    }
+}
+
+extension ScheduleRun {
+    /// "Left for review", "Missed: Mac was asleep"… `task`: its task's status, if it still has one.
+    public func outcomeText(task: TaskStatus?) -> String {
+        switch outcome {
+        case .running:
+            switch task {
+            case .needsInput?: "Needs input"
+            case .blocked?: "Blocked"
+            default: due == nil ? "Run by hand, running" : "Running"
+            }
+        case .review: "Left for review"
+        case .archived: "Archived"
+        case .pullRequest: "Pull request opened"
+        case .merged: "Merged"
+        case .missed: "Missed: \(reason ?? "")"
+        case .failed: "Failed"
+        }
+    }
+}

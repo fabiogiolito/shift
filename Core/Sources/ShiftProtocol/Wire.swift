@@ -91,6 +91,9 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     case changeBase(taskID: Int, to: String)
     /// The project's icon as a PNG, as the Mac's sidebar shows it. `.data(nil)` if it has none.
     case projectIcon(projectID: UUID)
+    /// Answered with `.taskID` of the run's task. A Mac from before schedules doesn't know these.
+    case runScheduleNow(scheduleID: UUID)
+    case setSchedulePaused(scheduleID: UUID, paused: Bool)
 }
 
 public enum RemoteResult: Codable, Equatable, Sendable {
@@ -128,6 +131,8 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case chatApproval(projectID: UUID, String?)
     case replyingChats(Set<UUID>)
     case offline(Bool)
+    /// All of them, whenever any changes. An older phone doesn't know this message and skips it.
+    case schedules([Schedule])
     /// One reply per `.command`: a result, or why there is none.
     case reply(id: Int, result: RemoteResult?, error: String?)
     /// Bytes of a subscribed log, from `offset`.
@@ -147,6 +152,8 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
     public var replyingChats: Set<UUID> = []
     /// The Mac can't reach the internet while an agent runs. Nil: an older Mac, which doesn't say.
     public var isOffline: Bool?
+    /// With their runs. Nil: an older Mac, from before schedules.
+    public var schedules: [Schedule]?
 
     public init() {}
 
@@ -174,6 +181,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         }
         if replyingChats != old.replyingChats { messages.append(.replyingChats(replyingChats)) }
         if isOffline != old.isOffline { messages.append(.offline(isOffline ?? false)) }
+        if schedules != old.schedules { messages.append(.schedules(schedules ?? [])) }
         return messages
     }
 
@@ -194,6 +202,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         case .chatApproval(let id, let request): chatApprovals[id] = request
         case .replyingChats(let ids): replyingChats = ids
         case .offline(let offline): isOffline = offline
+        case .schedules(let schedules): self.schedules = schedules
         case .hello, .reply, .log: break
         }
     }

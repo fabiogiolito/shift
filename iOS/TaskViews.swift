@@ -78,10 +78,15 @@ struct TaskListView: View {
         let active = tasks.filter { !$0.status.isClosed }
         let closed = tasks.filter(\.status.isClosed).sorted { ($0.mergedAt ?? .distantPast) > ($1.mergedAt ?? .distantPast) }
         let project = model.state.projects.first { $0.id == projectID }
+        let schedules = model.schedules(in: projectID)
         List {
             if let project { Section { ChatRow(project: project) } }
             if !active.isEmpty {
                 Section { ForEach(active) { TaskRow(task: $0) } }
+            }
+            // As on the Mac: between the tasks and the closed ones.
+            if !schedules.isEmpty {
+                Section("Scheduled") { ForEach(schedules) { ScheduleRow(schedule: $0) } }
             }
             if !closed.isEmpty {
                 Section("Closed") {
@@ -92,7 +97,7 @@ struct TaskListView: View {
         // Room between the large title and the first group.
         .contentMargins(.top, 16, for: .scrollContent)
         .overlay {
-            if tasks.isEmpty {
+            if tasks.isEmpty && schedules.isEmpty {
                 EmptyState(title: "No Tasks", systemImage: "tray", description: Text("Start one here or in Shift on your Mac.")) {
                     Button("New Task") { isCreating = true }.buttonStyle(.borderedProminent)
                 }
@@ -195,7 +200,7 @@ private struct ChatView: View {
             }
         }
         .safeAreaBar(edge: .bottom) {
-            PromptBar(placeholder: "Ask or tell the agent anything…") {
+            PromptBar(placeholder: "Ask or tell the agent anything…", commands: [.task, .schedule]) {
                 await model.sendChat(projectID: project.id, text: $0, attachments: $1)
             }
         }
@@ -230,15 +235,26 @@ private struct NewTaskView: View {
     @Environment(RemoteModel.self) private var model
     let projectID: UUID
     @State private var taskID: Int?
+    /// Sent `/schedule …`: the chat drafts it, and the schedule form opens on the Mac.
+    @State private var showsChat = false
 
     var body: some View {
         // The Mac's reply can come just ahead of the task itself.
         if let taskID, model.task(taskID) != nil {
             TaskDetailView(taskID: taskID)
+        } else if showsChat, let project = model.state.projects.first(where: { $0.id == projectID }) {
+            ChatView(project: project)
         } else {
             Color.clear
                 .safeAreaBar(edge: .bottom) {
-                    PromptBar(placeholder: "What should it do?", focusesOnAppear: true) { text, attachments in
+                    PromptBar(placeholder: "What should it do?", focusesOnAppear: true, commands: [.schedule]) { text, attachments in
+                        // As on the Mac: the words go to the project chat, whose agent asks what's missing and opens the
+                        // schedule form there. Alone, it would open an empty form on the Mac, out of sight: it needs words.
+                        if let words = Prompt.command("schedule", text) {
+                            guard !words.isEmpty else { return false }
+                            showsChat = await model.sendChat(projectID: projectID, text: text, attachments: attachments)
+                            return showsChat
+                        }
                         taskID = await model.createTask(projectID: projectID, prompt: text, attachments: attachments)
                         return taskID != nil
                     }
@@ -469,15 +485,28 @@ private struct ResponsePanel: View {
     }
 }
 
+/// A `/command` the + menu offers: `/schedule`, `/task`.
+struct PromptCommand {
+    let name: String
+    let title: String
+    let systemImage: String
+
+    static let schedule = PromptCommand(name: "schedule", title: "New Schedule", systemImage: "calendar.badge.clock")
+    static let task = PromptCommand(name: "task", title: "New Task", systemImage: "plus.square")
+}
+
 private struct PromptBar: View {
     @Environment(RemoteModel.self) private var model
     var placeholder = "Ask for changes…"
     var focusesOnAppear = false
     /// False inside the response panel: no margins of its own.
     var inset = true
+    /// Offered in the + menu, under Photos: each starts the message with its `/command`.
+    var commands: [PromptCommand] = []
     /// False if it didn't go through: what was written stays.
     let onSend: (_ text: String, _ attachments: [String]) async -> Bool
     @State private var text = ""
+    @State private var showsPhotos = false
     @State private var picked: [PhotosPickerItem] = []
     @State private var images: [PromptImage] = []
     @State private var viewing: PromptImage?
@@ -508,11 +537,20 @@ private struct PromptBar: View {
             }
             // At the bottom, and all as tall as one line of text: centered on a single line, and level with the last of several.
             HStack(alignment: .bottom, spacing: 8) {
-                PhotosPicker(selection: $picked, matching: .images) {
-                    Image(systemName: "photo")
+                Menu {
+                    Button("Photos", systemImage: "photo.on.rectangle") { showsPhotos = true }
+                    if !commands.isEmpty {
+                        Section {
+                            ForEach(commands, id: \.name) { command in
+                                Button(command.title, systemImage: command.systemImage) { start(command) }
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "plus")
                         .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
                         .frame(width: Self.controlSize, height: Self.controlSize)
-                        .accessibilityLabel("Attach pictures")
+                        .accessibilityLabel("Add")
                 }
                 PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
                     images += pasted.map(PromptImage.init)
@@ -532,6 +570,7 @@ private struct PromptBar: View {
         .padding(.horizontal, inset ? 16 : 0)
         .padding(.bottom, inset ? 8 : 0)
         .animation(.default, value: images)
+        .photosPicker(isPresented: $showsPhotos, selection: $picked, matching: .images)
         .onChange(of: picked) {
             guard !picked.isEmpty else { return }
             let items = picked
@@ -547,6 +586,15 @@ private struct PromptBar: View {
         .sheet(item: $viewing) { image in
             PromptImageViewer(image: image.image) { images.removeAll { $0.id == image.id } }
         }
+    }
+
+    /// `/name ` in front of what's written, in place of any command already there.
+    private func start(_ command: PromptCommand) {
+        var rest = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let other = commands.first(where: { Prompt.command($0.name, rest) != nil }) {
+            rest = Prompt.command(other.name, rest) ?? rest
+        }
+        text = "/\(command.name) " + rest
     }
 
     private func send() {
@@ -1111,7 +1159,7 @@ private struct SafariView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 }
 
-private extension VerticalAlignment {
+extension VerticalAlignment {
     /// The middle of a row's first line of text, for an icon beside a title and subtitle.
     enum FirstLineCenter: AlignmentID {
         static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }

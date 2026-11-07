@@ -247,6 +247,14 @@ final class RemoteModel {
     func stopChat(projectID: UUID) async { await perform(.stopChat(projectID: projectID)) }
     func newChat(projectID: UUID) async { await perform(.newChat(projectID: projectID)) }
 
+    /// The run's task, nil if it couldn't start (its run log says why).
+    func runScheduleNow(_ id: UUID) async -> Int? {
+        guard case .taskID(let taskID)? = await perform(.runScheduleNow(scheduleID: id)) else { return nil }
+        return taskID
+    }
+
+    func setSchedulePaused(_ id: UUID, _ paused: Bool) async { await perform(.setSchedulePaused(scheduleID: id, paused: paused)) }
+
     /// The project's base branch as this phone reaches it, once its server answers on the Mac.
     func baseURL(projectID: UUID) async -> URL? {
         guard case .url(let url?)? = await perform(.baseServerURL(projectID: projectID)), let port = url.port else { return nil }
@@ -318,6 +326,12 @@ final class RemoteModel {
 
     func tasks(in projectID: UUID) -> [TaskItem] { state.tasks.filter { $0.projectID == projectID } }
     func task(_ id: Int) -> TaskItem? { state.tasks.first { $0.id == id } }
+    /// Soonest next run first, as on the Mac; paused and finished ones last, by title.
+    func schedules(in projectID: UUID) -> [Schedule] {
+        (state.schedules ?? []).filter { $0.projectID == projectID }
+            .sorted { ($0.nextRun() ?? .distantFuture, $0.title) < ($1.nextRun() ?? .distantFuture, $1.title) }
+    }
+    func schedule(_ id: UUID) -> Schedule? { state.schedules?.first { $0.id == id } }
     func chat(projectID: UUID) -> ProjectChat? { state.chats.first { $0.projectID == projectID } }
 
     /// The task's dev server, while it runs.
