@@ -315,6 +315,8 @@ private struct NewTaskView: View {
 private struct TaskRow: View {
     let task: TaskItem
     @Environment(RemoteModel.self) private var model
+    @Environment(\.openURL) private var openURL
+    @State private var previewURL: URL?
 
     var body: some View {
         NavigationLink(value: task.id) {
@@ -331,6 +333,28 @@ private struct TaskRow: View {
                         .font(.footnote).foregroundStyle(.secondary).lineLimit(model.state.isOffline == true ? 2 : 1)
                 }
             }
+        }
+        .contextMenu { if model.link == .online { menu } }
+        .sheet(isPresented: Binding(get: { previewURL != nil }, set: { if !$0 { previewURL = nil } })) {
+            if let previewURL { SafariView(url: previewURL).ignoresSafeArea() }
+        }
+    }
+
+    /// As in the task: what its status offers, then Preview, Stop and Resume.
+    @ViewBuilder private var menu: some View {
+        if let project = model.state.projects.first(where: { $0.id == task.projectID }) {
+            ForEach(model.actions(for: task, in: project, openURL: openURL), id: \.title) { action in
+                Button(action.title) { Task { await action.run() } }
+            }
+        }
+        if model.canPreview(task) {
+            Button("Preview", systemImage: "safari") { Task { previewURL = await model.startPreview(taskID: task.id) } }
+        }
+        if task.status == .working || task.approvalRequest != nil {
+            Button("Stop", systemImage: "stop.fill") { Task { await model.stop(taskID: task.id) } }
+        }
+        if task.canResume {
+            Button("Resume", systemImage: "play.fill") { Task { await model.resume(taskID: task.id) } }
         }
     }
 }
@@ -892,6 +916,41 @@ private struct PromptTextView: UIViewRepresentable {
     }()
 }
 
+struct TaskAction {
+    let title: String
+    let run: () async -> Void
+}
+
+extension RemoteModel {
+    /// What a task's status offers, its main action first: the detail's buttons and the list's context menu.
+    func actions(for task: TaskItem, in project: Project, openURL: OpenURLAction) -> [TaskAction] {
+        let id = task.id, model = self
+        let pullRequest = state.pullRequests[id]
+        let view = pullRequest.map { pullRequest in
+            TaskAction(title: "View Pull Request #\(pullRequest.number)") { openURL(pullRequest.url) }
+        }
+        let viewing = view.map { [$0] } ?? []
+        switch task.status {
+        case .completed:
+            let merge = TaskAction(title: "Merge into \(task.base(in: project))") { await model.merge(taskID: id) }
+            if pullRequest?.state == .open {
+                let push = TaskAction(title: "Push Changes") { await model.push(taskID: id) }
+                return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
+            }
+            // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
+            if pullRequest?.state == .merged { return [merge] + viewing }
+            let open = TaskAction(title: "Open Pull Request") {
+                if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
+            }
+            return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
+        case .conflict:
+            return [TaskAction(title: "Resolve") { await model.resolveConflict(taskID: id) }] + viewing
+        default:
+            return []
+        }
+    }
+}
+
 /// The status's main action, the rest under the button beside it, as in the Mac's split button.
 /// Merging and pull requests name the branch they go to, and that menu changes it.
 private struct TaskActions: View {
@@ -903,37 +962,7 @@ private struct TaskActions: View {
     @State private var branches: [String] = []
     @State private var newBase: String?
 
-    private struct Action {
-        let title: String
-        let run: () async -> Void
-    }
-
-    private var actions: [Action] {
-        let id = task.id, model = model, openURL = openURL
-        let pullRequest = model.state.pullRequests[id]
-        let view = pullRequest.map { pullRequest in
-            Action(title: "View Pull Request #\(pullRequest.number)") { openURL(pullRequest.url) }
-        }
-        let viewing = view.map { [$0] } ?? []
-        switch task.status {
-        case .completed:
-            let merge = Action(title: "Merge into \(task.base(in: project))") { await model.merge(taskID: id) }
-            if pullRequest?.state == .open {
-                let push = Action(title: "Push Changes") { await model.push(taskID: id) }
-                return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
-            }
-            // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
-            if pullRequest?.state == .merged { return [merge] + viewing }
-            let open = Action(title: "Open Pull Request") {
-                if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
-            }
-            return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
-        case .conflict:
-            return [Action(title: "Resolve") { await model.resolveConflict(taskID: id) }] + viewing
-        default:
-            return []
-        }
-    }
+    private var actions: [TaskAction] { model.actions(for: task, in: project, openURL: openURL) }
 
     var body: some View {
         if let main = actions.first {
@@ -976,7 +1005,7 @@ private struct TaskActions: View {
         }
     }
 
-    private func perform(_ action: Action) {
+    private func perform(_ action: TaskAction) {
         isBusy = true
         Task {
             await action.run()
