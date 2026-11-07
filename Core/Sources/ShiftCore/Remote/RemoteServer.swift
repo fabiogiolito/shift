@@ -135,6 +135,8 @@ public final class RemoteServer {
         }
         snapshot.replyingChats = model.replyingChats
         snapshot.isOffline = model.isOffline
+        snapshot.schedules = model.schedules
+        snapshot.scheduleDraft = model.scheduleDraft
         return snapshot
     }
 
@@ -250,6 +252,18 @@ public final class RemoteServer {
         case .projectIcon(let id):
             guard let project = model.projects.first(where: { $0.id == id }) else { return .success(.data(nil)) }
             return .success(.data(await ProjectIconFinder.png(in: URL(fileURLWithPath: project.repoPath))))
+        case .runScheduleNow(let id): return .success(.taskID(model.runScheduleNow(id)))
+        case .setSchedulePaused(let id, let paused): model.setSchedulePaused(id, paused)
+        case .saveScheduleDraft(let id):
+            // Only what the phone was shown: not a draft that changed on the Mac since.
+            guard let draft = model.scheduleDraft, draft.id == id else { return .failure(ScheduleDraftGone()) }
+            guard !draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .failure(ScheduleDraftGone(message: "The schedule has no prompt yet. Finish it in Shift on your Mac."))
+            }
+            model.saveSchedule(draft)
+            model.scheduleDraft = nil
+        case .discardScheduleDraft(let id):
+            if model.scheduleDraft?.id == id { model.scheduleDraft = nil }
         case .baseServerURL(let id):
             let url = await model.baseServerURL(projectID: id)
             // ponytail: stays shared until Tailscale's serve config is reset; it only points at a port on this Mac,
@@ -259,6 +273,11 @@ public final class RemoteServer {
         }
         return .success(.done)
     }
+}
+
+private struct ScheduleDraftGone: LocalizedError {
+    var message = "That schedule was already saved or closed on your Mac."
+    var errorDescription: String? { message }
 }
 
 extension ServerMessage {

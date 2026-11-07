@@ -643,13 +643,8 @@ public final class AppModel {
         deliverPending(taskID)
     }
 
-    /// What follows `/<name>` in a message, e.g. the prompt of `/task <prompt>`, or nil when the message isn't that command.
-    /// The text after `/name` if `text` is that command, else nil.
-    public nonisolated static func command(_ name: String, _ text: String) -> String? {
-        let text = text.trimmingCharacters(in: .whitespacesAndNewlines), prefix = "/" + name
-        guard text.hasPrefix(prefix), text.count == prefix.count || text.dropFirst(prefix.count).first!.isWhitespace else { return nil }
-        return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    /// See `Prompt.command`.
+    public nonisolated static func command(_ name: String, _ text: String) -> String? { Prompt.command(name, text) }
 
     /// A tag no task has any more leaves the project too, unless `keepUnused`: the tags popover keeps it
     /// listed until it closes, so it can be checked again, and then calls `pruneTags`.

@@ -514,7 +514,15 @@ final class ScheduleRunTests: XCTestCase {
         XCTAssertEqual(model.schedules.first?.title, "Links")
         XCTAssertNil(model.schedules.first?.timing.between)
         XCTAssertEqual(model.schedules.first?.timing.repeat?.weekdays, [.monday, .thursday])
-        XCTAssertTrue(model.schedules.first!.keepAwake)
+        // The chat can't set keepAwake any more, nor see it.
+        XCTAssertFalse(model.schedules.first!.keepAwake)
+        XCTAssertFalse(model.scheduleKeepAwake.isHeld)
+        reply = await control("schedule", prefix)
+        XCTAssertFalse(reply.text.contains("keepAwake"), reply.text)
+        // A saved one still keeps the Mac awake.
+        var awake = try XCTUnwrap(model.schedules.first)
+        awake.keepAwake = true
+        model.updateSchedule(awake)
         XCTAssertTrue(model.scheduleKeepAwake.isHeld)
 
         reply = await control("schedule", "edit", prefix, #"{"permissions": "bypass"}"#)

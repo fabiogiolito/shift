@@ -55,7 +55,6 @@ extension AppModel {
                   "between": {"from": "13:00", "to": "17:00"} (only runs at these times of day),
                   "endAfter": 5 (runs), "endOn": "2026-12-31"},
        "finish": "review|archive|pullRequest|merge" (archive only without changes, merge only if clean),
-       "keepAwake": false (keeps the Mac from sleeping while a run is coming),
        "wakeMac": false (wakes the Mac before each run; asks the user for their password)}
     No "repeat": it runs once. A run missed while the Mac slept or Shift was closed is logged, not caught up.
     """
@@ -216,7 +215,7 @@ extension AppModel {
             }
         case "schedules":
             return try controlJSON(schedules(in: projectID).map { schedule -> [String: Any] in
-                var object = try controlObject(schedule)
+                var object = try scheduleObject(schedule)
                 object["runs"] = schedule.runs.count
                 object["next"] = schedule.nextRun().map(Self.controlDateFormatter.string(from:)) ?? NSNull()
                 return object
@@ -266,7 +265,8 @@ extension AppModel {
             let fields = try jsonArgument()
             guard (fields["timing"] as? [String: Any])?["start"] != nil else { throw Refusal("Missing timing.start.") }
             scheduleDraft = try await validSchedule(patching: defaults, with: fields)
-            return "The schedule form is open in Shift for the user, filled in. Nothing is created until they save it "
+            return "The schedule form is open in Shift for the user, filled in (on the Mac, and under this chat on their phone). "
+                + "Nothing is created until they save it "
                 + "(then `schedules` lists it). It runs: \(scheduleDraft?.timing.summary() ?? "")"
         case "edit":
             let old = try scheduleArgument()
@@ -296,7 +296,7 @@ extension AppModel {
         case let word?:
             rest.insert(word, at: rest.startIndex)
             let schedule = try scheduleArgument()
-            var object = try controlObject(schedule)
+            var object = try scheduleObject(schedule)
             object["next"] = schedule.nextRun().map(Self.controlDateFormatter.string(from:)) ?? NSNull()
             return try controlJSON(object)
         case nil:
@@ -308,7 +308,8 @@ extension AppModel {
     private func validSchedule(patching schedule: Schedule, with fields: [String: Any]) async throws -> Schedule {
         guard let project = project(schedule.projectID) else { throw Refusal("The project no longer exists.") }
         var fields = fields
-        for key in ["id", "projectID", "runs", "createdAt", "checkedUntil", "next"] { fields[key] = nil }
+        // keepAwake: the form no longer offers it, so the chat doesn't either; saved values are kept.
+        for key in ["id", "projectID", "runs", "createdAt", "checkedUntil", "next", "keepAwake"] { fields[key] = nil }
         let merged = Self.mergePatch(try controlObject(schedule), fields)
         var result: Schedule
         do {
@@ -390,6 +391,13 @@ extension AppModel {
             if let date = formatter.date(from: text) { return date }
         }
         return nil
+    }
+
+    /// What the chat sees of a schedule: without keepAwake, which it can't set.
+    private func scheduleObject(_ schedule: Schedule) throws -> [String: Any] {
+        var object = try controlObject(schedule)
+        object["keepAwake"] = nil
+        return object
     }
 
     private func controlObject<T: Encodable>(_ value: T) throws -> [String: Any] {

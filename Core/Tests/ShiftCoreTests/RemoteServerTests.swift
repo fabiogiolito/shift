@@ -27,6 +27,11 @@ final class WireTests: XCTestCase {
         snapshot.usage = [.claudeCode: AgentUsage(windows: [.init(name: "5-hour", usedPercent: 10, resetsAt: date)])]
         snapshot.chatApprovals = [project.id: "Edit `a`"]
         snapshot.replyingChats = [project.id]
+        snapshot.schedules = [Schedule(projectID: project.id, title: "Deps", prompt: "Update them", baseBranch: "main", agent: .claudeCode,
+                                       permissions: .auto, timing: ScheduleTiming(start: date), paused: true,
+                                       runs: [ScheduleRun(due: date, outcome: .missed, reason: "Mac was asleep"),
+                                              ScheduleRun(due: nil, started: date, taskID: 3001, outcome: .review, summary: "Done")],
+                                       createdAt: date)]
         return snapshot
     }
 
@@ -38,6 +43,7 @@ final class WireTests: XCTestCase {
             .hello(version: Wire.version), .snapshot(snapshot), .projects(snapshot.projects), .task(snapshot.tasks[0]), .taskRemoved(1),
             .chat(snapshot.chats[0]), .chatRemoved(id), .pullRequest(taskID: 1, nil), .pullRequest(taskID: 1, snapshot.pullRequests[3001]),
             .build(BuildKey(taskID: 1, targetID: id), .building), .usage(.codex, nil), .chatApproval(projectID: id, "x"), .replyingChats([id]),
+            .schedules(snapshot.schedules!), .schedules([]), .scheduleDraft(snapshot.schedules![0]), .scheduleDraft(nil),
             .reply(id: 1, result: .diff(diff), error: nil), .reply(id: 2, result: nil, error: "no"), .reply(id: 3, result: .changes(DiffSummary()), error: nil),
             .reply(id: 4, result: .url(nil), error: nil), .reply(id: 5, result: .taskID(4), error: nil),
             .log(.task(1), offset: 9, data: Data([0, 255])), .log(.chat(id), offset: 0, data: Data()),
@@ -49,6 +55,8 @@ final class WireTests: XCTestCase {
             .delete(taskID: 1), .resolveConflict(taskID: 1), .conflictedFiles(taskID: 1), .pushBranch(taskID: 1), .pullRequestURL(taskID: 1),
             .branches(projectID: id), .changeBase(taskID: 1, to: "main"), .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1, target: id), .buildLog(taskID: 1, target: id),
             .sendChat(projectID: id, text: "t", attachments: []), .answerChatApproval(projectID: id, allow: true), .stopChat(projectID: id), .newChat(projectID: id), .baseServerURL(projectID: id),
+            .runScheduleNow(scheduleID: id), .setSchedulePaused(scheduleID: id, paused: true),
+            .saveScheduleDraft(scheduleID: id), .discardScheduleDraft(scheduleID: id),
         ]
         commands.forEach { roundTrip(ClientMessage.command(CommandRequest(id: 1, command: $0))) }
         roundTrip(ClientMessage.hello(version: 1, device: "iPhone"))
@@ -71,6 +79,24 @@ final class WireTests: XCTestCase {
                        .command(CommandRequest(id: 7, command: nil)))
     }
 
+    func testSchedulesAcrossVersions() throws {
+        let snapshot = sampleSnapshot()
+        // A newer phone, an older Mac: a snapshot without schedules decodes, with none.
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Wire.encode(snapshot)) as? [String: Any])
+        json["schedules"] = nil
+        json["scheduleDraft"] = nil
+        let old = try XCTUnwrap(Wire.decode(RemoteSnapshot.self, from: JSONSerialization.data(withJSONObject: json)))
+        XCTAssertNil(old.schedules)
+        XCTAssertNil(old.scheduleDraft)
+        XCTAssertEqual(old.tasks, snapshot.tasks)
+        // An older phone, a newer Mac: the schedules message is one it doesn't know (as any unknown one), and the
+        // snapshot's extra field is skipped (as the task's above). Its runs keep missed reasons and summaries.
+        let message = String(decoding: Wire.encode(ServerMessage.schedules(snapshot.schedules!)), as: UTF8.self)
+        XCTAssertTrue(message.hasPrefix(#"{"schedules":"#), message)
+        XCTAssertEqual(Wire.decode(ServerMessage.self, from: Data(message.utf8)), .schedules(snapshot.schedules!))
+        XCTAssertEqual(Wire.decode(RemoteSnapshot.self, from: Wire.encode(snapshot))?.schedules?[0].runs.map(\.reason), ["Mac was asleep", nil])
+    }
+
     func testChangesTurnOneSnapshotIntoTheOther() {
         let old = sampleSnapshot()
         var new = old
@@ -84,6 +110,8 @@ final class WireTests: XCTestCase {
         new.chatApprovals = [:]
         new.replyingChats = []
         new.projects[0].name = "Other"
+        new.schedules![0].paused = false
+        new.scheduleDraft = new.schedules![0]
         let messages = new.changes(since: old)
         // Whole entities, and only the ones that changed.
         XCTAssertTrue(messages.contains { if case .task(let task) = $0 { task.id == 3001 && task.title == "Renamed" } else { false } })
@@ -338,6 +366,37 @@ final class RemoteServerTests: XCTestCase {
         XCTAssertEqual(log.0, .text(""))
         _ = await server.perform(.delete(taskID: id))
         XCTAssertNil(model.task(id))
+    }
+
+    func testSchedulesArePausedAndResumedAndSent() async throws {
+        let schedule = Schedule(projectID: project.id, title: "Deps", prompt: "Update", baseBranch: "main", agent: .claudeCode,
+                                permissions: .auto, timing: ScheduleTiming(start: Date().addingTimeInterval(3600)))
+        model.addSchedule(schedule)
+        XCTAssertEqual(RemoteServer.snapshot(of: model).schedules, model.schedules)
+        _ = await server.perform(.setSchedulePaused(scheduleID: schedule.id, paused: true))
+        XCTAssertEqual(model.schedule(schedule.id)?.paused, true)
+        _ = await server.perform(.setSchedulePaused(scheduleID: schedule.id, paused: false))
+        XCTAssertEqual(model.schedule(schedule.id)?.paused, false)
+    }
+
+    func testScheduleDraftIsSavedOrDiscardedFromThePhone() async throws {
+        var draft = try XCTUnwrap(model.newSchedule(projectID: project.id))
+        draft.prompt = "Check the links"
+        model.scheduleDraft = draft
+        XCTAssertEqual(RemoteServer.snapshot(of: model).scheduleDraft, draft)
+        // Not the one the phone was shown: nothing is saved.
+        let stale = await server.perform(.saveScheduleDraft(scheduleID: UUID()))
+        XCTAssertNotNil(stale.1)
+        XCTAssertTrue(model.schedules.isEmpty)
+        _ = await server.perform(.saveScheduleDraft(scheduleID: draft.id))
+        XCTAssertEqual(model.schedules.map(\.id), [draft.id])
+        XCTAssertEqual(model.schedules.first?.title, "Check the links")
+        XCTAssertNil(model.scheduleDraft)
+
+        model.scheduleDraft = try XCTUnwrap(model.newSchedule(projectID: project.id))
+        _ = await server.perform(.discardScheduleDraft(scheduleID: model.scheduleDraft!.id))
+        XCTAssertNil(model.scheduleDraft)
+        XCTAssertEqual(model.schedules.count, 1)
     }
 
     func testStopAndResume() async throws {

@@ -79,8 +79,8 @@ extension OutcomeProtocol {
     - Its prompt is what each run's agent gets, knowing nothing of this conversation: make it say everything that \
     agent needs, as for a task. Give it a short title.
     - "finish" decides what happens to each run's task when it's done: leave it for review unless the user asked \
-    for it to be archived, opened as a pull request or merged. Only set keepAwake or wakeMac if the user asks for \
-    the Mac to be kept awake or woken (wakeMac makes Shift ask the user for their password).
+    for it to be archived, opened as a pull request or merged. Only set wakeMac if the user asks for the Mac to be \
+    woken for runs (it makes Shift ask the user for their password).
     - Use `schedule edit`, `pause`, `resume`, `delete` and `run` for the existing ones, listed below; `schedule <id>` \
     shows a schedule's runs and their tasks. A run that was missed while the Mac slept or Shift was closed isn't \
     caught up: offer `schedule run` for it.

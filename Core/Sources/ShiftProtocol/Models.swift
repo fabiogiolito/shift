@@ -378,6 +378,15 @@ extension Project {
     }
 }
 
+extension Prompt {
+    /// What follows `/<name>` in a message, e.g. the prompt of `/task <prompt>`, or nil when the message isn't that command.
+    public static func command(_ name: String, _ text: String) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines), prefix = "/" + name
+        guard text.hasPrefix(prefix), text.count == prefix.count || text.dropFirst(prefix.count).first!.isWhitespace else { return nil }
+        return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 public struct Prompt: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var text: String

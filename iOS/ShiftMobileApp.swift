@@ -18,6 +18,26 @@ struct ShiftMobileApp: App {
 
 struct RootView: View {
     @Environment(RemoteModel.self) private var model
+    @State private var path = NavigationPath()
+
+    #if DEBUG
+    /// SHIFT_OPEN, to reach a screen without taps (screenshots): `project=<id>,schedule=<id>,chat=<project id>,task=<number>`, in order.
+    private static func debugPath() -> NavigationPath {
+        var path = NavigationPath()
+        for item in (ProcessInfo.processInfo.environment["SHIFT_OPEN"] ?? "").split(separator: ",") {
+            let parts = item.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { continue }
+            switch parts[0] {
+            case "project": if let id = UUID(uuidString: parts[1]) { path.append(id) }
+            case "schedule": if let id = UUID(uuidString: parts[1]) { path.append(ScheduleLink(id: id)) }
+            case "task": if let id = Int(parts[1]) { path.append(id) }
+            case "chat": if let id = UUID(uuidString: parts[1]) { path.append(ChatLink(projectID: id)) }
+            default: break
+            }
+        }
+        return path
+    }
+    #endif
 
     var body: some View {
         @Bindable var model = model
@@ -28,11 +48,18 @@ struct RootView: View {
                 // A stack, not a safe area inset: the navigation bar ignores an inset and ends up under the banner.
                 VStack(spacing: 0) {
                     LinkBanner()
-                    NavigationStack {
+                    NavigationStack(path: $path) {
                         ProjectsView()
                             .navigationDestination(for: UUID.self) { TaskListView(projectID: $0) }
                             .navigationDestination(for: Int.self) { TaskDetailView(taskID: $0) }
+                            .navigationDestination(for: ScheduleLink.self) { ScheduleDetailView(scheduleID: $0.id) }
+                            .navigationDestination(for: ChatLink.self) { link in
+                                if let project = model.state.projects.first(where: { $0.id == link.projectID }) { ChatView(project: project) }
+                            }
                     }
+                    #if DEBUG
+                    .task { path = Self.debugPath() }
+                    #endif
                 }
             }
         }
