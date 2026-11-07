@@ -189,8 +189,9 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .st svg { width: 100%; height: 100%; }
 .rays { animation: spin .9s steps(8) infinite; }
 /* Overlays: notification, browser, cursor */
-.notif { position: absolute; z-index: 5; top: 14px; right: 14px; display: flex; gap: 10px; width: 330px; padding: 12px 14px; border-radius: 18px; background: rgba(58, 58, 60, .85); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 12px 40px rgba(0, 0, 0, .5); transform: translateX(120%); opacity: 0; transition: transform .6s var(--ease), opacity .3s; }
+/* Sits outside the window, just above its top-right corner */
+.notif { position: absolute; z-index: 5; bottom: calc(100% + 14px); right: 0; text-align: left; color: #e8e8e8; font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em; display: flex; gap: 10px; width: 330px; padding: 12px 14px; border-radius: 18px; background: rgba(58, 58, 60, .85); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 12px 40px rgba(0, 0, 0, .5); transform: translateY(16px) scale(.96); opacity: 0; transition: transform .6s var(--ease), opacity .3s; }
 .notif.on { transform: none; opacity: 1; }
 .notif img { width: 34px; height: 34px; }
 .notif b { display: block; font-size: 13px; }
@@ -203,7 +204,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .browser .url { display: flex; align-items: center; gap: 6px; margin: 0 auto; padding: 4px 60px; border-radius: 7px; background: #1c1c1e; font-size: 12px; color: #c7c7cc; }
 .browser .url svg.g { width: 11px; height: 11px; }
 .page { position: relative; height: calc(100% - 40px); display: grid; place-items: center; background: #0b0b0c; }
-.page .photo { width: 62%; aspect-ratio: 4 / 3; border-radius: 4px; background: radial-gradient(120% 90% at 30% 20%, #f6c177 0%, #e07a5f 30%, #3d405b 70%, #1b1b2f 100%); box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+.page .photo { width: 62%; aspect-ratio: 4 / 3; border-radius: 4px; transition: background .5s; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
 .page .cap { position: absolute; bottom: 22px; font-size: 13px; color: #c7c7cc; }
 .page .arrow { position: absolute; top: 50%; display: grid; place-items: center; width: 34px; height: 34px; margin-top: -17px; border-radius: 50%; background: rgba(255, 255, 255, .1); color: #fff; }
 .cursor { position: absolute; z-index: 6; left: 0; top: 0; width: 22px; height: 30px; pointer-events: none; opacity: 0; transition: transform .75s cubic-bezier(.65, 0, .35, 1), opacity .3s; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
@@ -344,6 +345,7 @@ body > footer a:hover { color: var(--fg); }
       </div>
       <div class="scene" id="scene" aria-hidden="true">
         <div class="mac" id="mac">
+          <div class="notif" id="notif"><img src="icon.png" alt=""><div><b>Portfolio</b><p>Add my latest work is ready for review.</p></div><small>now</small></div>
           <div class="win" id="win">
             <aside class="sb">
               <div class="sb-top"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="tog" data-ic="sidebar"></span></div>
@@ -368,10 +370,9 @@ body > footer a:hover { color: var(--fg); }
               </div>
             </section>
             <div class="bar"><span class="path"><span data-ic="folder"></span><span id="path"></span><span data-ic="chev"></span></span><span><span data-ic="claude"></span>Claude Code<span data-ic="chev"></span></span><span><span data-ic="cpu"></span>Default model<span data-ic="chev"></span></span><span><span data-ic="shield"></span>Bypass permissions<span data-ic="chev"></span></span><span class="lim">Weekly limit 68% left</span></div>
-            <div class="notif" id="notif"><img src="icon.png" alt=""><div><b>Portfolio</b><p>Add my latest work is ready for review.</p></div><small>now</small></div>
             <div class="browser" id="browser">
               <div class="chrome"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="url"><span data-ic="lock"></span>localhost:3201</span></div>
-              <div class="page"><span class="arrow" style="left:22px" data-ic="left"></span><div class="photo"></div><span class="arrow" style="right:22px" data-ic="right"></span><span class="cap">Morning light, Lisbon · 3 of 12</span></div>
+              <div class="page"><span class="arrow" id="bprev" style="left:22px" data-ic="left"></span><div class="photo" id="photo"></div><span class="arrow" id="bnext" style="right:22px" data-ic="right"></span><span class="cap" id="cap"></span></div>
             </div>
             <div class="cursor" id="cursor"><div class="stack"><i class="th th2"></i><i class="th th1"></i><i class="th th0"></i><b>6</b></div><svg viewBox="0 0 22 30"><path d="M2 2v22l5.5-5.2 3.6 8.4 3.6-1.6-3.5-8.2H18Z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
           </div>
@@ -505,7 +506,7 @@ function stateAfter(beat) {
   if (beat >= 3) { s.acts = 5; s.prompts = [SECOND, ...s.prompts] }
   if (beat >= 4) s.acts = 6
   if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true }
-  if (beat >= 6) { s.notif = false; s.preview = true }
+  if (beat >= 6) { s.notif = false; s.preview = true; s.photo = 1 }
   if (beat >= 7) { s.tasks[0][1] = "merged"; s.preview = false }
   return s
 }
@@ -598,6 +599,19 @@ function renderDraft(enter) {
   if (S.draft || enter) f.insertAdjacentHTML("afterbegin", `<div class="thumbs${enter ? " enter" : ""}">${THUMBS}</div>`)
 }
 
+// The six new photos, as the preview's lightbox shows them
+const PHOTOS = [
+  ["Morning light, Lisbon", "radial-gradient(120% 90% at 30% 20%, #f6c177, #e07a5f 30%, #3d405b 70%, #1b1b2f)"],
+  ["Harbor at dusk, Porto", "linear-gradient(160deg, #a8d8ea, #3d5a80 55%, #1b263b)"],
+  ["Moss garden, Kyoto", "radial-gradient(100% 100% at 70% 30%, #e9edc9, #84a98c 45%, #2f3e46)"],
+  ["Pink hour, Marfa", "linear-gradient(200deg, #ffcad4, #b5838d 50%, #4a4e69)"],
+]
+function setPhoto(i) {
+  S.photo = i
+  $("photo").style.background = PHOTOS[i][1]
+  $("cap").textContent = `${PHOTOS[i][0]} · ${i + 1} of 6`
+}
+
 function renderAll() {
   win.classList.toggle("compact", W < 1120)
   renderProjects()
@@ -606,6 +620,7 @@ function renderAll() {
   renderDetail(false)
   $("notif").classList.toggle("on", !!S.notif)
   $("browser").classList.toggle("on", !!S.preview)
+  setPhoto(S.photo || 0)
   renderDraft()
   $("cursor").classList.remove("on", "down", "dragging")
   $("dfield").querySelector(".txt").textContent = ""
@@ -718,7 +733,17 @@ const BEATS = [
   async () => {
     S.notif = false; $("notif").classList.remove("on")
     await point($("server"), .45); await click($("server"))
-    S.preview = true; $("browser").classList.add("on"); cursor.classList.remove("on")
+    setPhoto(0); S.preview = true; $("browser").classList.add("on")
+    await wait(800)
+    // Try it: next, next, back
+    const next = $("bnext"), prev = $("bprev")
+    await point(next); await click(next); setPhoto(1)
+    await wait(700)
+    await click(next); setPhoto(2)
+    await wait(800)
+    await point(prev); await click(prev); setPhoto(1)
+    await wait(600)
+    cursor.classList.remove("on")
   },
   // 7. Close the preview, merge
   async () => {
