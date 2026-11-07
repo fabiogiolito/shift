@@ -34,6 +34,7 @@ final class RemoteModel {
     @ObservationIgnored private var streams: [AgentLog: LogStream] = [:]
     /// A screenshot never changes once taken.
     @ObservationIgnored private var screenshots: [UUID: UIImage] = [:]
+    @ObservationIgnored private var attachmentImages: [String: UIImage] = [:]
 
     init() {
         #if DEBUG
@@ -350,6 +351,19 @@ final class RemoteModel {
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200, let image = UIImage(data: data) else { return nil }
         screenshots[shot.id] = image
+        return image
+    }
+
+    /// An attached picture, by its path on the Mac, fetched once. nil if it isn't one, or the Mac doesn't serve it.
+    func image(attachment path: String) async -> UIImage? {
+        if let image = attachmentImages[path] { return image }
+        guard let pairing else { return nil }
+        let name = (path as NSString).lastPathComponent
+        var request = URLRequest(url: pairing.url(path: Wire.attachmentsPath, query: [.init(name: "name", value: name)]))
+        request.setValue("Bearer \(pairing.token)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200, let image = UIImage(data: data) else { return nil }
+        attachmentImages[path] = image
         return image
     }
 

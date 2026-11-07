@@ -161,11 +161,15 @@ public final class RemoteListener: @unchecked Sendable {
                     return Self.respond(connection, status: "413 Content Too Large")
                 }
                 self.readBody(connection, rest, length: length) { self.saveAttachment($0, name: head.query["name"], connection) }
+            case ("GET", Wire.attachmentsPath):
+                // Uploaded from a phone, or pasted on the Mac. Files attached from elsewhere aren't served.
+                let pasted = FileManager.default.temporaryDirectory.appendingPathComponent("Shift Attachments")
+                guard let data = Self.file(named: head.query["name"], in: [self.attachments, pasted]) else {
+                    return Self.respond(connection, status: "404 Not Found")
+                }
+                Self.respond(connection, status: "200 OK", body: data, type: "application/octet-stream")
             case ("GET", Wire.screenshotsPath):
-                // Only a file name: nothing from the client leads out of the folder.
-                let name = (head.query["name"] ?? "") as NSString
-                guard name.length > 0, name.lastPathComponent == name as String, !name.hasPrefix("."),
-                      let data = FileManager.default.contents(atPath: self.screenshots.appendingPathComponent(name as String).path) else {
+                guard let data = Self.file(named: head.query["name"], in: [self.screenshots]) else {
                     return Self.respond(connection, status: "404 Not Found")
                 }
                 Self.respond(connection, status: "200 OK", body: data, type: "image/png")
@@ -173,6 +177,13 @@ public final class RemoteListener: @unchecked Sendable {
                 Self.respond(connection, status: "404 Not Found")
             }
         }
+    }
+
+    /// Only a file name: nothing from the client leads out of the folders.
+    private static func file(named name: String?, in folders: [URL]) -> Data? {
+        let name = (name ?? "") as NSString
+        guard name.length > 0, name.lastPathComponent == name as String, !name.hasPrefix(".") else { return nil }
+        return folders.lazy.compactMap { FileManager.default.contents(atPath: $0.appendingPathComponent(name as String).path) }.first
     }
 
     private func readBody(_ connection: NWConnection, _ received: Data, length: Int, _ done: @escaping @Sendable (Data) -> Void) {

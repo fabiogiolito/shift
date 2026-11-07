@@ -1182,10 +1182,15 @@ private struct PromptList: View {
             ForEach(prompts.reversed()) { prompt in
                 Button { onOpen(prompt) } label: {
                     HStack(spacing: 8) {
-                        Text(prompt.text.isEmpty ? prompt.attachments.first.map { ($0 as NSString).lastPathComponent } ?? "" : prompt.text)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 6) {
+                            if !prompt.text.isEmpty {
+                                Text(prompt.text).lineLimit(2).multilineTextAlignment(.leading)
+                            }
+                            if !prompt.attachments.isEmpty {
+                                HStack(spacing: 6) { ForEach(prompt.attachments.prefix(4), id: \.self) { AttachmentThumbnail(path: $0, size: 40) } }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                     }
                     .padding(12)
@@ -1296,13 +1301,44 @@ private struct PromptBubble: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !prompt.text.isEmpty { Text(prompt.text).textSelection(.enabled) }
-            ForEach(prompt.attachments, id: \.self) { path in
-                Label((path as NSString).lastPathComponent, systemImage: "paperclip").font(.footnote).foregroundStyle(.secondary)
+            if !prompt.attachments.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) { ForEach(prompt.attachments, id: \.self) { AttachmentThumbnail(path: $0, size: 64) } }
+                }
+                .scrollIndicators(.hidden)
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 12)) // What a group box has here.
+    }
+}
+
+/// An attached picture, fetched from the Mac. Anything it can't show as one is its file name.
+private struct AttachmentThumbnail: View {
+    @Environment(RemoteModel.self) private var model
+    let path: String
+    let size: CGFloat
+    @State private var image: UIImage?
+    @State private var loaded = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(.rect(cornerRadius: 8))
+                    .accessibilityLabel("Attached picture")
+            } else if loaded {
+                Label((path as NSString).lastPathComponent, systemImage: "paperclip").font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+            } else {
+                Color(.tertiarySystemFill).frame(width: size, height: size).clipShape(.rect(cornerRadius: 8))
+            }
+        }
+        .task(id: path) {
+            image = await model.image(attachment: path)
+            loaded = true
+        }
     }
 }
 
