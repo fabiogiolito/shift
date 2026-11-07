@@ -90,7 +90,7 @@ struct TaskDetailView: View {
                             ResponsePanel(task: task, maxHeight: windowHeight * 0.5)
                                 .id([task.question, task.approvalRequest, task.blockedReason])
                         } else if let placeholder = promptPlaceholder(task) {
-                            PromptField(placeholder: placeholder, draftKey: "task \(taskID)", commands: [.tag]) { model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
+                            PromptField(placeholder: placeholder, focusOnAppear: true, draftKey: "task \(taskID)", commands: [.tag]) { model.sendPrompt(taskID: taskID, text: $0, attachments: $1) }
                                 .padding(12)
                         }
                     }
