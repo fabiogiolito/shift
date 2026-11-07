@@ -124,7 +124,6 @@ struct ScheduleDetailView: View {
                         ScheduleRunMenus(schedule: Binding { schedule } set: { model.saveSchedule($0) })
                     }
                     // Changed here, without the form; saved right away.
-                    ScheduleSettings(schedule: Binding { schedule } set: { model.saveSchedule($0) })
                     runs(schedule)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -383,6 +382,15 @@ struct ScheduleForm: View {
                     row("") { note("Every run is a new task, and each one takes disk space until it's archived or merged.") }
                 }
                 row("Ends") { endRow }
+            }
+            row("") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Wake up Mac for runs", isOn: Binding { draft.wakeMac } set: {
+                        draft.wakeMac = $0
+                        if $0 { draft.keepAwake = false }
+                    })
+                    if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
+                }
             }
         }
     }
@@ -689,46 +697,8 @@ struct ScheduleRunMenus: View {
     }
 }
 
-/// The run settings the form leaves out, on the schedule's page as a box of rows like System Settings, each
-/// changed in place.
-struct ScheduleSettings: View {
-    @Environment(AppModel.self) private var model
-    @Binding var schedule: Schedule
-
-    /// What a run does when the Mac is asleep at its time: the two settings as one choice.
-    enum Asleep: Hashable { case skip, stayAwake, wake }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Settings").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-            VStack(spacing: 0) {
-                row("When the Mac is asleep",
-                    note: schedule.wakeMac ? "Shift asks for your administrator password to schedule the wakes." : nil) {
-                    Picker("When the Mac is asleep", selection: asleep) {
-                        Text("Skip runs").tag(Asleep.skip)
-                        Text("Stay awake for runs").tag(Asleep.stayAwake)
-                        Text("Wake up for runs").tag(Asleep.wake)
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .background(.background, in: .rect(cornerRadius: 10))
-            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(.separator) }
-        }
-    }
-
-    private func row(_ title: String, note: String? = nil, @ViewBuilder control: () -> some View) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
-            }
-            Spacer(minLength: 16)
-            control().labelsHidden().fixedSize()
-        }
-        .padding(.vertical, 10)
-    }
-
+/// Shared schedule controls.
+@MainActor enum ScheduleSettings {
     static func agentPicker(_ schedule: Binding<Schedule>, model: AppModel) -> some View {
         Picker("Agent", selection: Binding { schedule.wrappedValue.agent } set: { agent in
             schedule.wrappedValue.agent = agent
@@ -742,21 +712,8 @@ struct ScheduleSettings: View {
             }
         }
     }
-
-    private var asleep: Binding<Asleep> {
-        Binding {
-            schedule.wakeMac ? .wake : schedule.keepAwake ? .stayAwake : .skip
-        } set: { choice in
-            schedule.keepAwake = choice == .stayAwake
-            schedule.wakeMac = choice == .wake
-        }
-    }
 }
 
-
-
-/// A date or a time as a plain field, the way Calendar and Reminders show them: no stepper, and clicking a date
-/// opens a small calendar under it. SwiftUI's DatePicker can't show that calendar, so this is AppKit's.
 /// A white, bordered box at one height, shared by the steppers and the date and time fields so they line up.
 private struct FieldBox: ViewModifier {
     var trailing: CGFloat = 2
@@ -780,6 +737,8 @@ struct DateField: View {
     }
 }
 
+/// A date or a time as a plain field, the way Calendar and Reminders show them: no stepper, and clicking a date
+/// opens a small calendar under it. SwiftUI's DatePicker can't show that calendar, so this is AppKit's.
 struct DatePickerField: NSViewRepresentable {
     enum Part { case date, time, dateTime }
     @Binding var date: Date
