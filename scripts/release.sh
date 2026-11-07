@@ -8,17 +8,28 @@
 #             unless one is given; the build number goes up as always.
 # Without a version, the Mac app gets the patch number after the last release tag (0.1.1 -> 0.1.2).
 # Without notes, scripts/release-notes.sh writes the Mac notes from the commits since the last release.
-# Without --publish nothing touches the network (except notarization when NOTARY_PROFILE is set, and Xcode
-# fetching signing profiles for the iPhone archive); the publish commands are printed instead.
-# --publish uploads the iPhone app to TestFlight with the Apple ID signed in to Xcode.
+# Without --publish nothing touches the network (except notarization, and Xcode fetching signing profiles for the
+# iPhone archive); the publish commands are printed instead.
+# Apple auth: the App Store Connect API key in ~/.appstoreconnect/shift.env (ASC_KEY_ID, ASC_ISSUER_ID,
+# ASC_KEY_PATH) signs and uploads the iPhone app and notarizes the Mac app, with no Xcode login or keychain
+# password. Without it, the Apple ID signed in to Xcode and the NOTARY_PROFILE keychain profile.
 # Env: DEVELOPER_ID   "Developer ID Application: …" signs with it (hardened runtime); ad-hoc otherwise.
 #                     Defaults to the Developer ID Application certificate in the keychain, if there is one.
-#      NOTARY_PROFILE notarytool keychain profile; notarizes and staples when set. Defaults to
+#      NOTARY_PROFILE notarytool keychain profile, used when there's no API key. Defaults to
 #                     "shift-notary" when that profile exists.
+#      ASC_ENV        the API key file to read instead of ~/.appstoreconnect/shift.env.
 #      SHIFT_FEED_URL testing only: builds against this feed and puts the archive's URL next to it.
 set -e
 cd "$(dirname "$0")/.."
 die() { echo "release: $*" >&2; exit 1; }
+
+ASC_ENV=${ASC_ENV:-$HOME/.appstoreconnect/shift.env}
+[ ! -f "$ASC_ENV" ] || . "$ASC_ENV"
+ASC_AUTH=
+if [ -n "$ASC_KEY_ID" ]; then
+  [ -f "$ASC_KEY_PATH" ] || die "no API key at $ASC_KEY_PATH (from $ASC_ENV)"
+  ASC_AUTH="-authenticationKeyPath $ASC_KEY_PATH -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+fi
 
 PUBLISH=0 VERSION= NOTES= MAC= IOS=
 for a do
@@ -36,10 +47,15 @@ done
 if [ -n "$MAC" ]; then
   # Sign and notarize whenever this Mac can, so a release is never unsigned by accident.
   : "${DEVELOPER_ID:=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)}"
-  : "${NOTARY_PROFILE:=$(xcrun notarytool history --keychain-profile shift-notary >/dev/null 2>&1 && echo shift-notary)}"
+  if [ -n "$ASC_KEY_ID" ]; then
+    NOTARY_AUTH="--key $ASC_KEY_PATH --key-id $ASC_KEY_ID --issuer $ASC_ISSUER_ID"
+  else
+    : "${NOTARY_PROFILE:=$(xcrun notarytool history --keychain-profile shift-notary >/dev/null 2>&1 && echo shift-notary)}"
+    NOTARY_AUTH=${NOTARY_PROFILE:+--keychain-profile $NOTARY_PROFILE}
+  fi
   # Apple only notarizes apps signed with a Developer ID.
-  [ -n "$DEVELOPER_ID" ] || NOTARY_PROFILE=
-  echo "release: signing with ${DEVELOPER_ID:-ad-hoc}; notarizing with ${NOTARY_PROFILE:-nothing}" >&2
+  [ -n "$DEVELOPER_ID" ] || NOTARY_AUTH=
+  echo "release: signing with ${DEVELOPER_ID:-ad-hoc}; notarizing ${NOTARY_AUTH:+with }${NOTARY_AUTH:-nothing}" >&2
 fi
 
 [ -z "$NOTES" ] || [ -f "$NOTES" ] || die "no such file: $NOTES"
@@ -89,9 +105,9 @@ if [ -n "$MAC" ]; then
   sign dist/Shift.app
   codesign --verify --deep --strict dist/Shift.app
 
-  if [ -n "$NOTARY_PROFILE" ]; then
+  if [ -n "$NOTARY_AUTH" ]; then
     ditto -c -k --keepParent dist/Shift.app dist/notarize.zip
-    xcrun notarytool submit dist/notarize.zip --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun notarytool submit dist/notarize.zip $NOTARY_AUTH --wait
     rm dist/notarize.zip
     xcrun stapler staple dist/Shift.app
   fi
@@ -107,7 +123,7 @@ if [ -n "$IOS" ]; then
   mkdir -p dist
   rm -rf dist/ShiftMobile.xcarchive
   xcodebuild -project Shift.xcodeproj -scheme ShiftMobile -configuration Release -destination generic/platform=iOS \
-    -archivePath dist/ShiftMobile.xcarchive -allowProvisioningUpdates -quiet archive >&2
+    -archivePath dist/ShiftMobile.xcarchive -allowProvisioningUpdates $ASC_AUTH -quiet archive >&2
   cat > dist/ExportOptions.plist <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -176,10 +192,10 @@ else
 fi
 if [ -n "$IOS" ]; then
   CMDS="$CMDS
-xcodebuild -exportArchive -archivePath dist/ShiftMobile.xcarchive -exportOptionsPlist dist/ExportOptions.plist -exportPath dist/testflight -allowProvisioningUpdates"
+xcodebuild -exportArchive -archivePath dist/ShiftMobile.xcarchive -exportOptionsPlist dist/ExportOptions.plist -exportPath dist/testflight -allowProvisioningUpdates $ASC_AUTH"
 fi
 
-[ -z "$MAC" ] || echo "Built $ZIP (build $BUILD, signed ${DEVELOPER_ID:-ad-hoc}${NOTARY_PROFILE:+, notarized}); appcast.xml updated."
+[ -z "$MAC" ] || echo "Built $ZIP (build $BUILD, signed ${DEVELOPER_ID:-ad-hoc}${NOTARY_AUTH:+, notarized}); appcast.xml updated."
 [ -z "$IOS" ] || echo "Archived dist/ShiftMobile.xcarchive ($VERSION, build $BUILD) for TestFlight."
 if [ "$PUBLISH" = 1 ]; then
   echo "$CMDS" | sh -ex
