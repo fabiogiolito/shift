@@ -253,6 +253,8 @@ struct ScheduleForm: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State var draft: Schedule
+    /// The panel opens on the title, not the first date field.
+    @FocusState private var titleFocused: Bool
     let isNew: Bool
     let onSave: (Schedule) -> Void
 
@@ -266,6 +268,7 @@ struct ScheduleForm: View {
                 .padding(.bottom, 16)
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Title", text: $draft.title, prompt: Text("Title"))
+                    .focused($titleFocused)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .padding(.vertical, 7).padding(.horizontal, 8)
@@ -301,6 +304,7 @@ struct ScheduleForm: View {
         }
         .frame(width: 560)
         .padding(24)
+        .onAppear { titleFocused = true }
     }
 
     @ViewBuilder private var buttons: some View {
@@ -753,17 +757,30 @@ struct ScheduleSettings: View {
 
 /// A date or a time as a plain field, the way Calendar and Reminders show them: no stepper, and clicking a date
 /// opens a small calendar under it. SwiftUI's DatePicker can't show that calendar, so this is AppKit's.
-/// A stepper and its value in one white, bordered box, like the date fields beside it.
+/// A white, bordered box at one height, shared by the steppers and the date and time fields so they line up.
 private struct FieldBox: ViewModifier {
+    var trailing: CGFloat = 2
+
     func body(content: Content) -> some View {
         content
-            .padding(.leading, 8).padding(.trailing, 2).padding(.vertical, 2)
+            .padding(.leading, 8).padding(.trailing, trailing)
+            .frame(minHeight: 28)
             .background(.background, in: .rect(cornerRadius: 6))
             .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
     }
 }
 
-struct DateField: NSViewRepresentable {
+/// A date or time field, as in Calendar: clicking a date opens a calendar.
+struct DateField: View {
+    @Binding var date: Date
+    let part: DatePickerField.Part
+
+    var body: some View {
+        DatePickerField(date: $date, part: part).fixedSize().modifier(FieldBox(trailing: 8))
+    }
+}
+
+struct DatePickerField: NSViewRepresentable {
     enum Part { case date, time, dateTime }
     @Binding var date: Date
     let part: Part
@@ -777,8 +794,10 @@ struct DateField: NSViewRepresentable {
         case .dateTime: [.yearMonthDay, .hourMinute]
         }
         picker.presentsCalendarOverlay = part != .time
-        picker.isBezeled = true
-        picker.drawsBackground = true
+        // The box around it draws the border, at the steppers' height.
+        picker.isBezeled = false
+        picker.isBordered = false
+        picker.drawsBackground = false
         picker.target = context.coordinator
         picker.action = #selector(Coordinator.changed(_:))
         picker.setContentHuggingPriority(.required, for: .horizontal)
