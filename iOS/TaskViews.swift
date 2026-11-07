@@ -299,7 +299,7 @@ private struct NewTaskView: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.branch")
+                    Image("Branch")
                     Text(current).lineLimit(1)
                 }
                 .font(.subheadline)
