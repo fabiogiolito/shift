@@ -560,6 +560,8 @@ private struct PromptBar: View {
     @State private var images: [PromptImage] = []
     @State private var viewing: PromptImage?
     @State private var isSending = false
+    @State private var isTall = false
+    @State private var isExpanded = false
 
     private static let controlSize: CGFloat = 30
 
@@ -585,7 +587,9 @@ private struct PromptBar: View {
                 .padding(.top, 3)
             }
             if let accessory {
-                textView.padding(.horizontal, 6).padding(.top, 2)
+                // The text has the full width here: leave the expand button room at its end.
+                textView.padding(.trailing, isTall ? Self.controlSize : 0).padding(.horizontal, 6).padding(.top, 2)
+                    .overlay(alignment: .topTrailing) { expandButton }
                 HStack(spacing: 8) {
                     addMenu
                     Spacer()
@@ -599,6 +603,8 @@ private struct PromptBar: View {
                     textView
                     sendButton
                 }
+                // Over the send button's column.
+                .overlay(alignment: .topTrailing) { expandButton }
             }
         }
         .padding(.horizontal, 10)
@@ -620,6 +626,21 @@ private struct PromptBar: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $isExpanded) {
+            VStack(alignment: .trailing, spacing: 12) {
+                Button("Collapse", systemImage: "arrow.up.right.and.arrow.down.left") { isExpanded = false }
+                    .labelStyle(.iconOnly)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 44, height: 44)
+                PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: true, maxLines: nil) { pasted in
+                    images += pasted.map(PromptImage.init)
+                }
+                .padding(.horizontal, 8)
+                sendButton
+            }
+            .padding(16)
         }
         .sheet(item: $viewing) { image in
             PromptImageViewer(image: image.image) { images.removeAll { $0.id == image.id } }
@@ -648,15 +669,30 @@ private struct PromptBar: View {
         PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
             images += pasted.map(PromptImage.init)
         }
+        .onGeometryChange(for: Bool.self) { $0.size.height > UIFont.preferredFont(forTextStyle: .body).lineHeight * 2.5 } action: { isTall = $0 }
         .padding(.vertical, 4)
     }
 
+    /// Three lines or more: open the text in a sheet.
+    @ViewBuilder private var expandButton: some View {
+        if isTall {
+            Button("Expand", systemImage: "arrow.down.left.and.arrow.up.right") { isExpanded = true }
+                .labelStyle(.iconOnly)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .frame(width: Self.controlSize, height: Self.controlSize)
+        }
+    }
+
     private var sendButton: some View {
-        Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
-            .labelStyle(.iconOnly)
-            .font(.system(size: Self.controlSize - 2))
-            .frame(width: Self.controlSize, height: Self.controlSize)
-            .disabled(!canSend)
+        Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill") {
+            isExpanded = false
+            send()
+        }
+        .labelStyle(.iconOnly)
+        .font(.system(size: Self.controlSize - 2))
+        .frame(width: Self.controlSize, height: Self.controlSize)
+        .disabled(!canSend)
     }
 
     /// `/name ` in front of what's written, in place of any command already there.
@@ -722,11 +758,13 @@ private struct PromptImageViewer: View {
     }
 }
 
-/// A text field that also takes pasted pictures, which SwiftUI's doesn't. Grows to six lines, then scrolls.
+/// A text field that also takes pasted pictures, which SwiftUI's doesn't. Grows to `maxLines`, then scrolls;
+/// with none, it fills the space it's given.
 private struct PromptTextView: UIViewRepresentable {
     let placeholder: String
     @Binding var text: String
     let focusesOnAppear: Bool
+    var maxLines: Int? = 6
     let onPasteImages: ([UIImage]) -> Void
 
     final class TextView: UITextView {
@@ -736,6 +774,34 @@ private struct PromptTextView: UIViewRepresentable {
         override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
             if action == #selector(paste(_:)), UIPasteboard.general.hasImages { return true }
             return super.canPerformAction(action, withSender: sender)
+        }
+
+        /// Scrolls once the text is taller than the field: decided here, from the field's real size, as SwiftUI
+        /// also measures it at other widths. Turning scrolling on leaves the offset at the top, so the line being
+        /// typed would sit below the edge: bring the caret into view; turning it off goes back to the top.
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard bounds.width > 0, bounds.height > 0 else { return }
+            let fitting = sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height
+            let scrolls = fitting > bounds.height + 1
+            guard isScrollEnabled != scrolls else { return }
+            isScrollEnabled = scrolls
+            // Set straight away: scrollRangeToVisible would slide the line in.
+            var offset: CGFloat = 0
+            if scrolls {
+                let caret = caretRect(for: selectedTextRange?.end ?? endOfDocument)
+                offset = min(max(caret.maxY - bounds.height, 0), fitting - bounds.height)
+            }
+            contentOffset = CGPoint(x: 0, y: offset)
+        }
+
+        // Following the caret as it types, a text view animates its scroll: the new line slides in. It should just be there.
+        override func setContentOffset(_ contentOffset: CGPoint, animated: Bool) {
+            super.setContentOffset(contentOffset, animated: false)
+        }
+
+        override func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
+            super.scrollRectToVisible(rect, animated: false)
         }
 
         override func paste(_ sender: Any?) {
@@ -754,6 +820,7 @@ private struct PromptTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             (textView as? TextView)?.placeholderLabel.isHidden = !textView.text.isEmpty
+            if textView.isScrollEnabled { textView.scrollRangeToVisible(textView.selectedRange) }
         }
     }
 
@@ -795,13 +862,23 @@ private struct PromptTextView: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView view: TextView, context: Context) -> CGSize? {
         let width = proposal.width ?? 200
-        let lineHeight = view.font?.lineHeight ?? 20
-        let fitting = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
-        let height = min(max(fitting, lineHeight), lineHeight * 6)
-        let scrolls = fitting > height + 1
-        if view.isScrollEnabled != scrolls { DispatchQueue.main.async { view.isScrollEnabled = scrolls } }
+        let measure = { (textView: UITextView) in textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height }
+        let fitting = measure(view)
+        guard let maxLines else { return CGSize(width: width, height: proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? fitting) }
+        // As tall as `maxLines` lines really are: laid out, a line is taller than the font's lineHeight.
+        Self.probe.font = view.font
+        Self.probe.text = Array(repeating: "X", count: maxLines).joined(separator: "\n")
+        let height = min(fitting, measure(Self.probe))
         return CGSize(width: width, height: ceil(height))
     }
+
+    /// Measures how tall `maxLines` lines are, set up as the field is.
+    private static let probe: UITextView = {
+        let view = UITextView()
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        return view
+    }()
 }
 
 /// The status's main action, the rest under the button beside it, as in the Mac's split button.
