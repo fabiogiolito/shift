@@ -369,7 +369,11 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .tags { margin: 0; padding: 0; list-style: none; text-align: center; text-wrap: balance; line-height: 2.6; }
 .tags li { display: inline-block; margin: 0 2px; padding: 0 .9rem; border-radius: 99px; background: #1c1c1e; color: #c7c7cc; font-size: 14px; line-height: 2.2; white-space: nowrap; }
 @media (max-width: 900px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .card.span2 { grid-column: span 2; } }
-@media (max-width: 600px) { .bento { grid-template-columns: minmax(0, 1fr); } .card.wide, .card.span2 { grid-column: auto; grid-row: auto; } .extras { padding-top: 5rem; } }
+@media (max-width: 600px) { .bento { grid-template-columns: minmax(0, 1fr); } .card.wide, .card.span2 { grid-column: auto; grid-row: auto; } .extras { padding-top: 5rem; }
+  /* As tall as the other cards; the pills pan through it as the page scrolls, faded in and out at the edges */
+  .card.full { height: 286px; padding-block: 0; }
+  .tagview { height: 100%; overflow: hidden; -webkit-mask-image: linear-gradient(transparent, #000 25%, #000 75%, transparent); mask-image: linear-gradient(transparent, #000 25%, #000 75%, transparent); }
+  .tags { translate: 0 var(--ty, 0); } }
 @supports (animation-timeline: view()) {
   .extras h2, .card { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
 }
@@ -588,11 +592,11 @@ body > footer a:hover { color: var(--fg); }
         <p>Every agent and dev server, heaviest first, ready to stop.</p>
       </article>
       <article class="card full">
-        <ul class="tags" aria-label="Also">
+        <div class="tagview"><ul class="tags" id="tags" aria-label="Also">
           <li>Branch per task</li><li>Dev server per task</li><li>Slash commands</li><li>Keyboard first</li>
           <li>Installs dependencies</li><li>Runs iOS apps in Simulator</li><li>Server logs per task</li><li>Diffs</li>
           <li>Finds project icons</li><li>Keeps the Mac awake</li><li>Auto updates</li><li>Free &amp; open source</li>
-        </ul>
+        </ul></div>
       </article>
     </div>
   </section>
@@ -1072,7 +1076,7 @@ function stopIdle() { clearTimeout(idleTimer); $("next").classList.remove("flash
 for (const e of ["wheel", "touchstart", "keydown", "pointerdown"]) addEventListener(e, stopIdle, { passive: true })
 
 // ---------- Scroll: tilt in, then one beat per screen ----------
-const story = $("story"), scene = $("scene"), mac = $("mac"), heads = [...document.querySelectorAll(".head")]
+const story = $("story"), scene = $("scene"), mac = $("mac"), tags = $("tags"), heads = [...document.querySelectorAll(".head")]
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
 function layout() {
   const w = scene.clientWidth, h = scene.clientHeight
@@ -1105,6 +1109,9 @@ function onScroll() {
   heads.forEach((h, i) => h.classList.toggle("on", i === beat))
   // Leaving the last step, the window eases back to the screen's width as the story scrolls away
   mac.style.setProperty("--out", Math.min(1, Math.max(0, (p - 9.3) / .7)).toFixed(3))
+  // Phones: the tag pills pan up through their card as it crosses the screen
+  const tv = tags.parentElement, r = tv.getBoundingClientRect(), over = tags.offsetHeight - tv.clientHeight
+  if (over > 0) tags.style.setProperty("--ty", `${(tv.clientHeight / 3 - Math.min(1, Math.max(0, (innerHeight - r.top) / (innerHeight + r.height))) * (over + tv.clientHeight * 2 / 3)).toFixed(1)}px`)
   // Gone just before the story lets go and the next section scrolls in
   $("ctrl").classList.toggle("on", beat > 0 && p < 9.75)
   if (beat !== target) { stopIdle(); target = beat; run() }
