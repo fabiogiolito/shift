@@ -308,7 +308,7 @@ struct ScheduleForm: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 20)
-            Divider().padding(.top, 28).padding(.bottom, 20)
+            Divider().padding(.top, 22).padding(.bottom, 20)
             HStack { Spacer(); buttons }
         }
         .frame(width: 560)
