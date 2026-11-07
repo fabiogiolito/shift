@@ -182,10 +182,14 @@ struct BaseBranchMenu: View {
             Divider()
             Button("New Branch…") { creatingBranch = true }
         } label: {
-            Label(project.baseBranch, systemImage: "arrow.triangle.branch")
+            // Drawn by SwiftUI, like the folder menu, so it takes the secondary color.
+            HStack(spacing: 4) {
+                Label(project.baseBranch, systemImage: "arrow.triangle.branch").labelStyle(.titleAndIcon)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .labelStyle(.titleAndIcon)
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
         .foregroundStyle(.secondary)
         .fixedSize()
         .help("Base branch for new tasks")

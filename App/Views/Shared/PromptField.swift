@@ -204,9 +204,10 @@ struct PromptField: View {
                 }
                 Button("Add Files…", systemImage: "paperclip") { importingFiles = true }
             } label: {
-                Image(systemName: "plus")
+                Image(systemName: "plus").font(.system(size: 15)).frame(width: 24, height: 24).contentShape(Rectangle())
             }
-            .menuStyle(.button).buttonStyle(.glass).buttonBorderShape(.circle).menuIndicator(.hidden)
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+            .foregroundStyle(.secondary)
             .fixedSize()
             .help("Add")
             Spacer(minLength: 0)
