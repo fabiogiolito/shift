@@ -2,8 +2,7 @@ import SwiftUI
 import AppKit
 import ShiftCore
 
-/// Along the bottom of the task list and task detail, split where they are. Under the list, what new tasks start
-/// from: the folder and the base branch. Under the detail, the agent, model and permissions of the task on screen,
+/// Along the bottom of the task list and task detail, split where they are. Under the list, the project's folder. Under the detail, the agent, model and permissions of the task on screen,
 /// for its next prompt; with no task (the chat, or none selected), the project's, which new tasks start with.
 struct ProjectBar: View {
     /// Shared with the sidebar's New Project bar, so their top edges line up.
@@ -14,9 +13,7 @@ struct ProjectBar: View {
     let task: TaskItem?
     /// The task list's width: the left side's.
     let listWidth: CGFloat
-    @State private var branches: [String] = []
     @State private var showingSettings = false
-    @State private var creatingBranch = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -33,23 +30,12 @@ struct ProjectBar: View {
         .foregroundStyle(.secondary)
         .frame(height: Self.height)
         .background(.bar)
-        .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
-        .sheet(isPresented: $creatingBranch) {
-            NewBranchSheet(projectID: project.id, branches: branches, source: project.baseBranch) { name in
-                var updated = project
-                updated.baseBranch = name
-                model.updateProject(updated)
-                Task { branches = await model.branches(for: project.id) }
-            }
-        }
         .sheet(isPresented: $showingSettings) { ProjectSettingsView(projectID: project.id) }
         .focusedSceneValue(\.openProjectSettings) { showingSettings = true }
     }
 
     private var newTaskSide: some View {
-        // The current value is always offered, so the menu is valid before branches load.
-        let branchOptions = branches.contains(project.baseBranch) ? branches : [project.baseBranch] + branches
-        return HStack(spacing: 16) {
+        HStack(spacing: 16) {
             Menu {
                 Button("Show in Finder") {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.repoPath)
@@ -66,18 +52,6 @@ struct ProjectBar: View {
             }
             .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
             .help("Repository")
-
-            Menu {
-                Picker("Base branch", selection: projectBinding(\.baseBranch)) {
-                    ForEach(branchOptions, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.inline)
-                Divider()
-                Button("New Branch…") { creatingBranch = true }
-            } label: {
-                Label(project.baseBranch, systemImage: "arrow.triangle.branch")
-            }
-            .help("Base branch for new tasks")
             Spacer(minLength: 0)
         }
     }
@@ -164,10 +138,6 @@ struct ProjectBar: View {
         return text
     }
 
-    private func projectBinding<Value>(_ keyPath: WritableKeyPath<Project, Value>) -> Binding<Value> {
-        Binding(get: { project[keyPath: keyPath] }, set: { value in updateProject { $0[keyPath: keyPath] = value } })
-    }
-
     private func updateProject(_ change: (inout Project) -> Void) {
         var updated = project
         change(&updated)
@@ -191,6 +161,47 @@ extension Project {
 extension AppModel {
     func modelName(_ id: String, for agent: AgentKind) -> String {
         id.isEmpty ? "Default model" : models[agent]?.first { $0.id == id }?.name ?? id
+    }
+}
+
+/// The branch new tasks start from, with New Branch…. In the new task field, next to Start.
+struct BaseBranchMenu: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    @State private var branches: [String] = []
+    @State private var creatingBranch = false
+
+    var body: some View {
+        // The current value is always offered, so the menu is valid before branches load.
+        let options = branches.contains(project.baseBranch) ? branches : [project.baseBranch] + branches
+        Menu {
+            Picker("Base branch", selection: Binding(get: { project.baseBranch }, set: setBase)) {
+                ForEach(options, id: \.self) { Text($0) }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Button("New Branch…") { creatingBranch = true }
+        } label: {
+            Label(project.baseBranch, systemImage: "arrow.triangle.branch")
+        }
+        .menuStyle(.borderlessButton)
+        .labelStyle(.titleAndIcon)
+        .foregroundStyle(.secondary)
+        .fixedSize()
+        .help("Base branch for new tasks")
+        .onAppearAndActivate(id: project.id) { branches = await model.branches(for: project.id) }
+        .sheet(isPresented: $creatingBranch) {
+            NewBranchSheet(projectID: project.id, branches: branches, source: project.baseBranch) { name in
+                setBase(name)
+                Task { branches = await model.branches(for: project.id) }
+            }
+        }
+    }
+
+    private func setBase(_ name: String) {
+        var updated = project
+        updated.baseBranch = name
+        model.updateProject(updated)
     }
 }
 

@@ -21,11 +21,16 @@ struct PromptField: View {
     var draftKey: String?
     /// The slash commands this field's messages handle; typing `/` lists them in a menu above the field.
     var commands: [SlashCommand] = []
+    /// Offered as New Schedule in the + menu, when given.
+    var onNewSchedule: (() -> Void)?
+    /// Shown next to the send button, like the new task field's base branch.
+    var accessory: AnyView?
     var onSubmit: (String, [String]) -> Void = { _, _ in }
 
     @State private var ownText = ""
     @State private var ownAttachments: [URL] = []
     @State private var dropTargeted = false
+    @State private var importingFiles = false
     @FocusState private var focused: Bool
     @State private var selectedCommand = 0
     /// The text the command menu was closed on with Esc; it stays closed until the text changes.
@@ -65,10 +70,10 @@ struct PromptField: View {
                 .scrollIndicators(.never)
             }
             editor
+            if externalText == nil { toolbar }
         }
         .font(.body)
         .padding(10)
-        .padding(.trailing, externalText == nil ? 32 : 0) // room for the send button
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
         // TextEditor draws no focus ring of its own, so the field draws the system one around its edge.
@@ -78,8 +83,8 @@ struct PromptField: View {
                 RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            if externalText == nil { sendButton }
+        .fileImporter(isPresented: $importingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            (try? result.get())?.forEach(attach)
         }
         .onDrop(of: [.item], isTargeted: $dropTargeted) { providers in
             for provider in providers { Task { await add(provider) } }
@@ -190,6 +195,26 @@ struct PromptField: View {
         return (try? png.write(to: url)) != nil ? url : nil
     }
 
+    /// Under the text: the + menu, then the accessory and the send button at the end.
+    private var toolbar: some View {
+        HStack(spacing: 8) {
+            Menu {
+                if let onNewSchedule {
+                    Button("New Schedule…", systemImage: "calendar", action: onNewSchedule)
+                }
+                Button("Add Files…", systemImage: "paperclip") { importingFiles = true }
+            } label: {
+                Image(systemName: "plus")
+            }
+            .menuStyle(.button).buttonStyle(.glass).buttonBorderShape(.circle).menuIndicator(.hidden)
+            .fixedSize()
+            .help("Add")
+            Spacer(minLength: 0)
+            accessory
+            sendButton
+        }
+    }
+
     @ViewBuilder private var sendButton: some View {
         let send = Button(action: submit) {
             Label(submitTitle, systemImage: "arrow.up").labelStyle(.iconOnly)
@@ -202,7 +227,6 @@ struct PromptField: View {
         // While the command menu is open, Return picks a command instead.
         .keyboardShortcut(focused && commandMatches.isEmpty ? KeyboardShortcut(.return, modifiers: .command) : nil)
         .help("\(submitTitle) (⌘↩)")
-        .padding(6)
     }
 }
 
