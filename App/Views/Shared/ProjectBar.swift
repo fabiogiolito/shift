@@ -54,6 +54,11 @@ struct ProjectBar: View {
             .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
             .help("Repository")
             Spacer(minLength: 0)
+            Button { showingSettings = true } label: {
+                Image(systemName: "gearshape").contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Project Settings")
         }
     }
 
