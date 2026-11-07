@@ -75,11 +75,11 @@ h1 .w:first-child, h1 .w:first-child .l { color: var(--fg); }
 h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(--i) * 25ms + 100ms) both; }
 .scene { position: relative; flex: 1; margin-top: clamp(1.5rem, 4.5vh, 3rem); perspective: 1800px; animation: rise 1.4s var(--ease) .3s both; }
 /* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene.
-   --z, --zx: on phones, a zoom and pan onto the part of the window where the step happens */
+   --z, --zx: on phones, a zoom and pan onto the part of the window where the step happens; --out (0 → 1, on scroll, not eased) undoes them as the story scrolls away */
 @property --z { syntax: "<number>"; inherits: true; initial-value: 1; }
 @property --zx { syntax: "<length>"; inherits: true; initial-value: 0px; }
 .mac { position: absolute; top: 0; left: 50%; width: var(--w); height: var(--h); transform-origin: 50% 0; transition: --z .9s var(--ease), --zx .9s var(--ease);
-  transform: translateX(calc(-50% + var(--zx))) translateY(calc((1 - var(--t)) * var(--drop) - var(--t) * var(--lift, 0px))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * var(--z) * (.84 + .16 * var(--t)))); }
+  transform: translateX(calc(-50% + var(--zx) * (1 - var(--out, 0)))) translateY(calc((1 - var(--t)) * var(--drop) - var(--t) * var(--lift, 0px))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * (var(--z) + (1 - var(--z)) * var(--out, 0)) * (.84 + .16 * var(--t)))); }
 .phone { width: var(--pw); padding: calc(var(--pw) * .025); border-radius: calc(var(--pw) * .17); background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 70px -10px #000; }
 .phone img { border-radius: calc(var(--pw) * .145); }
 .iphone { position: absolute; z-index: 3; left: calc(50% + var(--mw) * .5 - var(--pw) * .7); top: calc(var(--drop) * 1.1); width: var(--pw);
@@ -1103,6 +1103,8 @@ function onScroll() {
   scene.parentElement.style.setProperty("--t", reduced ? 1 : Math.min(1, Math.max(0, p)).toFixed(3))
   const beat = Math.min(9, Math.max(0, Math.floor(p + .1)))
   heads.forEach((h, i) => h.classList.toggle("on", i === beat))
+  // Leaving the last step, the window eases back to the screen's width as the story scrolls away
+  mac.style.setProperty("--out", Math.min(1, Math.max(0, (p - 9.3) / .7)).toFixed(3))
   // Gone just before the story lets go and the next section scrolls in
   $("ctrl").classList.toggle("on", beat > 0 && p < 9.75)
   if (beat !== target) { stopIdle(); target = beat; run() }
