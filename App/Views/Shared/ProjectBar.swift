@@ -14,6 +14,7 @@ struct ProjectBar: View {
     /// The task list's width: the left side's.
     let listWidth: CGFloat
     @State private var showingSettings = false
+    @State private var showingUsage = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -108,13 +109,17 @@ struct ProjectBar: View {
             Spacer()
 
             if let usage = model.usage[agent], let window = usage.tightest {
-                Text(Self.describe(window))
-                    .font(.subheadline)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .help(usage.windows.map { "\($0.name) limit: \(Self.describe($0, named: false))" }
-                        .joined(separator: "\n"))
+                Button { showingUsage.toggle() } label: {
+                    Text(Self.describe(window))
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Usage limits")
+                .popover(isPresented: $showingUsage, arrowEdge: .top) { UsagePopover(agent: agent, usage: usage) }
             }
         }
         .task(id: agent) {
@@ -127,14 +132,9 @@ struct ProjectBar: View {
     }
 
     /// "5-hour limit 58% left · resets 3:40 PM"
-    private static func describe(_ window: AgentUsage.Window, named: Bool = true) -> String {
-        var text = (named ? "\(window.name) limit " : "") + "\(Int(window.percentLeft().rounded()))% left"
-        if let resetsAt = window.resetsAt, resetsAt > .now {
-            let time = Calendar.current.isDateInToday(resetsAt)
-                ? resetsAt.formatted(date: .omitted, time: .shortened)
-                : resetsAt.formatted(.dateTime.weekday().hour().minute())
-            text += " · resets \(time)"
-        }
+    private static func describe(_ window: AgentUsage.Window) -> String {
+        var text = "\(window.name) limit \(Int(window.percentLeft().rounded()))% left"
+        if let time = window.resetTime { text += " · resets \(time)" }
         return text
     }
 
@@ -142,6 +142,45 @@ struct ProjectBar: View {
         var updated = project
         change(&updated)
         model.updateProject(updated)
+    }
+}
+
+/// Each of an agent's usage windows (session, week): how much is used, as a bar, and when it resets.
+private struct UsagePopover: View {
+    let agent: AgentKind
+    let usage: AgentUsage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("\(agent.displayName) usage").font(.headline)
+            ForEach(usage.windows, id: \.name) { window in
+                let used = 100 - window.percentLeft()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("\(window.name) limit")
+                        Spacer()
+                        Text("\(Int(used.rounded()))% used").monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    ProgressView(value: used, total: 100)
+                        .tint(used >= 90 ? .red : used >= 75 ? .orange : .accentColor)
+                    if let time = window.resetTime {
+                        Text("Resets \(time)").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding()
+        .frame(width: 260)
+    }
+}
+
+private extension AgentUsage.Window {
+    /// "3:40 PM" today, "Fri 3:40 PM" later; nil once past.
+    var resetTime: String? {
+        guard let resetsAt, resetsAt > .now else { return nil }
+        return Calendar.current.isDateInToday(resetsAt)
+            ? resetsAt.formatted(date: .omitted, time: .shortened)
+            : resetsAt.formatted(.dateTime.weekday().hour().minute())
     }
 }
 
