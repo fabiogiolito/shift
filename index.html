@@ -39,6 +39,7 @@ h1, h2 { font-weight: 600; letter-spacing: -.045em; line-height: 1; text-wrap: b
 h1 { font-size: clamp(2.25rem, min(5vw, 7vh), 4rem); }
 h2 { font-size: clamp(2rem, min(5vw, 7vh), 4rem); }
 .story h3 { font-size: clamp(1.25rem, 2vw, 1.625rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.2; }
+.head h3, .head p { max-width: 28rem; margin-inline: auto; text-wrap: balance; }
 .head p { margin-top: .5rem; font-size: clamp(.9375rem, 1.3vw, 1.0625rem); line-height: 1.4; color: var(--muted); }
 h2 span, h1 span { color: var(--muted); }
 .sub { max-width: 30rem; margin: 1.25rem auto 0; font-size: clamp(1.0625rem, 1.5vw, 1.25rem); line-height: 1.4; color: var(--muted); text-wrap: balance; }
@@ -63,7 +64,7 @@ nav .gh:hover { color: var(--fg); }
 /* The story: the Mac app, rebuilt in HTML, pinned while each screen of scrolling plays one beat */
 .story { position: relative; height: calc(var(--n) * 100vh); }
 .pin { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; height: 100svh; padding-top: 6.5rem; overflow: hidden; text-align: center; }
-.heads { position: relative; z-index: 2; display: grid; padding-inline: 1.5rem; translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px) + var(--t, 0) * var(--bal, 0px)); }
+.heads { position: relative; z-index: 2; display: grid; padding-inline: max(1.5rem, 8vw); translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px) + var(--t, 0) * var(--bal, 0px)); }
 .head { grid-area: 1 / 1; opacity: 0; translate: 0 16px; filter: blur(6px); pointer-events: none; transition: opacity .4s, translate .7s var(--ease), filter .4s; }
 .head:not([data-i="0"]) { align-self: start; margin-top: -32px; }
 .head.on { opacity: 1; translate: 0 0; filter: none; pointer-events: auto; }
@@ -326,7 +327,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .card.wide { grid-column: span 2; }
 .span2 .mem { width: min(100%, 26rem); }
 .card h3 { margin-top: auto; padding-top: 1.5rem; font-size: 1.0625rem; font-weight: 500; letter-spacing: -.01em; }
-.card p { margin-top: .25rem; font-size: .9375rem; line-height: 1.4; color: var(--muted); }
+.card p { margin-top: .25rem; font-size: .9375rem; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
 .ui { display: flex; flex-direction: column; justify-content: center; min-height: 140px; font-size: 13px; }
 .sched { align-items: center; flex: 1; }
 .srow { display: flex; align-items: center; gap: 10px; align-self: stretch; max-width: 22rem; margin: 0 auto; padding: 10px 12px; border-radius: 12px; background: #1c1c1e; }
