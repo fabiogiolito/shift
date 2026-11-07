@@ -318,9 +318,9 @@ public enum ShiftPaths {
     /// The command the project chat's agent runs Shift with.
     public static let controlScript = root.appendingPathComponent("bin/shiftctl")
     public static let screenshots = root.appendingPathComponent("screenshots")
-    /// SHIFT_HOME of a task's build when Shift opens it, so a build of Shift keeps its own data.
-    // ponytail: never cleaned up; delete it with the task if builds of Shift pile up.
-    public static func build(taskID: Int) -> URL { root.appendingPathComponent("builds/\(taskID)") }
+    public static let builds = root.appendingPathComponent("builds")
+    /// SHIFT_HOME of a task's build when Shift opens it, so a build of Shift keeps its own data. Removed with the task.
+    public static func build(taskID: Int, root: URL = builds) -> URL { root.appendingPathComponent(String(taskID)) }
 
     public static func worktree(project: Project, taskID: Int, root: URL = worktrees) -> URL {
         let slug = project.name.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
