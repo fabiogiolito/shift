@@ -306,7 +306,7 @@ struct ScheduleForm: View {
                 })
                 if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 6)
             .padding(.top, 20)
             Divider().padding(.top, 22).padding(.bottom, 20)
             HStack { Spacer(); buttons }
