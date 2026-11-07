@@ -290,6 +290,13 @@ struct ScheduleForm: View {
                         }
                     }
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
+                Picker("When done", selection: $draft.finish) {
+                    ForEach(Schedule.FinishAction.allCases, id: \.self) {
+                        Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
+                    }
+                }
+                .fixedSize()
+                .padding(.top, 4)
             }
             // When it runs, set apart on a light gray panel.
             timing
@@ -300,18 +307,10 @@ struct ScheduleForm: View {
                 .padding(.top, 16)
             // Just under the schedule's timing, then a line, then the buttons.
             VStack(alignment: .leading, spacing: 4) {
-                Picker("When done", selection: $draft.finish) {
-                    ForEach(Schedule.FinishAction.allCases, id: \.self) {
-                        Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
                 Toggle("Wake up Mac for runs", isOn: Binding { draft.wakeMac } set: {
                     draft.wakeMac = $0
                     if $0 { draft.keepAwake = false }
                 })
-                .padding(.top, 10)
                 if draft.wakeMac { note("Shift asks for your administrator password to schedule the wakes.") }
             }
             .padding(.horizontal, 6)
