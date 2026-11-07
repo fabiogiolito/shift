@@ -894,7 +894,7 @@ async function type(field, text) {
 }
 function addAct() { S.acts++; $("acts").outerHTML = actsList(S.acts) }
 
-// On phones the window is zoomed in, panned so window x `f` sits mid-screen (clamped to its edges); "phone" zooms out for the iPhone
+// On phones the window is zoomed in, panned so window x `f` sits mid-screen (its edges stop 16px inside the screen); "phone" zooms out for the iPhone
 // Where each step's activity is, in window x: sidebar and list, list, detail, the preview
 const FOCUS = [null, 0, 560, W, W, W, 650, W, "phone", 560]
 let fit = 1, fx = null
@@ -903,7 +903,7 @@ function aim(f) {
   let z = 1, zx = 0
   if (innerWidth < 640 && f != null) {
     z = f === "phone" ? .85 : 1.5
-    const k = fit * z, half = Math.min(W / 2, scene.clientWidth / k / 2)
+    const k = fit * z, half = Math.min(W / 2, (scene.clientWidth / 2 - 16) / k)
     if (f !== "phone") zx = -(Math.min(W - half, Math.max(half, f)) - W / 2) * k
   }
   mac.style.setProperty("--z", z); mac.style.setProperty("--zx", `${zx}px`)
