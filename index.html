@@ -229,6 +229,42 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .cursor svg { width: 100%; height: 100%; transition: transform .12s; transform-origin: 20% 15%; }
 .cursor.down svg { transform: scale(.82); }
 
+/* The iPhone app, in code: slides up over the Mac in the last step */
+.rphone { position: absolute; z-index: 3; left: calc(50% + var(--mw1) * .5 - var(--pw) * 1.05); top: 4%; width: var(--pw);
+  translate: 0 115%; opacity: 0; transition: translate .9s var(--ease), opacity .5s; }
+.rphone.on { translate: 0 0; opacity: 1; }
+.ps { position: relative; display: flex; flex-direction: column; aspect-ratio: 603 / 1311; overflow: hidden; padding: 6% 7% 7%; border-radius: calc(var(--pw) * .13); background: #000; color: #f2f2f7; text-align: left;
+  font: calc(var(--pw) * .05) / 1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em; }
+.pbar { display: flex; justify-content: space-between; align-items: center; padding: 0 5%; font-size: .95em; }
+.pbar span { display: flex; align-items: flex-end; gap: 1.5px; }
+.pbar i { width: 3px; background: #fff; border-radius: 1px; }
+.pbar i:nth-child(1) { height: 4px; } .pbar i:nth-child(2) { height: 6px; } .pbar i:nth-child(3) { height: 8px; } .pbar i:nth-child(4) { height: 10px; }
+.pbar em { width: 20px; height: 10px; margin-left: 5px; border-radius: 3px; background: #30d158; }
+.pnav { display: flex; justify-content: space-between; margin-top: 8%; }
+.pc { display: grid; place-items: center; width: 2.4em; height: 2.4em; border-radius: 50%; background: #1c1c1e; }
+.pc svg.g, .pprompt svg.g { width: 1.1em; height: 1.1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pc .st { width: 1.25em; height: 1.25em; }
+.ps h4 { margin-top: 8%; font-size: 1.15em; font-weight: 600; }
+.pdesc { margin-top: .5em; font-size: .9em; color: #d1d1d6; }
+.pprompt { display: flex; align-items: center; gap: .5em; margin-top: 8%; padding: .7em .8em; border-radius: .7em; background: #1c1c1e; font-size: .9em; }
+.pprompt svg.g { flex-shrink: 0; margin-left: auto; color: #636366; }
+.pwork { display: flex; align-items: center; gap: .5em; margin-top: 6%; font-size: .9em; color: #d1d1d6; opacity: 0; transition: opacity .4s; }
+.pwork.on { opacity: 1; }
+.pwork .st { width: 1.1em; height: 1.1em; }
+.pask { margin-top: auto; padding: .9em; border: 1.5px solid var(--blue); border-radius: 1em; background: #111; transition: translate .5s var(--ease), opacity .4s; }
+.pask.gone { translate: 0 30%; opacity: 0; }
+.pask small { font-size: .8em; color: #8e8e93; }
+.pask p { margin-top: .2em; font-size: .92em; }
+.pask ul { margin: .5em 0 .8em; }
+.pask li { display: flex; align-items: center; gap: .6em; height: 2em; font-size: .9em; }
+.pask .radio { width: 1.1em; height: 1.1em; }
+.pask li.pick .radio { border: .32em solid var(--blue); background: #fff; }
+.psend { display: grid; place-items: center; height: 2.4em; border-radius: 99px; background: #2c2c2e; color: #636366; font-size: .92em; transition: background .2s, color .2s, transform .12s; }
+.psend.go { background: var(--blue); color: #fff; }
+.tap { position: absolute; left: 0; top: 0; width: 2.6em; height: 2.6em; margin: -1.3em 0 0 -1.3em; border-radius: 50%; background: rgba(255, 255, 255, .35); box-shadow: 0 0 0 1px rgba(255, 255, 255, .5); opacity: 0; transition: left .6s cubic-bezier(.65, 0, .35, 1), top .6s cubic-bezier(.65, 0, .35, 1), opacity .25s, scale .15s; pointer-events: none; }
+.tap.on { opacity: 1; }
+.tap.down { scale: .8; }
+
 /* Step controls: replay this step, previous, next */
 .ctrl { position: absolute; z-index: 4; right: max(1.5rem, 4vw); bottom: 14vh; display: flex; flex-direction: column; align-items: center; gap: 12px;
   opacity: 0; translate: 12px 0; pointer-events: none; transition: opacity .4s, translate .6s var(--ease); }
@@ -263,7 +299,6 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 @supports (animation-timeline: view()) {
   .screen h2, .screen .sub, .screen .visual { animation: rise linear both; animation-timeline: view(); animation-range: entry 10% cover 35%; }
 }
-.screen .phone { --pw: min(17rem, 60vw); margin: 3rem auto 0; }
 .week { display: flex; justify-content: center; gap: clamp(.5rem, 2vw, 1rem); margin-top: 3.5rem; font-family: var(--mono); font-size: clamp(1rem, 2.3vw, 1.375rem); }
 .week span { display: grid; place-items: center; width: 2.5em; height: 2.5em; border-radius: 50%; border: 1px solid var(--line); color: #555; }
 .week .on { border-color: var(--fg); background: var(--fg); color: var(--bg); }
@@ -311,7 +346,7 @@ body > footer a:hover { color: var(--fg); }
 </header>
 
 <main>
-  <section class="story" id="story" style="--n:9">
+  <section class="story" id="story" style="--n:10">
     <div class="pin">
       <div class="gitcmds" aria-hidden="true">
         <span class="gitcmd" style="--dx:-220px;--dy:-160px;--r:-6deg;top:38%;left:2%"><b>$</b> git worktree add ../wt-101</span>
@@ -335,6 +370,7 @@ body > footer a:hover { color: var(--fg); }
         <div class="head" data-i="5"><h3>Come back to a checkmark</h3><p>You get a notification when it’s ready to review.</p></div>
         <div class="head" data-i="6"><h3>Test it in one click</h3><p>Open the task’s own preview in your browser.</p></div>
         <div class="head" data-i="7"><h3>Then merge it</h3><p>One click merges into main and cleans up.</p></div>
+        <div class="head" data-i="8"><h3>Work remotely from your phone</h3><p>Answer questions, check in and merge from your iPhone.</p></div>
       </div>
       <div class="ctrl" id="ctrl">
         <button id="replay" type="button" aria-label="Replay this step" title="Replay"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
@@ -378,13 +414,25 @@ body > footer a:hover { color: var(--fg); }
           </div>
         </div>
         <div class="iphone phone"><img src="screens/iphone-ready.webp" alt="" width="603" height="1311"></div>
+        <div class="rphone phone" id="rphone">
+          <div class="ps">
+            <div class="pbar"><b>9:41</b><span><i></i><i></i><i></i><i></i><em></em></span></div>
+            <div class="pnav"><span class="pc" data-ic="left"></span><span class="pc" id="pmark"></span></div>
+            <h4>Case study pages</h4>
+            <p class="pdesc">Gives each project its own page with the full story.</p>
+            <div class="pprompt">Give each project its own page with the full story.<span data-ic="right"></span></div>
+            <div class="pwork" id="pwork"><span class="st"></span>Writing the case study template…</div>
+            <div class="pask" id="pask">
+              <small>The agent needs a decision</small>
+              <p>Should each case study open with a cover photo or a short summary?</p>
+              <ul><li id="popt"><i class="radio"></i>Cover photo</li><li><i class="radio"></i>Short summary</li><li><i class="radio"></i>Something else</li></ul>
+              <span class="psend" id="psend">Send</span>
+            </div>
+            <i class="tap" id="tap"></i>
+          </div>
+        </div>
       </div>
     </div>
-  </section>
-
-  <section class="screen">
-    <h2>Answer it <span>from your iPhone.</span></h2>
-    <div class="phone visual"><img src="screens/iphone-needs.webp" alt="Shift on iPhone, showing a task that asks a question" width="603" height="1311" loading="lazy"></div>
   </section>
 
   <section class="screen">
@@ -510,6 +558,8 @@ function stateAfter(beat) {
   if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true; for (const [i, st] of AFTER) s.tasks[i][1] = st }
   if (beat >= 6) { s.notif = false; s.preview = true; s.photo = 1 }
   if (beat >= 7) { s.tasks[0][1] = "merged"; s.preview = false }
+  // Last, the question waiting on Case study pages is answered from the phone
+  if (beat >= 8) { s.phone = true; s.tasks[2][1] = "working" }
   return s
 }
 
@@ -614,6 +664,23 @@ function setPhoto(i) {
   $("cap").textContent = `${PHOTOS[i][0]} · ${i + 1} of 6`
 }
 
+// The phone shows Case study pages: asking, or (once answered) working again
+function renderPhone(on, answered) {
+  $("rphone").classList.toggle("on", !!on)
+  $("pask").classList.toggle("gone", !!answered)
+  $("pwork").classList.toggle("on", !!answered)
+  $("pmark").innerHTML = answered ? `<span class="st">${rays()}</span>` : `<span class="st">${MARK.input}</span>`
+  $("popt").classList.remove("pick"); $("psend").classList.remove("go")
+  $("tap").className = "tap"
+}
+async function tap(el) {
+  const ps = $("rphone").querySelector(".ps"), r = el.getBoundingClientRect(), b = ps.getBoundingClientRect(), k = b.width / ps.offsetWidth
+  const tp = $("tap"); tp.classList.add("on")
+  tp.style.left = `${(r.left - b.left + r.width * .3) / k}px`; tp.style.top = `${(r.top - b.top + r.height / 2) / k}px`
+  await wait(700)
+  tp.classList.add("down"); await wait(160); tp.classList.remove("down"); await wait(140)
+}
+
 function renderAll() {
   win.classList.toggle("compact", W < 1120)
   renderProjects()
@@ -622,6 +689,7 @@ function renderAll() {
   renderDetail(false)
   $("notif").classList.toggle("on", !!S.notif)
   $("browser").classList.toggle("on", !!S.preview)
+  renderPhone(S.phone, S.phone)
   setPhoto(S.photo || 0)
   renderDraft()
   $("cursor").classList.remove("on", "down", "dragging")
@@ -760,6 +828,19 @@ const BEATS = [
     renderRows(); renderDetail()
     cursor.classList.remove("on")
   },
+  // 8. The phone slides up over the Mac; the waiting question is answered with a tap and the Mac follows
+  async () => {
+    renderPhone(true, false)
+    await wait(1200)
+    await tap($("popt")); $("popt").classList.add("pick"); $("psend").classList.add("go")
+    await wait(300)
+    await tap($("psend"))
+    $("tap").classList.remove("on")
+    $("pask").classList.add("gone")
+    await wait(400)
+    $("pwork").classList.add("on"); $("pmark").innerHTML = `<span class="st">${rays()}</span>`
+    S.tasks[2][1] = "working"; renderRows(); renderProjects()
+  },
 ]
 
 async function run() {
@@ -787,6 +868,7 @@ function layout() {
   scene.style.setProperty("--fit", fit)
   scene.style.setProperty("--drop", `${h * .4}px`)
   scene.style.setProperty("--mw", `${W * fit * .84}px`)
+  scene.style.setProperty("--mw1", `${W * fit}px`)
   // In the opening, center the headline between the nav and the tilted window's top edge
   const hs = document.querySelector(".heads"), hh = heads[0].offsetHeight
   scene.parentElement.style.setProperty("--hy", `${Math.max(0, (56 + scene.offsetTop + h * .4) / 2 - (hs.offsetTop + hh / 2))}px`)
@@ -796,7 +878,7 @@ function layout() {
 function onScroll() {
   const p = -story.getBoundingClientRect().top / innerHeight
   scene.parentElement.style.setProperty("--t", reduced ? 1 : Math.min(1, Math.max(0, p)).toFixed(3))
-  const beat = Math.min(7, Math.max(0, Math.floor(p + .1)))
+  const beat = Math.min(8, Math.max(0, Math.floor(p + .1)))
   heads.forEach((h, i) => h.classList.toggle("on", i === beat))
   $("ctrl").classList.toggle("on", beat > 0)
   if (beat !== target) { target = beat; run() }
@@ -814,7 +896,7 @@ async function replay() {
 // Each step starts just after its own screen of scrolling begins; past the last one is the next section
 function go(d) {
   const top = story.getBoundingClientRect().top + scrollY, k = target + d
-  scrollTo({ top: k > 7 ? top + story.offsetHeight - innerHeight + innerHeight : top + Math.max(0, k) * innerHeight + (k > 0 ? innerHeight * .05 : 0), behavior: reduced ? "auto" : "smooth" })
+  scrollTo({ top: k > 8 ? top + story.offsetHeight - innerHeight + innerHeight : top + Math.max(0, k) * innerHeight + (k > 0 ? innerHeight * .05 : 0), behavior: reduced ? "auto" : "smooth" })
 }
 $("replay").addEventListener("click", replay)
 $("prev").addEventListener("click", () => go(-1))
