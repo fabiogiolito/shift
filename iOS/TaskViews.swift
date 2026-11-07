@@ -782,10 +782,26 @@ private struct PromptTextView: UIViewRepresentable {
         override func layoutSubviews() {
             super.layoutSubviews()
             guard bounds.width > 0, bounds.height > 0 else { return }
-            let scrolls = sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height > bounds.height + 1
+            let fitting = sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height
+            let scrolls = fitting > bounds.height + 1
             guard isScrollEnabled != scrolls else { return }
             isScrollEnabled = scrolls
-            if scrolls { scrollRangeToVisible(selectedRange) } else { contentOffset = .zero }
+            // Set straight away: scrollRangeToVisible would slide the line in.
+            var offset: CGFloat = 0
+            if scrolls {
+                let caret = caretRect(for: selectedTextRange?.end ?? endOfDocument)
+                offset = min(max(caret.maxY - bounds.height, 0), fitting - bounds.height)
+            }
+            contentOffset = CGPoint(x: 0, y: offset)
+        }
+
+        // Following the caret as it types, a text view animates its scroll: the new line slides in. It should just be there.
+        override func setContentOffset(_ contentOffset: CGPoint, animated: Bool) {
+            super.setContentOffset(contentOffset, animated: false)
+        }
+
+        override func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
+            super.scrollRectToVisible(rect, animated: false)
         }
 
         override func paste(_ sender: Any?) {
