@@ -365,3 +365,21 @@ extension Project {
     /// The command of the first target guessed from the repo. Empty when there is nothing to guess.
     public var defaultBuildCommand: String { defaultBuildTargets.first?.command ?? "" }
 }
+
+extension Project {
+    /// GitHub's branch of static files served as the repo's website, whatever the rest of the repo is.
+    public static let staticSiteBranch = "gh-pages"
+
+    /// The project as `task` sees it: a task based on gh-pages is a static website, served from its worktree,
+    /// with no setup and nothing to build. Every other task gets the project as it is.
+    /// Whatever decides a task's server, setup, build targets or agent instructions reads this, not the project.
+    public func forTask(_ task: TaskItem) -> Project {
+        guard task.base(in: self) == Self.staticSiteBranch else { return self }
+        var site = self
+        site.type = .staticWebsite
+        site.serverCommand = ProjectSetup.staticServer
+        site.setupCommand = ""
+        site.buildTargets = []
+        return site
+    }
+}

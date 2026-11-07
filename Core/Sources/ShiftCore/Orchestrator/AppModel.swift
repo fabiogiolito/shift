@@ -221,6 +221,11 @@ public final class AppModel {
         projects.first { $0.id == id }
     }
 
+    /// The project as the task sees it: see `Project.forTask`.
+    public func project(for task: TaskItem) -> Project? {
+        project(task.projectID)?.forTask(task)
+    }
+
     /// Number of tasks waiting on the user (needs input, blocked, conflict, completed). Drives the Dock badge.
     public var attentionCount: Int {
         tasks.filter { $0.status.needsAttention || $0.status == .completed }.count
@@ -286,11 +291,11 @@ public final class AppModel {
         tasks.map(\.id).forEach(dropPending)
         // Saved before tasks had their own base: they keep the one they have been using.
         for task in tasks where task.baseBranch == nil {
-            if let base = project(task.projectID)?.baseBranch { update(task.id) { $0.baseBranch = base } }
+            if let base = project(for: task)?.baseBranch { update(task.id) { $0.baseBranch = base } }
         }
         // Saved before tasks had their own model and permissions: they keep the project's.
         for task in tasks where task.permissions == nil {
-            guard let project = project(task.projectID) else { continue }
+            guard let project = project(for: task) else { continue }
             update(task.id) {
                 $0.permissions = project.permissions
                 $0.model = project.models[task.agent]
@@ -457,7 +462,7 @@ public final class AppModel {
         // Now an app: its tasks are tested by building, so their dev servers and ports go. A running app goes
         // when the project stops being one, but not on any other change to its settings.
         if project.isApp ? !old.isApp : old.runsApp && !project.runsApp {
-            for task in tasks(in: project.id) where task.serverPID != nil || task.port != nil {
+            for task in tasks(in: project.id) where (task.serverPID != nil || task.port != nil) && project.forTask(task).isApp {
                 update(task.id) { $0.serverPID = nil; $0.port = nil }
                 runningTargets[task.id] = nil
                 Task {
@@ -496,7 +501,9 @@ public final class AppModel {
             [.staticWebsite, .other].contains(project.type) && project.serverCommand.isEmpty
                 && project.setupCommand.isEmpty && !project.buildTargets.contains(where: \.hasCommand)
         }
-        guard let services, let project = project(projectID), undetected(project) else { return }
+        // Only the base's own files: not a gh-pages site, nor whatever other branch the repo has checked out.
+        guard let services, let project = project(projectID), undetected(project), project.baseBranch != Project.staticSiteBranch,
+              (try? await services.git.currentBranch(repo: project.repoURL)) == project.baseBranch else { return }
         let suggested = await ProjectSetup.suggest(repo: project.repoURL, git: services.git, servers: services.servers)
         guard [.dynamicWebsite, .nativeApp, .electronApp].contains(suggested.type),
               var now = self.project(projectID), undetected(now) else { return }
@@ -723,7 +730,7 @@ public final class AppModel {
 
     public func merge(taskID: TaskItem.ID) async {
         guard let services, let task = task(taskID), !task.status.isClosed,
-              let project = project(task.projectID), !busy.contains(taskID) else { return }
+              let project = project(for: task), !busy.contains(taskID) else { return }
         busy.insert(taskID)
         defer { busy.remove(taskID) }
 
@@ -834,7 +841,7 @@ public final class AppModel {
     /// Commits what the task has and pushes its branch to the project's remote, which updates its open
     /// pull request. Never forced.
     public func pushBranch(taskID: TaskItem.ID) async {
-        guard let services, let task = task(taskID), let project = project(task.projectID),
+        guard let services, let task = task(taskID), let project = project(for: task),
               let remote = await services.git.remote(repo: project.repoURL, branch: task.branch) else { return }
         do {
             if FileManager.default.fileExists(atPath: task.worktreePath) {
@@ -860,7 +867,7 @@ public final class AppModel {
     /// missing, signed out or fails: GitHub's pre-filled page instead, with why in `lastError` if worth
     /// knowing. Nil (and `lastError`) if the push fails or the remote is not on GitHub. Never opens anything.
     public func openPullRequest(taskID: TaskItem.ID) async -> PullRequestOpening? {
-        guard let services, let task = task(taskID), let project = project(task.projectID) else { return nil }
+        guard let services, let task = task(taskID), let project = project(for: task) else { return nil }
         let base = task.base(in: project)
         let body = [task.description, task.summary].compactMap { $0 }.joined(separator: "\n\n")
         guard let remote = await services.git.remote(repo: project.repoURL, branch: task.branch),
@@ -980,7 +987,7 @@ public final class AppModel {
     /// Whether the task has anything the pull request does not. Unknown counts as yes: a yes keeps the
     /// work, a wrong no deletes it. Local commits behind the pull request (GitHub's "Update branch") are not work.
     private func hasWork(_ id: TaskItem.ID, outside pullRequest: PullRequest, remote: String) async -> Bool {
-        guard let services, let task = task(id), let project = project(task.projectID) else { return true }
+        guard let services, let task = task(id), let project = project(for: task) else { return true }
         if isSettled(id), FileManager.default.fileExists(atPath: task.worktreePath) {
             do { try await services.git.commitAll(worktree: task.worktreeURL, message: task.title) } catch { return true }
         }
@@ -1099,7 +1106,7 @@ public final class AppModel {
             return task
         }
         for id in tasks.map(\.id) {
-            guard let task = eligible(id), let project = project(task.projectID) else { continue }
+            guard let task = eligible(id), let project = project(for: task) else { continue }
             if FileManager.default.fileExists(atPath: task.worktreePath) {
                 _ = try? await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
             }
@@ -1128,7 +1135,7 @@ public final class AppModel {
 
     /// The files that keep a conflicting task from merging into its base. Empty if none or unknown.
     public func conflictedFiles(taskID: TaskItem.ID) async -> [String] {
-        guard let services, let task = task(taskID), task.status == .conflict, let project = project(task.projectID) else { return [] }
+        guard let services, let task = task(taskID), task.status == .conflict, let project = project(for: task) else { return [] }
         return (try? await services.git.conflictedFiles(repo: project.repoURL, branch: task.branch,
                                                          base: task.base(in: project))) ?? []
     }
@@ -1136,7 +1143,7 @@ public final class AppModel {
     /// Hands a conflict back to the agent.
     public func resolveConflict(taskID: TaskItem.ID) {
         guard services != nil, let task = task(taskID), task.status == .conflict, !busy.contains(taskID),
-              runs[taskID]?.active != true, let project = project(task.projectID) else { return }
+              runs[taskID]?.active != true, let project = project(for: task) else { return }
         beginWorking(taskID)
         update(taskID) { $0.isResolvingConflict = true }
         startRun(taskID, prompt: """
@@ -1154,7 +1161,7 @@ public final class AppModel {
         update(taskID) {
             $0.agent = agent
             $0.sessionID = nil
-            $0.model = project(task.projectID)?.models[agent]
+            $0.model = project(for: task)?.models[agent]
         }
     }
 
@@ -1172,7 +1179,7 @@ public final class AppModel {
     /// only its work. If they conflict there, the agent moves them. Not while the agent is working.
     public func changeBase(taskID: TaskItem.ID, to base: String) async {
         guard let services, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
-              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID),
+              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(for: task),
               base != task.branch else { return }
         let old = task.base(in: project)
         guard base != old else { return }
@@ -1214,7 +1221,7 @@ public final class AppModel {
     @discardableResult
     public func syncBase(taskID: TaskItem.ID) async -> [String] {
         guard let services, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
-              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(task.projectID) else { return [] }
+              !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(for: task) else { return [] }
         let base = task.base(in: project)
         if let missing = await missingBase(task, project) {
             lastError = "Could not re-sync \(task.title): \(missing)"
@@ -1246,7 +1253,7 @@ public final class AppModel {
     /// Hands a re-sync that conflicted to the agent, which merges the base in and resolves it.
     public func fixSyncConflict(taskID: TaskItem.ID) {
         guard services != nil, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
-              runs[taskID]?.active != true, let project = project(task.projectID) else { return }
+              runs[taskID]?.active != true, let project = project(for: task) else { return }
         beginWorking(taskID)
         update(taskID) { $0.isResolvingConflict = true }
         startRun(taskID, prompt: """
@@ -1344,7 +1351,7 @@ public final class AppModel {
     /// line of the output, if that is the path of a .app. An iOS app is run on a simulator right here instead.
     public func build(taskID: TaskItem.ID, target targetID: BuildTarget.ID) async -> URL? {
         let key = BuildKey(taskID: taskID, targetID: targetID)
-        guard let services, let task = task(taskID), !task.status.isClosed, let project = project(task.projectID),
+        guard let services, let task = task(taskID), !task.status.isClosed, let project = project(for: task),
               project.isApp, builds[key] != .building,
               let chosen = project.targets.first(where: { $0.id == targetID }), chosen.kind != .run else { return nil }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
@@ -1433,7 +1440,7 @@ public final class AppModel {
     // ponytail: macOS only hook (CoreFoundation's home override), fine while Shift is a Mac app.
     public func runApp(taskID: TaskItem.ID, target targetID: BuildTarget.ID) async {
         let key = BuildKey(taskID: taskID, targetID: targetID)
-        guard let services, let task = task(taskID), !task.status.isClosed, let project = project(task.projectID),
+        guard let services, let task = task(taskID), !task.status.isClosed, let project = project(for: task),
               let target = project.targets.first(where: { $0.id == targetID }), target.kind == .run else { return }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
             builds[key] = .failed("The task's folder is recreated the next time the agent runs.")
@@ -1475,7 +1482,7 @@ public final class AppModel {
     /// What to build for this task: the target whose paths match the most files the task changed against its
     /// base, else the one last built for it, else the first.
     public func suggestedTarget(taskID: TaskItem.ID) async -> BuildTarget? {
-        guard let task = task(taskID), let targets = project(task.projectID)?.targets else { return nil }
+        guard let task = task(taskID), let targets = project(for: task)?.targets else { return nil }
         // A question with one answer: no need to read the diff.
         guard targets.count > 1 else { return targets.first }
         let changed = await changes(taskID: taskID)?.files.map(\.path) ?? []
@@ -1525,7 +1532,7 @@ public final class AppModel {
     /// nil for the preview model.
     private func readDiff<T>(_ id: TaskItem.ID, _ read: (GitServicing, URL, String) async throws -> T) async -> Result<T, Error>? {
         guard let services else { return nil }
-        guard let task = task(id), let project = project(task.projectID) else {
+        guard let task = task(id), let project = project(for: task) else {
             return .failure(Failure("The task no longer exists."))
         }
         guard FileManager.default.fileExists(atPath: task.worktreePath) else {
@@ -1959,7 +1966,7 @@ public final class AppModel {
     /// command and dev server. Leaves nothing behind if it fails or is cancelled.
     private func setUp(_ id: TaskItem.ID, token: UUID) async throws {
         guard let services, let task = task(id) else { throw CancellationError() }
-        guard let project = project(task.projectID) else { throw Failure("The project no longer exists.") }
+        guard let project = project(for: task) else { throw Failure("The project no longer exists.") }
         settingUp.insert(id)
         defer { settingUp.remove(id) }
         var created = false, createdBranch = false
@@ -2024,12 +2031,12 @@ public final class AppModel {
     private func adapter(for id: TaskItem.ID) throws -> AgentAdapter {
         guard let services, let task = task(id) else { throw CancellationError() }
         if installedAgents[task.agent] != nil, let adapter = services.agents[task.agent] { return adapter }
-        if let fallback = project(task.projectID)?.defaultAgent, installedAgents[fallback] != nil,
+        if let fallback = project(for: task)?.defaultAgent, installedAgents[fallback] != nil,
            let adapter = services.agents[fallback] {
             update(id) {
                 $0.agent = fallback
                 $0.sessionID = nil
-                $0.model = project(task.projectID)?.models[fallback]
+                $0.model = project(for: task)?.models[fallback]
             }
             return adapter
         }
@@ -2056,9 +2063,9 @@ public final class AppModel {
             let channel = ApprovalChannel()
             let request = AgentRequest(prompt: text, sessionID: task.sessionID, worktree: task.worktreeURL,
                                        environment: task.port.map { ["PORT": String($0)].merging(taskControlEnvironment(id)) { $1 } } ?? [:],
-                                       permissions: task.permissions ?? project(task.projectID)?.permissions ?? .bypass,
+                                       permissions: task.permissions ?? project(for: task)?.permissions ?? .bypass,
                                        // A fallback agent (see `adapter(for:)`) doesn't run the other one's model.
-                                       model: adapter.kind == task.agent ? task.model : project(task.projectID)?.models[adapter.kind],
+                                       model: adapter.kind == task.agent ? task.model : project(for: task)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        description: task.description,
                                        approvals: channel, screenshots: screenshots)
@@ -2120,7 +2127,7 @@ public final class AppModel {
             let settled = await settle(id, outcome)
             try check(id, token)
             // The agent may have created the project (a package.json with a dev script): serve that now.
-            if let now = self.task(id), now.serverPID != nil, let owner = self.project(now.projectID), serverCommands[id] != nil,
+            if let now = self.task(id), now.serverPID != nil, let owner = self.project(for: now), serverCommands[id] != nil,
                serverCommands[id] != ProjectSetup.serverCommand(for: owner, in: now.worktreeURL) {
                 await startServer(id)
                 try check(id, token)
@@ -2163,7 +2170,7 @@ public final class AppModel {
 
     /// Nil if this turn takes no screenshots. Conflict resolutions are Shift's own prompts, not the user's.
     private func screenshotTurn(_ id: TaskItem.ID) async -> ScreenshotTurn? {
-        guard let services, services.screenshots != nil, let task = task(id), let project = project(task.projectID),
+        guard let services, services.screenshots != nil, let task = task(id), let project = project(for: task),
               project.takesScreenshots, project.isApp || task.port != nil, !task.isResolvingConflict,
               let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)) else { return nil }
         let wantsBefore = diff.isEmpty && task.screenshots?.contains(where: \.isBefore) != true
@@ -2176,11 +2183,11 @@ public final class AppModel {
     private func takeBeforeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, unchangedFrom diff: [FileDiff]) async -> Bool {
         // The server starts only now that the agent has named a page: a turn that changes nothing visible never needs it.
         // The agent is already working, so the changes are checked once it answers.
-        if let task = task(id), project(task.projectID)?.isApp == false {
+        if let task = task(id), project(for: task)?.isApp == false {
             await wakeServer(id)
             _ = await serverAnswers(id)
         }
-        guard let services, let task = task(id), let project = project(task.projectID),
+        guard let services, let task = task(id), let project = project(for: task),
               (try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project))) == diff else { return false }
         // A page as it loads: what a script would select is what the agent is about to build.
         return await takeScreenshot(id, project.isApp ? target : ScreenshotTarget(page: target.page), isBefore: true)
@@ -2190,7 +2197,7 @@ public final class AppModel {
         let tookBefore = await shots.before?.value ?? false
         // A page is loaded again, but an app's image is what it was: it can't be the "after" too.
         if shots.isApp && tookBefore && shots.pagesNamed < 2 { return }
-        guard let services, !shots.targets.isEmpty, let task = task(id), let project = project(task.projectID),
+        guard let services, !shots.targets.isEmpty, let task = task(id), let project = project(for: task),
               let diff = try? await services.git.diff(worktree: task.worktreeURL, base: task.base(in: project)),
               diff != shots.diff else { return }
         update(id) { $0.activity = "Taking a screenshot…" }
@@ -2200,7 +2207,7 @@ public final class AppModel {
     @discardableResult
     private func takeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, isBefore: Bool) async -> Bool {
         guard let services, let screenshots = services.screenshots, let task = task(id),
-              let project = project(task.projectID) else { return false }
+              let project = project(for: task) else { return false }
         let file = ShiftPaths.screenshots.appendingPathComponent("\(id)-\(UUID().uuidString).png")
         let source: URL, captured: Bool
         var shown = target.page
@@ -2291,7 +2298,7 @@ public final class AppModel {
     }
 
     private func settle(_ id: TaskItem.ID, _ outcome: AgentOutcome) async -> Settled {
-        guard let services, let task = task(id), let project = project(task.projectID) else {
+        guard let services, let task = task(id), let project = project(for: task) else {
             return Settled(status: .blocked, blockedReason: "The project no longer exists.")
         }
         switch outcome {
@@ -2321,7 +2328,7 @@ public final class AppModel {
     /// A notification titled with the project's name: "<task> is ready for review." or "<task> needs your attention."
     private func notify(_ task: TaskItem, needsAttention: Bool = true) {
         guard let services else { return }
-        let title = project(task.projectID)?.name ?? ""
+        let title = project(for: task)?.name ?? ""
         let body = "\(task.title) \(needsAttention ? "needs your attention" : "is ready for review")."
         enqueue { await services.notifier.notify(title: title, body: body, taskID: task.id) }
     }
@@ -2349,7 +2356,7 @@ public final class AppModel {
         // For the countdown to the reset: the last reading is likely from before the limit was reached.
         if self.task(id)?.isUsageLimited == true { Task { await refreshUsage(task.agent) } }
         if task.scheduleID != nil { scheduledTaskSettled(id, settled.status, reason: settled.blockedReason, finishes: finishesRun) }
-        let pushes = settled.status == .completed && project(task.projectID)?.pushTaskBranches == true
+        let pushes = settled.status == .completed && project(for: task)?.pushTaskBranches == true
         if pushes || pullRequests[id] != nil {
             Task {
                 if pushes { await pushBranch(taskID: id) }
@@ -2400,7 +2407,7 @@ public final class AppModel {
             await services.servers.stopOrphan(pid: pid)
         }
         await removeBuild(task)
-        guard let project = project(task.projectID) else { return }
+        guard let project = project(for: task) else { return }
         var deleteBranch: String? = deletingBranch ? task.branch : nil
         if let base, (try? await services.git.isContained(repo: project.repoURL, branch: task.branch, in: base)) != true {
             deleteBranch = nil
@@ -2444,7 +2451,7 @@ public final class AppModel {
     /// Starts (or replaces) the task's dev server. Returns a message if it could not be started.
     @discardableResult
     private func startServer(_ id: TaskItem.ID, retries: Int = 0) async -> String? {
-        guard let services, let task = task(id), let project = project(task.projectID), !project.isApp else { return nil }
+        guard let services, let task = task(id), let project = project(for: task), !project.isApp else { return nil }
         guard !project.serversOff else {
             dormant.insert(id)
             return "Servers are off for \(project.name). Turn them on from its menu in the sidebar."
@@ -2525,7 +2532,7 @@ public final class AppModel {
     private func wakeServer(_ id: TaskItem.ID) async {
         serverUsed[id] = .now
         guard dormant.contains(id), !settingUp.contains(id), !busy.contains(id), let task = task(id),
-              project(task.projectID)?.serversOff == false, FileManager.default.fileExists(atPath: task.worktreePath) else { return }
+              project(for: task)?.serversOff == false, FileManager.default.fileExists(atPath: task.worktreePath) else { return }
         dormant.remove(id)
         await startServer(id)
     }
@@ -2556,7 +2563,7 @@ public final class AppModel {
         }
         for task in tasks where !task.status.isClosed {
             guard let pid = task.serverPID, runs[task.id] == nil, !settingUp.contains(task.id), !busy.contains(task.id),
-                  project(task.projectID)?.isApp == false, idle(task.id) else { continue }
+                  project(for: task)?.isApp == false, idle(task.id) else { continue }
             if let port = task.port, await services.ports.hasClients(port, besides: pid) {
                 serverUsed[task.id] = .now
                 continue
@@ -2671,7 +2678,7 @@ public final class AppModel {
             await services.servers.stopOrphan(pid: pid)
             update(id) { $0.serverPID = nil }
         }
-        guard let project = project(task.projectID) else {
+        guard let project = project(for: task) else {
             update(id) { Self.apply(Settled(status: .blocked, blockedReason: "The project no longer exists."), to: &$0) }
             return
         }
