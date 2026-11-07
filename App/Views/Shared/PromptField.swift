@@ -3,6 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Multi-line text field with a send button inside it. Return adds a line; ⌘↩ submits while the field is focused.
+/// Typing `/` at the start lists the field's `commands` in a menu above it.
 /// Files and images dropped on it become attachments, sent as their paths.
 struct PromptField: View {
     let placeholder: String
@@ -18,12 +19,17 @@ struct PromptField: View {
     /// Keeps what's typed and attached under this key after the field is gone, so it's back when the user
     /// returns to the project or task it belongs to.
     var draftKey: String?
+    /// The slash commands this field's messages handle; typing `/` lists them in a menu above the field.
+    var commands: [SlashCommand] = []
     var onSubmit: (String, [String]) -> Void = { _, _ in }
 
     @State private var ownText = ""
     @State private var ownAttachments: [URL] = []
     @State private var dropTargeted = false
     @FocusState private var focused: Bool
+    @State private var selectedCommand = 0
+    /// The text the command menu was closed on with Esc; it stays closed until the text changes.
+    @State private var dismissedCommandText: String?
 
     private var text: String {
         get { externalText?.wrappedValue ?? draftKey.map { PromptDrafts.shared.drafts[$0]?.text ?? "" } ?? ownText }
@@ -42,6 +48,9 @@ struct PromptField: View {
         }
     }
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var commandMatches: [SlashCommand] {
+        focused && text != dismissedCommandText ? SlashCommand.matches(text, in: commands) : []
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -81,6 +90,43 @@ struct PromptField: View {
         .focusedSceneValue(\.focusPrompt, isNewTaskField ? nil : { focused = true })
         .focusedValue(\.editingNewTask, isNewTaskField && focused ? true : nil)
         .onAppear { if focusOnAppear { focused = true } }
+        .background {
+            SlashCommandMenu(commands: commandMatches, selected: selectedCommand,
+                             onHover: { selectedCommand = $0 }, onPick: pick)
+        }
+        .onChange(of: text) {
+            selectedCommand = 0
+            if text != dismissedCommandText { dismissedCommandText = nil }
+        }
+    }
+
+    /// ↑↓ move through the command menu, Return or Tab picks, Esc closes it; with it closed, keys go to the text.
+    private func commandKey(_ press: KeyPress) -> KeyPress.Result {
+        let matches = commandMatches
+        guard !matches.isEmpty else { return .ignored }
+        switch press.key {
+        case .upArrow: selectedCommand = (min(selectedCommand, matches.count - 1) + matches.count - 1) % matches.count
+        case .downArrow: selectedCommand = (min(selectedCommand, matches.count - 1) + 1) % matches.count
+        case .escape: dismissedCommandText = text
+        default: pick(matches[min(selectedCommand, matches.count - 1)])
+        }
+        return .handled
+    }
+
+    /// Types `/name ` for the rest to follow. `/schedule` works alone in the New Task field, so it runs there right away.
+    private func pick(_ command: SlashCommand) {
+        if isNewTaskField && command == .schedule {
+            text = "/schedule"
+            submit()
+        } else {
+            text = "/\(command.rawValue) "
+        }
+    }
+
+    private func submit() {
+        onSubmit(trimmed, attachments.map(\.path))
+        text = ""
+        attachments = []
     }
 
     private var editor: some View {
@@ -95,6 +141,7 @@ struct PromptField: View {
                 TextEditor(text: Binding(get: { text }, set: { text = $0 }))
                     .scrollContentBackground(.hidden)
                     .focused($focused)
+                    .onKeyPress(keys: [.upArrow, .downArrow, .return, .tab, .escape], action: commandKey)
                     .background(TextViewDropsAndPaste(onPaste: paste))
             }
             .overlay(alignment: .topLeading) {
@@ -144,11 +191,7 @@ struct PromptField: View {
     }
 
     @ViewBuilder private var sendButton: some View {
-        let send = Button {
-            onSubmit(trimmed, attachments.map(\.path))
-            text = ""
-            attachments = []
-        } label: {
+        let send = Button(action: submit) {
             Label(submitTitle, systemImage: "arrow.up").labelStyle(.iconOnly)
         }
         Group {
@@ -156,7 +199,8 @@ struct PromptField: View {
         }
         .buttonBorderShape(.circle)
         // Only the focused field owns ⌘↩, so two fields can be on screen.
-        .keyboardShortcut(focused ? KeyboardShortcut(.return, modifiers: .command) : nil)
+        // While the command menu is open, Return picks a command instead.
+        .keyboardShortcut(focused && commandMatches.isEmpty ? KeyboardShortcut(.return, modifiers: .command) : nil)
         .help("\(submitTitle) (⌘↩)")
         .padding(6)
     }
