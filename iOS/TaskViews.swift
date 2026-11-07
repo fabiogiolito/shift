@@ -523,6 +523,8 @@ private struct PromptBar: View {
     @State private var images: [PromptImage] = []
     @State private var viewing: PromptImage?
     @State private var isSending = false
+    @State private var isTall = false
+    @State private var isExpanded = false
 
     private static let controlSize: CGFloat = 30
 
@@ -567,12 +569,19 @@ private struct PromptBar: View {
                 PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: focusesOnAppear) { pasted in
                     images += pasted.map(PromptImage.init)
                 }
+                .onGeometryChange(for: Bool.self) { $0.size.height > UIFont.preferredFont(forTextStyle: .body).lineHeight * 2.5 } action: { isTall = $0 }
                 .padding(.vertical, 4)
-                Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill", action: send)
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: Self.controlSize - 2))
-                    .frame(width: Self.controlSize, height: Self.controlSize)
-                    .disabled(!canSend)
+                sendButton
+            }
+            // Three lines or more: open the text in a sheet, over the send button's column.
+            .overlay(alignment: .topTrailing) {
+                if isTall {
+                    Button("Expand", systemImage: "arrow.up.left.and.arrow.down.right") { isExpanded = true }
+                        .labelStyle(.iconOnly)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: Self.controlSize, height: Self.controlSize)
+                }
             }
         }
         .padding(.horizontal, 10)
@@ -595,9 +604,35 @@ private struct PromptBar: View {
                 }
             }
         }
+        .sheet(isPresented: $isExpanded) {
+            VStack(alignment: .trailing, spacing: 12) {
+                Button("Collapse", systemImage: "arrow.down.right.and.arrow.up.left") { isExpanded = false }
+                    .labelStyle(.iconOnly)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 44, height: 44)
+                PromptTextView(placeholder: placeholder, text: $text, focusesOnAppear: true, maxLines: nil) { pasted in
+                    images += pasted.map(PromptImage.init)
+                }
+                .padding(.horizontal, 8)
+                sendButton
+            }
+            .padding(16)
+        }
         .sheet(item: $viewing) { image in
             PromptImageViewer(image: image.image) { images.removeAll { $0.id == image.id } }
         }
+    }
+
+    private var sendButton: some View {
+        Button("Send", systemImage: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill") {
+            isExpanded = false
+            send()
+        }
+        .labelStyle(.iconOnly)
+        .font(.system(size: Self.controlSize - 2))
+        .frame(width: Self.controlSize, height: Self.controlSize)
+        .disabled(!canSend)
     }
 
     /// `/name ` in front of what's written, in place of any command already there.
@@ -663,11 +698,13 @@ private struct PromptImageViewer: View {
     }
 }
 
-/// A text field that also takes pasted pictures, which SwiftUI's doesn't. Grows to six lines, then scrolls.
+/// A text field that also takes pasted pictures, which SwiftUI's doesn't. Grows to `maxLines`, then scrolls;
+/// with none, it fills the space it's given.
 private struct PromptTextView: UIViewRepresentable {
     let placeholder: String
     @Binding var text: String
     let focusesOnAppear: Bool
+    var maxLines: Int? = 6
     let onPasteImages: ([UIImage]) -> Void
 
     final class TextView: UITextView {
@@ -739,7 +776,7 @@ private struct PromptTextView: UIViewRepresentable {
         let width = proposal.width ?? 200
         let lineHeight = view.font?.lineHeight ?? 20
         let fitting = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
-        let height = min(max(fitting, lineHeight), lineHeight * 6)
+        let height = maxLines.map { min(max(fitting, lineHeight), lineHeight * CGFloat($0)) } ?? (proposal.height.flatMap { $0.isFinite ? $0 : nil } ?? fitting)
         let scrolls = fitting > height + 1
         // Past six lines it scrolls. Turning scrolling on leaves the offset at the top, so the line being typed
         // would sit below the edge: bring the caret into view; turning it off goes back to the top.
