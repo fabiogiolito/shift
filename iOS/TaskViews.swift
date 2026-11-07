@@ -743,10 +743,10 @@ private struct PromptImage: Identifiable, Equatable {
     let image: UIImage
 }
 
-/// A picture about to be sent, large. Swipe down or Close to go back.
+/// A picture, large: one about to be sent, which can be removed, or one already sent. Swipe down or Close to go back.
 private struct PromptImageViewer: View {
     let image: UIImage
-    let onRemove: () -> Void
+    var onRemove: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -758,10 +758,12 @@ private struct PromptImageViewer: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Close", systemImage: "xmark") { dismiss() }
                     }
-                    ToolbarItem(placement: .destructiveAction) {
-                        Button("Remove", systemImage: "trash", role: .destructive) {
-                            onRemove()
-                            dismiss()
+                    if let onRemove {
+                        ToolbarItem(placement: .destructiveAction) {
+                            Button("Remove", systemImage: "trash", role: .destructive) {
+                                onRemove()
+                                dismiss()
+                            }
                         }
                     }
                 }
@@ -1303,7 +1305,7 @@ private struct PromptBubble: View {
             if !prompt.text.isEmpty { Text(prompt.text).textSelection(.enabled) }
             if !prompt.attachments.isEmpty {
                 ScrollView(.horizontal) {
-                    HStack(spacing: 6) { ForEach(prompt.attachments, id: \.self) { AttachmentThumbnail(path: $0, size: 64) } }
+                    HStack(spacing: 6) { ForEach(prompt.attachments, id: \.self) { AttachmentThumbnail(path: $0, size: 64, opens: true) } }
                 }
                 .scrollIndicators(.hidden)
             }
@@ -1314,21 +1316,31 @@ private struct PromptBubble: View {
     }
 }
 
-/// An attached picture, fetched from the Mac. Anything it can't show as one is its file name.
+/// An attached picture, fetched from the Mac; with `opens`, tapping it shows it large. Anything it can't show as
+/// one is its file name.
 private struct AttachmentThumbnail: View {
     @Environment(RemoteModel.self) private var model
     let path: String
     let size: CGFloat
+    var opens = false
     @State private var image: UIImage?
     @State private var loaded = false
+    @State private var viewing = false
 
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image).resizable().scaledToFill()
+                let thumbnail = Image(uiImage: image).resizable().scaledToFill()
                     .frame(width: size, height: size)
                     .clipShape(.rect(cornerRadius: 8))
                     .accessibilityLabel("Attached picture")
+                if opens {
+                    Button { viewing = true } label: { thumbnail }
+                        .buttonStyle(.plain)
+                        .sheet(isPresented: $viewing) { PromptImageViewer(image: image) }
+                } else {
+                    thumbnail
+                }
             } else if loaded {
                 Label((path as NSString).lastPathComponent, systemImage: "paperclip").font(.footnote).foregroundStyle(.secondary).lineLimit(1)
             } else {
