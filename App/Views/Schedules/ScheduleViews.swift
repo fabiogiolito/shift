@@ -291,6 +291,19 @@ struct ScheduleForm: View {
                     }
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.separator) }
             }
+            // Outside the panel, but in line with its labels and controls.
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                label("When done")
+                Picker("When done", selection: $draft.finish) {
+                    ForEach(Schedule.FinishAction.allCases, id: \.self) {
+                        Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
             // When it runs, set apart on a light gray panel.
             timing
                 .padding(.horizontal, 16)
@@ -351,15 +364,6 @@ struct ScheduleForm: View {
     @ViewBuilder private var timing: some View {
         let rule = draft.timing.repeat
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 14) {
-            row("When done") {
-                Picker("When done", selection: $draft.finish) {
-                    ForEach(Schedule.FinishAction.allCases, id: \.self) {
-                        Label(ScheduleRunMenus.title($0), systemImage: ScheduleRunMenus.symbol($0)).tag($0)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
-            }
             row("Starts") { DateField(date: $draft.timing.start, part: .dateTime) }
             row("Repeat") {
                 Picker("Repeat", selection: frequency) {
@@ -405,9 +409,18 @@ struct ScheduleForm: View {
         }
     }
 
+    /// A label as wide as the widest one, "When done", so the row outside the panel lines up with those inside.
+    private func label(_ title: String) -> some View {
+        ZStack(alignment: .trailing) {
+            Text("When done").hidden()
+            Text(title)
+        }
+        .foregroundStyle(.secondary)
+    }
+
     private func row(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         GridRow {
-            Text(title).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
+            label(title).gridColumnAlignment(.trailing)
             content()
         }
     }
