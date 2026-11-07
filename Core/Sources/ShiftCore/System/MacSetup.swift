@@ -306,7 +306,7 @@ public enum MacSetup {
     }
 
     /// With the system's administrator password dialog. `script` must quote its own paths.
-    private static func runAsAdministrator(_ script: String) async throws {
+    static func runAsAdministrator(_ script: String) async throws {
         let escaped = script.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let result = await run(["/usr/bin/osascript", "-e", "do shell script \"\(escaped)\" with administrator privileges"],
                                minutes: 30)

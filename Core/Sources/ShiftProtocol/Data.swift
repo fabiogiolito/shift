@@ -118,12 +118,25 @@ public struct AppState: Codable, Equatable, Sendable {
     public var nextTaskID: Int
     /// Absent in state saved before project chats existed.
     public var chats: [ProjectChat]
+    /// Absent in state saved before schedules existed.
+    public var schedules: [Schedule]
+    /// When Shift was last seen running, so a run due after it is known to be missed because Shift wasn't.
+    public var lastAlive: Date?
+    /// Set while the Mac sleeps with Shift running: a run due after it was missed because the Mac was asleep.
+    public var asleepSince: Date?
+    /// The wakes Shift has scheduled with `pmset`, so it can tell what's covered and cancel the stale ones.
+    public var wakes: [Date]
 
-    public init(projects: [Project] = [], tasks: [TaskItem] = [], nextTaskID: Int = 3001, chats: [ProjectChat] = []) {
+    public init(projects: [Project] = [], tasks: [TaskItem] = [], nextTaskID: Int = 3001, chats: [ProjectChat] = [],
+                schedules: [Schedule] = [], lastAlive: Date? = nil, asleepSince: Date? = nil, wakes: [Date] = []) {
         self.projects = projects
         self.tasks = tasks
         self.nextTaskID = nextTaskID
         self.chats = chats
+        self.schedules = schedules
+        self.lastAlive = lastAlive
+        self.asleepSince = asleepSince
+        self.wakes = wakes
     }
 
     public init(from decoder: Decoder) throws {
@@ -132,6 +145,10 @@ public struct AppState: Codable, Equatable, Sendable {
         tasks = try values.decode([TaskItem].self, forKey: .tasks)
         nextTaskID = try values.decode(Int.self, forKey: .nextTaskID)
         chats = try values.decodeIfPresent([ProjectChat].self, forKey: .chats) ?? []
+        schedules = try values.decodeIfPresent([Schedule].self, forKey: .schedules) ?? []
+        lastAlive = try values.decodeIfPresent(Date.self, forKey: .lastAlive)
+        asleepSince = try values.decodeIfPresent(Date.self, forKey: .asleepSince)
+        wakes = try values.decodeIfPresent([Date].self, forKey: .wakes) ?? []
     }
 }
 

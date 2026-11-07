@@ -66,13 +66,31 @@ extension OutcomeProtocol {
     answer a task's approval requests (`waitingForApproval`): tell the user it's waiting for them.
     - Merging, deleting, pushing and opening pull requests need the user to have asked for it in this conversation; \
     suggesting it isn't enough. Changing settings too.
+
+    Scheduling tasks:
+    - When the user wants something done later, at a set time or again and again ("every weekday at 9 update the \
+    dependencies", "tonight", "check the links every hour"), or writes `/schedule` followed by what they want, draft \
+    a schedule with `schedule draft`, not a task. That opens Shift's schedule form filled in; the user checks it and \
+    saves it, and nothing is created until they do. Each time a schedule comes due, Shift starts a new task from its \
+    prompt, by itself, even with nobody there.
+    - Work out every field from what the user said, in the Mac's local time (the current time is below). If when it \
+    should run is missing or ambiguous, ask first; otherwise draft it straight away, then tell the user in a line \
+    that the form is open with what you filled in, and to check and save it.
+    - Its prompt is what each run's agent gets, knowing nothing of this conversation: make it say everything that \
+    agent needs, as for a task. Give it a short title.
+    - "finish" decides what happens to each run's task when it's done: leave it for review unless the user asked \
+    for it to be archived, opened as a pull request or merged. Only set keepAwake or wakeMac if the user asks for \
+    the Mac to be kept awake or woken (wakeMac makes Shift ask the user for their password).
+    - Use `schedule edit`, `pause`, `resume`, `delete` and `run` for the existing ones, listed below; `schedule <id>` \
+    shows a schedule's runs and their tasks. A run that was missed while the Mac slept or Shift was closed isn't \
+    caught up: offer `schedule run` for it.
     """
 
     /// Most merged tasks the chat is told about; the rest it can look up in the state file.
     static let chatMergedLimit = 50
 
     /// What the chat knows about the project's tasks. Passed with each run, as the tasks keep changing.
-    static func chatContext(tasks: [TaskItem], project: Project) -> String {
+    static func chatContext(tasks: [TaskItem], project: Project, schedules: [Schedule] = [], now: Date = Date()) -> String {
         func oneLine(_ text: String) -> String { text.split(whereSeparator: \.isNewline).joined(separator: " ") }
         func day(_ date: Date) -> String { date.formatted(.iso8601.year().month().day()) }
         func entry(_ task: TaskItem) -> String {
@@ -101,6 +119,13 @@ extension OutcomeProtocol {
         if merged.count > chatMergedLimit {
             parts.append("\(merged.count - chatMergedLimit) older closed tasks aren't listed. All tasks, with their prompts, are in \(ShiftPaths.state.path).")
         }
+        let local = ISO8601DateFormatter()
+        local.timeZone = .current
+        parts.append("Now: \(local.string(from: now)), \(now.formatted(.dateTime.weekday(.wide))), time zone \(TimeZone.current.identifier).")
+        parts.append("Schedules:\n" + (schedules.isEmpty ? "None" : schedules.map { schedule in
+            let next = schedule.paused ? "paused" : schedule.nextRun(after: now).map { "next run \(local.string(from: $0))" } ?? "no more runs"
+            return "- \(schedule.id.uuidString.prefix(8)) \(oneLine(schedule.title)): \(next), \(schedule.runs.count) runs so far"
+        }.joined(separator: "\n")))
         return parts.joined(separator: "\n\n")
     }
 

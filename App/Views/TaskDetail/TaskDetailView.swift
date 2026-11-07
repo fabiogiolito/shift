@@ -44,6 +44,8 @@ struct TaskDetailView: View {
     /// The screenshot open in Quick Look.
     @State private var screenshotPreview: URL?
     @State private var screenshotsExpanded = false
+    /// The window's selection, so the link to the schedule that started this task can open it.
+    @AppStorage("selectedTask") private var selectedRow: TaskItem.ID?
     /// Clicking the toolbar title scrolls this back to the top.
     @State private var scrollPosition = ScrollPosition(edge: .top)
 
@@ -181,17 +183,28 @@ struct TaskDetailView: View {
     /// a status line, then the action row. What the task needs from the user is in the bottom bar.
     private func header(_ task: TaskItem, _ project: Project) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let headline = headline(task) {
-                Text(headline).font(.title3).textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 8) {
+                if let headline = headline(task) {
+                    Text(headline).font(.title3).textSelection(.enabled)
+                }
+                if task.tags?.isEmpty == false {
+                    TaskTags(tags: task.tags, project: project, onRemove: { model.removeTag(taskID: task.id, $0) },
+                             onDelete: { model.deleteTag(projectID: project.id, $0) },
+                             isShared: { model.tagIsShared(taskID: task.id, $0) },
+                             onColor: { model.setTagColor(projectID: project.id, $0, $1) })
+                }
             }
-            if task.tags?.isEmpty == false {
-                TaskTags(tags: task.tags, project: project, onRemove: { model.removeTag(taskID: task.id, $0) },
-                         onDelete: { model.deleteTag(projectID: project.id, $0) },
-                         isShared: { model.tagIsShared(taskID: task.id, $0) },
-                         onColor: { model.setTagColor(projectID: project.id, $0, $1) })
-            }
-            statusLine(task, project)
+            .padding(.bottom, 8)
             actions(task, project)
+            statusLine(task, project)
+            if let schedule = task.scheduleID.flatMap(model.schedule) {
+                Button { selectedRow = schedule.selectionID } label: {
+                    Label("Started by the schedule “\(schedule.title)” \(Schedule.shortDate(task.createdAt).lowercasedFirst)",
+                          systemImage: schedule.symbol)
+                }
+                .buttonStyle(.link)
+                .help("Open the schedule")
+            }
         }
     }
 
@@ -742,15 +755,19 @@ struct TaskDetailView: View {
     }
 
     private func promptList(_ task: TaskItem) -> some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(task.prompts.reversed()) { prompt in
-                    promptRow(prompt)
-                        .padding(.vertical, 8)
-                    if prompt != task.prompts.first { Divider() }
+        VStack(alignment: .leading, spacing: 8) {
+            // Headed like a schedule's Prompt and runs.
+            Text("Prompt history").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            GroupBox {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(task.prompts.reversed()) { prompt in
+                        promptRow(prompt)
+                            .padding(.vertical, 8)
+                        if prompt != task.prompts.first { Divider() }
+                    }
                 }
+                .padding(.horizontal, 8)
             }
-            .padding(.horizontal, 8)
         }
     }
 

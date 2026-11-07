@@ -6,6 +6,9 @@ import IOKit.pwr_mgt
 @MainActor
 final class KeepAwake {
     private var assertion: IOPMAssertionID?
+    private let reason: String
+
+    init(reason: String = "Shift is running a task") { self.reason = reason }
 
     var isHeld: Bool { assertion != nil }
 
@@ -14,7 +17,7 @@ final class KeepAwake {
             var id = IOPMAssertionID(0)
             let result = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
                                                      IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                                     "Shift is running a task" as CFString, &id)
+                                                     reason as CFString, &id)
             if result == kIOReturnSuccess { assertion = id }
         } else if !held, let id = assertion {
             IOPMAssertionRelease(id)
