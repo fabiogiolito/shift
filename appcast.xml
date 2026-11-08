@@ -380,5 +380,21 @@
 - In a task's prompt field, slash commands only suggest /tag]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.12/Shift-0.2.12.zip" sparkle:edSignature="MMFX82S49dXO4Uy0HzwoRsUsXQ3fpnyyus7OjHw+r0VDHAqOuwZbMFVP/SuF8bUQHr31AgYa9b2cCILqHZXnDQ==" length="5493510" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.13</title>
+      <pubDate>Sun, 08 Nov 2026 15:10:41 +0000</pubDate>
+      <sparkle:version>30</sparkle:version>
+      <sparkle:shortVersionString>0.2.13</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Search tasks from the top of the task list by title, description, tags, prompts, agent replies or changed file names. Words can match in any order, and ⌘F jumps to the search field
+- Collapse and expand sections in the task list
+- New project setting tags tasks automatically on their first turn, reusing the project's existing tags where they fit
+- Clicking a notification opens its task, even when the click launches Shift
+- Simpler project settings, opened from a new button in the bottom bar
+- Pick the agent and the model from a single menu
+- The project folder menu is wider and has an "Open in" submenu
+- Larger tags in task details, plus new icons for pull requests, branches and project folders]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.13/Shift-0.2.13.zip" sparkle:edSignature="lugVcpSqY3etSJtlDsasYKPAV3Nc478ohwzXMREkc0E9FxoppNgtSp8Q1260MQr7q0Fpjm7Ej9GhwJqiU12eCw==" length="5542056" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
