@@ -681,3 +681,15 @@ public struct FileDiff: Codable, Identifiable, Hashable, Sendable {
         self.hunks = hunks
     }
 }
+
+extension TaskItem {
+    /// Whether every word of `search` is somewhere in the title, description, tags, prompts or `extra`, in any order,
+    /// ignoring case and accents: "change text" finds "Change the text color".
+    /// `extra`: what only the Mac reads, the agent's replies and the changed files' paths (`AppModel.searchText`).
+    public func matches(_ search: String, extra: String = "") -> Bool {
+        let words = search.split(whereSeparator: \.isWhitespace)
+        guard !words.isEmpty else { return true }
+        let text = ([title, description ?? "", extra] + (tags ?? []) + prompts.map(\.text)).joined(separator: "\n")
+        return words.allSatisfy { text.localizedStandardContains($0) }
+    }
+}

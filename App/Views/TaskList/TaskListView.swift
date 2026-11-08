@@ -11,7 +11,8 @@ struct TaskListView: View {
     @State private var tagFilter: Set<String> = []
     @State private var showingFilter = false
     @State private var search = ""
-    @FocusState private var searchFocused: Bool
+    /// Bumped by ⌘F to focus the search field.
+    @State private var searchFocusRequests = 0
     /// Per task, what search finds besides its own fields: the agent's replies and the changed files' paths.
     /// Read when a search starts, as it needs every log and worktree.
     @State private var searchText: [TaskItem.ID: String] = [:]
@@ -28,10 +29,14 @@ struct TaskListView: View {
         // In a ZStack so the rebuild stops there: bars attached to the list itself are rebuilt with it, and the
         // new task field would lose what is being typed in it, and its focus.
         // A description or tags add lines to a row, so one arriving or going rebuilds it too.
-        let key = sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined()
+        // Not on what the search leaves: the rebuild would take the search field's focus with every keystroke.
+        let key = Self.sections(Self.filter(all, tags: tagFilter)).map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined()
             + "S:\(schedules.map(\.id))"
         ZStack {
             List(selection: $selection) {
+                searchBar(project.tagNames)
+                    .listRowSeparator(.hidden)
+                    .selectionDisabled()
                 ChatRow(replying: model.replyingChats.contains(project.id),
                         waiting: model.chatApprovalRequest(projectID: project.id) != nil).tag(ChatRow.id)
                 ForEach(sections.dropLast(), id: \.0) { section($0.0, $0.1) }
@@ -61,7 +66,6 @@ struct TaskListView: View {
                 EmptyState("No Tasks", systemImage: "tray", description: Text("Describe a task below to start one."))
             }
         }
-        .safeAreaBar(edge: .top) { searchBar(project.tagNames) }
         .safeAreaBar(edge: .bottom) { footer }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .toolbar {
@@ -90,15 +94,13 @@ struct TaskListView: View {
         }
         // A tag that leaves the project leaves the filter too, or the list would stay filtered by a tag it no longer offers.
         .onChange(of: project.tagNames) { tagFilter.formIntersection(project.tagNames.map { $0.lowercased() }) }
-        .focusedSceneValue(\.focusSearch) { searchFocused = true }
+        .focusedSceneValue(\.focusSearch) { searchFocusRequests += 1 }
         .task(id: search.isEmpty ? nil : project.id) {
             guard !search.isEmpty else { return searchText = [:] }
             for task in model.tasks(in: project.id) where searchText[task.id] == nil {
-                let turns = await model.transcript(taskID: task.id)?.update() ?? []
-                let replies = turns.flatMap(\.blocks).compactMap { if case .message(let text) = $0 { text } else { nil } }
-                let files = await model.changes(taskID: task.id)?.files.map(\.path) ?? []
+                let text = await model.searchText(taskID: task.id)
                 guard !Task.isCancelled else { return }
-                searchText[task.id] = (replies + files).joined(separator: "\n")
+                searchText[task.id] = text
             }
         }
         // Commits may have been made or pushed outside Shift while the user was away.
@@ -114,38 +116,20 @@ struct TaskListView: View {
     /// Nothing chosen and no search: all of them.
     static func filter(_ tasks: [TaskItem], tags: Set<String>, search: String = "",
                        extra: [TaskItem.ID: String] = [:]) -> [TaskItem] {
-        let search = search.trimmingCharacters(in: .whitespaces)
-        return tasks.filter { task in
-            guard tags.isEmpty || (task.tags ?? []).contains(where: { tags.contains($0.lowercased()) }) else { return false }
-            guard !search.isEmpty else { return true }
-            let fields = [task.title, task.description ?? "", extra[task.id] ?? ""] + (task.tags ?? []) + task.prompts.map(\.text)
-            return fields.contains { $0.localizedStandardContains(search) }
+        tasks.filter { task in
+            (tags.isEmpty || (task.tags ?? []).contains { tags.contains($0.lowercased()) })
+                && task.matches(search, extra: extra[task.id] ?? "")
         }
     }
 
     private func searchBar(_ tagNames: [String]) -> some View {
         HStack(spacing: 8) {
-            HStack(spacing: 4) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search", text: $search)
-                    .textFieldStyle(.plain)
-                    .focused($searchFocused)
-                    .onExitCommand { search = ""; searchFocused = false }
-                if !search.isEmpty {
-                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
-                        .help("Clear search")
-                }
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 28)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            filterMenu(tagNames)
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
+            SearchField(text: $search, focusRequests: searchFocusRequests)
+            filterMenu(tagNames).buttonStyle(.borderless).imageScale(.large)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        // Out to the edges of the rows' selection below.
+        .padding(.horizontal, -6)
+        .padding(.bottom, 10)
     }
 
     /// A popover rather than a menu: it stays open, so several tags can be picked in one go.
@@ -338,5 +322,43 @@ private struct RenameTaskAlert: ViewModifier {
                 Button("Rename") { model.rename(taskID: task.id, to: name) }
                 Button("Cancel", role: .cancel) {}
             }
+    }
+}
+
+/// AppKit's own search field: SwiftUI has one only as `.searchable`, which goes in a toolbar or sidebar, not in a list.
+private struct SearchField: NSViewRepresentable {
+    @Binding var text: String
+    var focusRequests: Int
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = "Search"
+        field.delegate = context.coordinator
+        field.sendsSearchStringImmediately = true
+        // The clear button reports through its action, not as a text change.
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.changed(_:))
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.parent = self
+        if field.stringValue != text { field.stringValue = text }
+        if context.coordinator.focusRequests != focusRequests {
+            context.coordinator.focusRequests = focusRequests
+            field.window?.makeFirstResponder(field)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var parent: SearchField
+        var focusRequests: Int
+        init(_ parent: SearchField) { self.parent = parent; focusRequests = parent.focusRequests }
+        func controlTextDidChange(_ note: Notification) {
+            parent.text = (note.object as? NSSearchField)?.stringValue ?? ""
+        }
+        @objc func changed(_ field: NSSearchField) { parent.text = field.stringValue }
     }
 }

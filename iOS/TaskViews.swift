@@ -72,13 +72,20 @@ struct TaskListView: View {
     @State private var isCreating = false
     @State private var isOpeningSite = false
     @State private var site: URL?
+    @State private var search = ""
+    /// Lowercased tag names to show tasks with; empty shows every task.
+    @State private var tagFilter: Set<String> = []
+    /// What the Mac found the search in: replies and changed files, which the phone doesn't have.
+    @State private var macMatches: Set<Int> = []
 
     var body: some View {
-        let tasks = model.tasks(in: projectID).sorted { $0.id > $1.id }
+        let all = model.tasks(in: projectID).sorted { $0.id > $1.id }
+        let tasks = all.filter(shows)
         let active = tasks.filter { !$0.status.isClosed }
         let closed = tasks.filter(\.status.isClosed).sorted { ($0.mergedAt ?? .distantPast) > ($1.mergedAt ?? .distantPast) }
         let project = model.state.projects.first { $0.id == projectID }
         let schedules = model.schedules(in: projectID)
+        let tagNames: [String] = project?.tagNames ?? []
         List {
             if let project { Section { ChatRow(project: project) } }
             if !active.isEmpty {
@@ -96,8 +103,16 @@ struct TaskListView: View {
         }
         // Room between the large title and the first group.
         .contentMargins(.top, 16, for: .scrollContent)
+        // Hidden under the title until the list is pulled down: it starts scrolled just past the search field.
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic))
+        .background(HideSearchOnAppear())
+        .task(id: search) { await searchMac() }
+        .onChange(of: tagNames) { _, names in tagFilter.formIntersection(names.map { $0.lowercased() }) }
         .overlay {
-            if tasks.isEmpty && schedules.isEmpty {
+            if tasks.isEmpty && !all.isEmpty {
+                EmptyState("No Matching Tasks", systemImage: "line.3.horizontal.decrease.circle",
+                           description: Text(search.isEmpty ? "No tasks have the chosen tags." : "No tasks match the search."))
+            } else if tasks.isEmpty && schedules.isEmpty {
                 EmptyState(title: "No Tasks", systemImage: "tray", description: Text("Start one here or in Shift on your Mac.")) {
                     Button("New Task") { isCreating = true }.buttonStyle(.borderedProminent)
                 }
@@ -111,12 +126,52 @@ struct TaskListView: View {
                 }
                 .disabled(isOpeningSite)
             }
+            if let project { filterMenu(project) }
             Button("New Task", systemImage: "plus") { isCreating = true }
         }
         .sheet(isPresented: Binding(get: { site != nil }, set: { if !$0 { site = nil } })) {
             if let site { SafariView(url: site).ignoresSafeArea() }
         }
         .navigationDestination(isPresented: $isCreating) { NewTaskView(projectID: projectID) }
+    }
+
+    private func searchMac() async {
+        guard !search.trimmingCharacters(in: .whitespaces).isEmpty else { return macMatches = [] }
+        // Waits for typing to pause: the Mac reads every task's log to answer.
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled, let found = await model.searchTasks(projectID: projectID, query: search) else { return }
+        macMatches = found
+    }
+
+    private func shows(_ task: TaskItem) -> Bool {
+        let tagged = tagFilter.isEmpty || (task.tags ?? []).contains { tagFilter.contains($0.lowercased()) }
+        return tagged && (task.matches(search) || macMatches.contains(task.id))
+    }
+
+    private func filterMenu(_ project: Project) -> some View {
+        Menu {
+            if project.tagNames.isEmpty {
+                Text("No tags. Hold a task to tag it.")
+            }
+            ForEach(project.tagNames, id: \.self) { name in
+                Toggle(isOn: Binding { tagFilter.contains(name.lowercased()) } set: {
+                    if $0 { tagFilter.insert(name.lowercased()) } else { tagFilter.remove(name.lowercased()) }
+                }) {
+                    Label { Text(name) } icon: {
+                        Image(systemName: "circle.fill").foregroundStyle(project.color(ofTag: name).color)
+                    }
+                }
+            }
+            if !tagFilter.isEmpty {
+                Divider()
+                Button("Clear", role: .destructive) { tagFilter = [] }
+            }
+        } label: {
+            Label("Filter", systemImage: tagFilter.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+        }
+        // Stays open, so several tags can be picked in one go.
+        .menuActionDismissBehavior(.disabled)
+        .accessibilityLabel("Filter by tag")
     }
 
     private func openSite() {
@@ -1575,4 +1630,67 @@ extension VerticalAlignment {
         static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
     }
     static let firstLineCenter = VerticalAlignment(FirstLineCenter.self)
+}
+
+/// Scrolls the list just past the navigation bar's search field, as Mail does, so a small pull shows it.
+/// SwiftUI's own scroll position doesn't move a list shorter than the screen; the scroll view underneath does.
+/// iOS 26 folds the large title away with the search field.
+private struct HideSearchOnAppear: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView { Probe() }
+    func updateUIView(_ view: UIView, context: Context) {}
+
+    private final class Probe: UIView {
+        private var found = false
+        private var observation: NSKeyValueObservation?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil, !found else { return }
+            find(tries: 20)
+        }
+
+        /// Tries again until the search field is laid out in the navigation bar.
+        private func find(tries: Int) {
+            guard tries > 0, !found else { return }
+            guard let bar = Self.searchBar(from: self), bar.frame.height > 0, let list = window.flatMap(Self.list) else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.find(tries: tries - 1) }
+                return
+            }
+            found = true
+            list.alwaysBounceVertical = true
+            // The insets grow once the search field joins the navigation bar, so from what they are a moment later.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                let hidden = -list.adjustedContentInset.top + bar.frame.height
+                list.setContentOffset(CGPoint(x: 0, y: hidden), animated: false)
+                // The tasks arriving from the Mac reload the list, which goes back to the top: hide it again,
+                // until the list is touched or a few seconds have passed.
+                self?.observation = list.observe(\.contentSize) { list, _ in
+                    DispatchQueue.main.async {
+                        guard !list.isTracking, list.contentOffset.y < hidden else { return }
+                        list.setContentOffset(CGPoint(x: 0, y: hidden), animated: false)
+                    }
+                }
+                list.panGestureRecognizer.addTarget(self as Any, action: #selector(Probe.stop))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.stop() }
+            }
+        }
+
+        @objc private func stop() { observation = nil }
+
+        private static func searchBar(from view: UIView) -> UISearchBar? {
+            var responder: UIResponder? = view
+            while let current = responder {
+                if let bar = (current as? UIViewController)?.navigationItem.searchController?.searchBar { return bar }
+                responder = current.next
+            }
+            return nil
+        }
+
+        /// The list: the one under the navigation bar, which insets it.
+        private static func list(in view: UIView) -> UIScrollView? {
+            if let list = view as? UICollectionView, list.adjustedContentInset.top > 0, !list.isHidden { return list }
+            for sub in view.subviews { if let found = list(in: sub) { return found } }
+            return nil
+        }
+    }
 }

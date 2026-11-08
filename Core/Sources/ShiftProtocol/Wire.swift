@@ -104,6 +104,9 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     /// Saves the open draft (`RemoteSnapshot.scheduleDraft`), if it's still this one, as the Mac's form would.
     case saveScheduleDraft(scheduleID: UUID)
     case discardScheduleDraft(scheduleID: UUID)
+    /// Answered with `.taskIDs`: the project's tasks matching `query`, the agent's replies and changed files included.
+    /// A Mac from before it doesn't know it.
+    case searchTasks(projectID: UUID, query: String)
 }
 
 public enum RemoteResult: Codable, Equatable, Sendable {
@@ -115,6 +118,7 @@ public enum RemoteResult: Codable, Equatable, Sendable {
     case changes(DiffSummary)
     case diff([FileDiff])
     case data(Data?)
+    case taskIDs([Int])
 }
 
 public struct AttachmentUploaded: Codable, Equatable, Sendable {
