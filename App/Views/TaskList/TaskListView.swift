@@ -18,8 +18,10 @@ struct TaskListView: View {
     @State private var searchText: [TaskItem.ID: String] = [:]
     /// The layout key while a row's tags popover is open: a rebuild would take the row, and the popover, away.
     @State private var heldKey: String?
-    /// Titles of the sections folded down to their header, joined by newlines.
-    @AppStorage("collapsedTaskSections") private var collapsedSections = ""
+    /// Titles of the sections folded down to their header; in defaults joined by newlines.
+    /// State rather than `@AppStorage`: a defaults write redraws the list outside the toggle's animation. Saved by hand.
+    @State private var collapsedSections = Set(UserDefaults.standard.string(forKey: "collapsedTaskSections")?
+        .split(separator: "\n").map(String.init) ?? [])
 
     var body: some View {
         let all = model.tasks(in: project.id)
@@ -225,15 +227,19 @@ struct TaskListView: View {
 
     /// Not while searching: what's found would hide in a folded section.
     private func isCollapsed(_ title: String) -> Bool {
-        search.isEmpty && collapsedSections.split(separator: "\n").contains { $0 == title }
+        search.isEmpty && collapsedSections.contains(title)
     }
 
     private func header(_ title: String, count: Int) -> some View {
         SectionHeader(title: title, count: count, collapsed: isCollapsed(title)) {
-            var titles = Set(collapsedSections.split(separator: "\n").map(String.init))
-            if titles.remove(title) == nil { titles.insert(title) }
-            // Not part of the list's rebuild key, so its rows slide in and out and the chevron turns.
-            withAnimation { collapsedSections = titles.sorted().joined(separator: "\n") }
+            // Not part of the list's rebuild key, so its rows slide in and out and the chevron turns. After the click
+            // is handled: changed during the table's own mouse handling, the rows snap without animating.
+            DispatchQueue.main.async {
+                withAnimation {
+                    if collapsedSections.remove(title) == nil { collapsedSections.insert(title) }
+                }
+                UserDefaults.standard.set(collapsedSections.sorted().joined(separator: "\n"), forKey: "collapsedTaskSections")
+            }
         }
     }
 
@@ -358,6 +364,8 @@ private struct SectionHeader: View {
                     .imageScale(.small)
                     .fontWeight(.semibold)
                     .rotationEffect(.degrees(collapsed ? -90 : 0))
+                    // Quicker than the rows, so the click answers straight away.
+                    .animation(.easeOut(duration: 0.1), value: collapsed)
                     .opacity(collapsed || hovering ? 1 : 0)
             }
             .contentShape(.rect)
