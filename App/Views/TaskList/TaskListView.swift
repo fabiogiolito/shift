@@ -33,7 +33,7 @@ struct TaskListView: View {
         // A description or tags add lines to a row, so one arriving or going rebuilds it too.
         // Not on what the search leaves: the rebuild would take the search field's focus with every keystroke.
         let key = Self.sections(Self.filter(all, tags: tagFilter)).map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined()
-            + "S:\(schedules.map(\.id))" + "C:\(collapsedSections)"
+            + "S:\(schedules.map(\.id))"
         ZStack {
             List(selection: $selection) {
                 searchBar(project.tagNames)
@@ -232,7 +232,8 @@ struct TaskListView: View {
         SectionHeader(title: title, count: count, collapsed: isCollapsed(title)) {
             var titles = Set(collapsedSections.split(separator: "\n").map(String.init))
             if titles.remove(title) == nil { titles.insert(title) }
-            collapsedSections = titles.sorted().joined(separator: "\n")
+            // Not part of the list's rebuild key, so its rows slide in and out and the chevron turns.
+            withAnimation { collapsedSections = titles.sorted().joined(separator: "\n") }
         }
     }
 
