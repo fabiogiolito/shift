@@ -12,6 +12,8 @@ struct TaskListView: View {
     @State private var showingFilter = false
     /// The layout key while a row's tags popover is open: a rebuild would take the row, and the popover, away.
     @State private var heldKey: String?
+    /// Titles of the sections folded down to their header, joined by newlines.
+    @AppStorage("collapsedTaskSections") private var collapsedSections = ""
 
     var body: some View {
         let all = model.tasks(in: project.id)
@@ -24,7 +26,7 @@ struct TaskListView: View {
         // new task field would lose what is being typed in it, and its focus.
         // A description or tags add lines to a row, so one arriving or going rebuilds it too.
         let key = sections.map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined()
-            + "S:\(schedules.map(\.id))"
+            + "S:\(schedules.map(\.id))" + "C:\(collapsedSections)"
         ZStack {
             List(selection: $selection) {
                 ChatRow(replying: model.replyingChats.contains(project.id),
@@ -33,9 +35,11 @@ struct TaskListView: View {
                 // Above Recently Closed: what's still to come.
                 if !schedules.isEmpty {
                     Section {
-                        ForEach(schedules) { ScheduleRow(schedule: $0).tag($0.selectionID) }
+                        if !isCollapsed("Scheduled") {
+                            ForEach(schedules) { ScheduleRow(schedule: $0).tag($0.selectionID) }
+                        }
                     } header: {
-                        Text("Scheduled").padding(.top, 10).padding(.bottom, 4)
+                        header("Scheduled", count: schedules.count)
                     }
                 }
                 if let closed = sections.last { section(closed.0, closed.1) }
@@ -181,11 +185,22 @@ struct TaskListView: View {
     @ViewBuilder private func section(_ title: String, _ tasks: [TaskItem]) -> some View {
         if !tasks.isEmpty {
             Section {
-                ForEach(tasks) { TaskRow(task: $0) }
+                if !isCollapsed(title) { ForEach(tasks) { TaskRow(task: $0) } }
             } header: {
-                // Extra room around each header so the groups read apart and the first row isn't tight under it.
-                Text(title).padding(.top, 10).padding(.bottom, 4)
+                header(title, count: tasks.count)
             }
+        }
+    }
+
+    private func isCollapsed(_ title: String) -> Bool {
+        collapsedSections.split(separator: "\n").contains { $0 == title }
+    }
+
+    private func header(_ title: String, count: Int) -> some View {
+        SectionHeader(title: title, count: count, collapsed: isCollapsed(title)) {
+            var titles = Set(collapsedSections.split(separator: "\n").map(String.init))
+            if titles.remove(title) == nil { titles.insert(title) }
+            collapsedSections = titles.sorted().joined(separator: "\n")
         }
     }
 
@@ -289,5 +304,35 @@ private struct RenameTaskAlert: ViewModifier {
                 Button("Rename") { model.rename(taskID: task.id, to: name) }
                 Button("Cancel", role: .cancel) {}
             }
+    }
+}
+
+/// A section title with a chevron that folds the section: shown on hover, and always while folded, with the count of
+/// what's hidden next to the title.
+private struct SectionHeader: View {
+    let title: String
+    let count: Int
+    let collapsed: Bool
+    let toggle: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 4) {
+                Text(title)
+                if collapsed { Text("\(count)").monospacedDigit().foregroundStyle(.tertiary) }
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
+                    .fontWeight(.semibold)
+                    .rotationEffect(.degrees(collapsed ? -90 : 0))
+                    .opacity(collapsed || hovering ? 1 : 0)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(collapsed ? "Show \(title)" : "Hide \(title)")
+        // Extra room around each header so the groups read apart and the first row isn't tight under it.
+        .padding(.top, 10).padding(.bottom, 4)
     }
 }
