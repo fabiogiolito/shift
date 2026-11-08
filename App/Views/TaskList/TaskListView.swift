@@ -18,6 +18,10 @@ struct TaskListView: View {
     @State private var searchText: [TaskItem.ID: String] = [:]
     /// The layout key while a row's tags popover is open: a rebuild would take the row, and the popover, away.
     @State private var heldKey: String?
+    /// Titles of the sections folded down to their header; in defaults joined by newlines.
+    /// State rather than `@AppStorage`: a defaults write redraws the list outside the toggle's animation. Saved by hand.
+    @State private var collapsedSections = Set(UserDefaults.standard.string(forKey: "collapsedTaskSections")?
+        .split(separator: "\n").map(String.init) ?? [])
 
     var body: some View {
         let all = model.tasks(in: project.id)
@@ -43,9 +47,11 @@ struct TaskListView: View {
                 // Above Recently Closed: what's still to come.
                 if !schedules.isEmpty {
                     Section {
-                        ForEach(schedules) { ScheduleRow(schedule: $0).tag($0.selectionID) }
+                        if !isCollapsed("Scheduled") {
+                            ForEach(schedules) { ScheduleRow(schedule: $0).tag($0.selectionID) }
+                        }
                     } header: {
-                        Text("Scheduled").padding(.top, 10).padding(.bottom, 4)
+                        header("Scheduled", count: schedules.count)
                     }
                 }
                 if let closed = sections.last { section(closed.0, closed.1) }
@@ -212,10 +218,27 @@ struct TaskListView: View {
     @ViewBuilder private func section(_ title: String, _ tasks: [TaskItem]) -> some View {
         if !tasks.isEmpty {
             Section {
-                ForEach(tasks) { TaskRow(task: $0) }
+                if !isCollapsed(title) { ForEach(tasks) { TaskRow(task: $0) } }
             } header: {
-                // Extra room around each header so the groups read apart and the first row isn't tight under it.
-                Text(title).padding(.top, 10).padding(.bottom, 4)
+                header(title, count: tasks.count)
+            }
+        }
+    }
+
+    /// Not while searching: what's found would hide in a folded section.
+    private func isCollapsed(_ title: String) -> Bool {
+        search.isEmpty && collapsedSections.contains(title)
+    }
+
+    private func header(_ title: String, count: Int) -> some View {
+        SectionHeader(title: title, count: count, collapsed: isCollapsed(title)) {
+            // Not part of the list's rebuild key, so its rows slide in and out and the chevron turns. After the click
+            // is handled: changed during the table's own mouse handling, the rows snap without animating.
+            DispatchQueue.main.async {
+                withAnimation {
+                    if collapsedSections.remove(title) == nil { collapsedSections.insert(title) }
+                }
+                UserDefaults.standard.set(collapsedSections.sorted().joined(separator: "\n"), forKey: "collapsedTaskSections")
             }
         }
     }
@@ -320,6 +343,38 @@ private struct RenameTaskAlert: ViewModifier {
                 Button("Rename") { model.rename(taskID: task.id, to: name) }
                 Button("Cancel", role: .cancel) {}
             }
+    }
+}
+
+/// A section title with a chevron that folds the section: shown on hover, and always while folded, with the count of
+/// what's hidden next to the title.
+private struct SectionHeader: View {
+    let title: String
+    let count: Int
+    let collapsed: Bool
+    let toggle: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 4) {
+                Text(title)
+                if collapsed { Text("\(count)").monospacedDigit().foregroundStyle(.tertiary) }
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
+                    .fontWeight(.semibold)
+                    .rotationEffect(.degrees(collapsed ? -90 : 0))
+                    // Quicker than the rows, so the click answers straight away.
+                    .animation(.easeOut(duration: 0.1), value: collapsed)
+                    .opacity(collapsed || hovering ? 1 : 0)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(collapsed ? "Show \(title)" : "Hide \(title)")
+        // Extra room around each header so the groups read apart and the first row isn't tight under it.
+        .padding(.top, 10).padding(.bottom, 4)
     }
 }
 
