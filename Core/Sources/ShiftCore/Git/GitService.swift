@@ -66,6 +66,10 @@ public struct GitService: GitServicing {
         try await git(["worktree", "add", path.path, branch], in: repo)
     }
 
+    public func repairWorktrees(repo: URL, paths: [URL]) async throws {
+        try await git(["worktree", "repair"] + paths.map(\.path), in: repo)
+    }
+
     public func removeWorktree(repo: URL, path: URL, deleteBranch: String?) async throws {
         _ = try await run(["worktree", "remove", "--force", path.path], in: repo)
         // Git refuses when it no longer knows the worktree; the directory may still be there.
