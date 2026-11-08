@@ -22,6 +22,8 @@ public protocol GitServicing: Sendable {
     func addWorktree(repo: URL, branch: String, at path: URL) async throws
     /// Removes the worktree (forced) and, if given, deletes the branch. Must not throw if already gone.
     func removeWorktree(repo: URL, path: URL, deleteBranch: String?) async throws
+    /// Points the repo and the worktrees at `paths` at each other again, after the repo folder moved.
+    func repairWorktrees(repo: URL, paths: [URL]) async throws
 
     /// Stages and commits everything in the worktree. Returns false if there was nothing to commit.
     @discardableResult

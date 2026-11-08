@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import ShiftCore
 
 struct ContentView: View {
@@ -11,6 +12,8 @@ struct ContentView: View {
     @State private var listWidth: CGFloat = 0
     @State private var detailWidth: CGFloat = 0
     @State private var barHeight: CGFloat = 0
+    /// The selected project, while its folder can't be found.
+    @State private var missingProject: Project?
 
     /// The project a selected row belongs to: a task's, or a schedule's.
     private func owner(_ id: TaskItem.ID?) -> Project.ID? {
@@ -89,6 +92,7 @@ struct ContentView: View {
         // e.g. when a notification click reopens the window on a task in another project.
         .onAppear {
             selectedProject = selectedProject ?? owner(selectedTask) ?? model.projects.first?.id
+            checkFolder()
         }
         .onChange(of: model.projects) {
             if selectedProject.flatMap(model.project) == nil { selectedProject = model.projects.first?.id }
@@ -100,6 +104,7 @@ struct ContentView: View {
         .onChange(of: selectedProject) {
             // Every project has a chat: it stays selected.
             if selectedTask != ChatRow.id, owner(selectedTask) != selectedProject { selectedTask = nil }
+            checkFolder()
         }
         // ⇧⌘[ ⇧⌘] and ⌘[ ⌘]: wrap around, in the order the sidebar and the task list show.
         .focusedSceneValue(\.selectProject) { offset in
@@ -128,6 +133,32 @@ struct ContentView: View {
         } message: {
             Text(model.lastError ?? "")
         }
+        .alert("Can't Find “\(missingProject?.name ?? "")”", isPresented: Binding(get: { missingProject != nil },
+                                                                  set: { if !$0 { missingProject = nil } }),
+               presenting: missingProject) { project in
+            Button("Locate Folder…") { locate(project) }
+            Button("Remove Project", role: .destructive) { Task { await model.removeProject(project.id) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { project in
+            Text("Its folder is no longer at \(project.repoPath). If it moved, locate it. Removing the project deletes its tasks; the folder is not touched.")
+        }
+    }
+
+    private func checkFolder() {
+        guard let project = selectedProject.flatMap(model.project),
+              !FileManager.default.fileExists(atPath: project.repoPath) else { return }
+        missingProject = project
+    }
+
+    private func locate(_ project: Project) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Choose"
+        panel.message = "Locate the folder of “\(project.name)”"
+        panel.directoryURL = URL(fileURLWithPath: project.repoPath).deletingLastPathComponent()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await model.relocateProject(project.id, to: url) }
     }
 }
 

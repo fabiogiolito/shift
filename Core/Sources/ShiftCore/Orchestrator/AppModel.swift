@@ -546,6 +546,24 @@ public final class AppModel {
         changed()
     }
 
+    /// Points a project whose folder moved at `url`, and reconnects its tasks' worktrees to it.
+    public func relocateProject(_ id: Project.ID, to url: URL) async {
+        guard let services, var project = project(id) else { return }
+        guard await services.git.isRepository(url) else {
+            lastError = "\(url.lastPathComponent) is not a Git repository."
+            return
+        }
+        project.repoPath = url.standardizedFileURL.path
+        updateProject(project)
+        let worktrees = tasks(in: id).filter { FileManager.default.fileExists(atPath: $0.worktreePath) }
+            .map { URL(fileURLWithPath: $0.worktreePath) }
+        do {
+            try await services.git.repairWorktrees(repo: url, paths: worktrees)
+        } catch {
+            lastError = "Could not reconnect the tasks of \(project.name): \(Self.firstLine(Self.describe(error)))"
+        }
+    }
+
     /// Branches that can be the project's base: not its tasks' own branches, which merging would delete.
     public func branches(for projectID: Project.ID) async -> [String] {
         guard let services, let project = project(projectID) else { return [] }

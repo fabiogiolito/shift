@@ -95,6 +95,8 @@ final class MockGit: GitServicing {
         calls.append("remove \(deleteBranch ?? path.lastPathComponent)")
     }
 
+    func repairWorktrees(repo: URL, paths: [URL]) async throws { calls.append("repair") }
+
     func commitAll(worktree: URL, message: String) async throws -> Bool {
         if let commitError { throw commitError }
         calls.append("commit \(worktree.lastPathComponent)")
