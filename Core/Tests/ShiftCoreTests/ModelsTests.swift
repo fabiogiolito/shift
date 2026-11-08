@@ -155,4 +155,17 @@ final class ModelsTests: XCTestCase {
         let prompt = try JSONDecoder().decode(Prompt.self, from: Data(json.utf8))
         XCTAssertFalse(prompt.isPending)
     }
+
+    func testTaskSearchMatches() {
+        var task = TaskItem(id: 3001, projectID: UUID(), title: "Make the button blue", agent: .claudeCode, branch: "b",
+                            worktreePath: "/tmp", prompts: [Prompt(text: "Use the brand colour")], description: "Restyles the café page")
+        task.tags = ["Design"]
+        for query in ["", "BUTTON", "cafe", "design", "brand"] {
+            XCTAssertTrue(task.matches(query), query)
+        }
+        XCTAssertTrue(task.matches("blue make"))
+        XCTAssertFalse(task.matches("blue red"))
+        XCTAssertFalse(task.matches("page.js"))
+        XCTAssertTrue(task.matches("page.js", extra: "Done.\napp/page.js"))
+    }
 }

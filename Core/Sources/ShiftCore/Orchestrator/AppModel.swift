@@ -1550,6 +1550,24 @@ public final class AppModel {
         await services?.tailscale?.unserve(port: port)
     }
 
+    /// What search finds in a task besides its own fields: the agent's replies and the changed files' paths.
+    public func searchText(taskID: TaskItem.ID) async -> String {
+        let turns = await transcript(taskID: taskID)?.update() ?? []
+        let replies = turns.flatMap(\.blocks).compactMap { if case .message(let text) = $0 { text } else { nil } }
+        let files = await changes(taskID: taskID)?.files.map(\.path) ?? []
+        return (replies + files).joined(separator: "\n")
+    }
+
+    /// The project's tasks that `TaskItem.matches` the search, replies and changed files included. For the phone.
+    /// ponytail: reads every log and worktree per search, the phone waits for typing to pause; cache if it gets slow.
+    public func searchTasks(projectID: Project.ID, query: String) async -> [TaskItem.ID] {
+        var found: [TaskItem.ID] = []
+        for task in tasks(in: projectID) where task.matches(query, extra: await searchText(taskID: task.id)) {
+            found.append(task.id)
+        }
+        return found
+    }
+
     /// Reads the task's log as a conversation. nil for the preview model.
     public func transcript(taskID: TaskItem.ID) -> TranscriptReader? {
         guard let services, let agent = task(taskID)?.agent else { return nil }

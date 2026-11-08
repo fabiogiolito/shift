@@ -396,6 +396,11 @@ final class RemoteModel {
         (state.schedules ?? []).filter { $0.projectID == projectID }
             .sorted { ($0.nextRun() ?? .distantFuture, $0.title) < ($1.nextRun() ?? .distantFuture, $1.title) }
     }
+    /// The tasks the Mac finds `query` in, its agent's replies and changed files included. nil: a Mac from before search.
+    func searchTasks(projectID: UUID, query: String) async -> Set<Int>? {
+        guard case .taskIDs(let ids)? = await perform(.searchTasks(projectID: projectID, query: query), quietly: true) else { return nil }
+        return Set(ids)
+    }
     func schedule(_ id: UUID) -> Schedule? { state.schedules?.first { $0.id == id } }
     func chat(projectID: UUID) -> ProjectChat? { state.chats.first { $0.projectID == projectID } }
 
