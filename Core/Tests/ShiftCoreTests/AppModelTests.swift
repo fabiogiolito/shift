@@ -1606,6 +1606,24 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(store.state.tasks, model.tasks)
     }
 
+    func testAutoTagsAsksOnceAndKeepsTheProjectsSpelling() async {
+        var tagged = project!
+        tagged.autoTags = true
+        tagged.tagColors = ["Checkout": .blue]
+        model.updateProject(tagged)
+        agent.scripts.append([.emit(.tagged(["checkout", "auth"])), .emit(.finished(.completed(summary: "Done")))])
+        let id = model.createTask(projectID: project.id, prompt: "Fix the pay button")!
+        await waitForStatus(id, .completed)
+        XCTAssertEqual(agent.requests[0].tags, ["Checkout"])
+        XCTAssertEqual(model.task(id)?.tags, ["Checkout", "auth"])
+        XCTAssertEqual(model.project(project.id)?.color(ofTag: "Checkout"), .blue)
+
+        agent.scripts.append([.emit(.finished(.completed(summary: "Done")))])
+        model.sendPrompt(taskID: id, text: "More")
+        await waitFor("the second run") { self.agent.requests.count == 2 }
+        XCTAssertNil(agent.requests[1].tags)
+    }
+
     func testPartialOrMissingDescriptionKeepsWhatIsThere() async {
         let id = await createCompletedTask()
         XCTAssertEqual(model.task(id)?.title, "Do the thing")

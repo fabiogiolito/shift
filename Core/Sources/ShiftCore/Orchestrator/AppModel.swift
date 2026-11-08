@@ -26,21 +26,7 @@ public final class AppModel {
     /// it was not checked yet).
     public internal(set) var pushStates: [Project.ID: PushState] = [:]
 
-    public struct PushState: Equatable, Sendable {
-        public var remote: String
-        /// Commits on the project's bases that the remote does not have, as of the last fetch.
-        public var unpushed: Int
-        /// The bases those commits are on.
-        public var branches: [String]
-        public var isPushing = false
-
-        public init(remote: String, unpushed: Int, branches: [String] = [], isPushing: Bool = false) {
-            self.remote = remote
-            self.unpushed = unpushed
-            self.branches = branches
-            self.isPushing = isPushing
-        }
-    }
+    public typealias PushState = ShiftProtocol.PushState
 
     /// Each task's latest pull request, as of the last check. No entry: none, or not known (no `gh`).
     public internal(set) var pullRequests: [TaskItem.ID: PullRequest] = [:]
@@ -1799,7 +1785,7 @@ public final class AppModel {
                     if case .blocked(let reason, _) = outcome { failure = reason }
                     break events
                 case .approvalRequested(let id, let summary): chatApprovals[projectID, default: []].append((id, summary))
-                case .activity, .described, .screenshots: break
+                case .activity, .described, .tagged, .screenshots: break
                 }
                 guard isChatCurrent(projectID, token) else { return }
                 deliverChatPending(projectID)
@@ -2090,6 +2076,9 @@ public final class AppModel {
                                        model: adapter.kind == task.agent ? task.model : project(for: task)?.models[adapter.kind],
                                        needsDescription: task.description == nil && !task.isResolvingConflict,
                                        description: task.description,
+                                       // Once, on the first turn, and never over the user's own tags.
+                                       tags: task.description == nil && task.tags == nil && !task.isResolvingConflict
+                                           && project(for: task)?.autoTags == true ? project(for: task)?.tagNames : nil,
                                        approvals: channel, screenshots: screenshots)
             approvalChannels[id] = channel
             await services.store.appendLog(taskID: id, text: RunMarker.line(
@@ -2117,6 +2106,10 @@ public final class AppModel {
                             $0.description = description ?? $0.description
                         }
                     }
+                case .tagged(let tags):
+                    // Each in the spelling the project already has, so it keeps its color.
+                    let known = project(for: task)
+                    if self.task(id)?.tags == nil { addTags(taskID: id, tags.map { known?.tagKey($0) ?? $0 }.joined(separator: ",")) }
                 case .screenshots(let targets):
                     shots?.pagesNamed += 1
                     shots?.targets = targets

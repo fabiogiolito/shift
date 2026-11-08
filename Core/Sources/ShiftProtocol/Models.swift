@@ -269,6 +269,8 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     /// Every tag the project's tasks have had, in its first spelling, with its color: one per name whatever its
     /// case, shared by every task with it. Kept when no task has the tag any more, so it can be picked again.
     public var tagColors: [String: TagColor] = [:]
+    /// A new task's agent tags it from `tagNames`, adding a new one only when none fits.
+    public var autoTags = false
 
     /// The key `tag` is stored under, whatever its case.
     public func tagKey(_ tag: String) -> String? {
@@ -325,6 +327,7 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         opensPullRequests = try values.decodeIfPresent(Bool.self, forKey: .opensPullRequests) ?? false
         serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
         tagColors = try values.decodeIfPresent([String: TagColor].self, forKey: .tagColors) ?? [:]
+        autoTags = try values.decodeIfPresent(Bool.self, forKey: .autoTags) ?? false
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)

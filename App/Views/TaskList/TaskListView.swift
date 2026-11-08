@@ -191,9 +191,7 @@ struct TaskListView: View {
     }
 
     private func pushButton(_ state: AppModel.PushState) -> some View {
-        let title = state.unpushed == 0 ? "Nothing to push"
-            : "Push \(state.unpushed) \(state.unpushed == 1 ? "commit" : "commits") to "
-                + state.branches.map { "\(state.remote)/\($0)" }.formatted(.list(type: .and))
+        let title = state.title
         return Button {
             Task { await model.push(projectID: project.id) }
         } label: {

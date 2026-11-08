@@ -19,7 +19,7 @@ struct ProjectIcon: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             } else {
                 // Smaller than the frame: an outline glyph filling 18pt reads heavier than a filled app icon.
-                Image(systemName: "folder").font(.system(size: 12))
+                Image(systemName: "folder").font(.system(size: 10)).foregroundStyle(.secondary)
             }
         }
         .frame(width: 18, height: 18)

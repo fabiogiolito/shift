@@ -7,6 +7,29 @@ public enum MergeResult: Equatable, Sendable {
     case conflict
 }
 
+/// Whether a project's base branches have commits to push to its remote.
+public struct PushState: Codable, Equatable, Sendable {
+    public var remote: String
+    /// Commits on the project's bases that the remote does not have, as of the last fetch.
+    public var unpushed: Int
+    /// The bases those commits are on.
+    public var branches: [String]
+    public var isPushing = false
+
+    public init(remote: String, unpushed: Int, branches: [String] = [], isPushing: Bool = false) {
+        self.remote = remote
+        self.unpushed = unpushed
+        self.branches = branches
+        self.isPushing = isPushing
+    }
+
+    /// "Push 3 commits to origin/main", or "Nothing to push".
+    public var title: String {
+        unpushed == 0 ? "Nothing to push"
+            : "Push \(unpushed) \(unpushed == 1 ? "commit" : "commits") to " + branches.map { "\(remote)/\($0)" }.formatted(.list(type: .and))
+    }
+}
+
 /// A pull request on GitHub, as `gh pr list --json` gives it.
 extension PullRequest {
     /// The PR badge from SF Symbols in macOS and iOS 27; on 26, the pull arrows.
@@ -76,6 +99,8 @@ public enum AgentEvent: Equatable, Sendable {
     case activity(String)
     /// The agent's own words for what the task will accomplish. Either may be missing.
     case described(title: String?, description: String?)
+    /// Tags the agent picked for the task (`AgentRequest.tags`), at most 2.
+    case tagged([String])
     /// Screenshots are on: what shows this turn's change, empty if nothing visible changes. The first one comes
     /// before the agent's work; a later one replaces it. In an app project, the images the agent took instead.
     case screenshots([ScreenshotTarget])

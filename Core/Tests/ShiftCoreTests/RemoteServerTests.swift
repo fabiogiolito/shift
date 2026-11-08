@@ -43,7 +43,7 @@ final class WireTests: XCTestCase {
             .hello(version: Wire.version), .snapshot(snapshot), .projects(snapshot.projects), .task(snapshot.tasks[0]), .taskRemoved(1),
             .chat(snapshot.chats[0]), .chatRemoved(id), .pullRequest(taskID: 1, nil), .pullRequest(taskID: 1, snapshot.pullRequests[3001]),
             .build(BuildKey(taskID: 1, targetID: id), .building), .usage(.codex, nil), .chatApproval(projectID: id, "x"), .replyingChats([id]),
-            .schedules(snapshot.schedules!), .schedules([]), .scheduleDraft(snapshot.schedules![0]), .scheduleDraft(nil),
+            .schedules(snapshot.schedules!), .schedules([]), .pushStates([id: PushState(remote: "origin", unpushed: 2, branches: ["main"])]), .scheduleDraft(snapshot.schedules![0]), .scheduleDraft(nil),
             .reply(id: 1, result: .diff(diff), error: nil), .reply(id: 2, result: nil, error: "no"), .reply(id: 3, result: .changes(DiffSummary()), error: nil),
             .reply(id: 4, result: .url(nil), error: nil), .reply(id: 5, result: .taskID(4), error: nil),
             .log(.task(1), offset: 9, data: Data([0, 255])), .log(.chat(id), offset: 0, data: Data()),
@@ -53,7 +53,7 @@ final class WireTests: XCTestCase {
             .createTask(projectID: id, prompt: "p", attachments: ["/a"], agent: nil), .createTask(projectID: id, prompt: "p", attachments: [], agent: .codex, baseBranch: "dev"),
             .sendPrompt(taskID: 1, text: "t", attachments: []),
             .answerApproval(taskID: 1, allow: false), .stop(taskID: 1), .resume(taskID: 1), .rename(taskID: 1, title: "t"), .merge(taskID: 1),
-            .delete(taskID: 1), .resolveConflict(taskID: 1), .conflictedFiles(taskID: 1), .pushBranch(taskID: 1), .pullRequestURL(taskID: 1),
+            .delete(taskID: 1), .resolveConflict(taskID: 1), .conflictedFiles(taskID: 1), .pushBranch(taskID: 1), .push(projectID: id), .pullRequestURL(taskID: 1),
             .branches(projectID: id), .changeBase(taskID: 1, to: "main"), .loadChanges(taskID: 1), .loadDiff(taskID: 1), .restartServer(taskID: 1), .serverLog(taskID: 1), .build(taskID: 1, target: id), .buildLog(taskID: 1, target: id),
             .sendChat(projectID: id, text: "t", attachments: []), .answerChatApproval(projectID: id, allow: true), .stopChat(projectID: id), .newChat(projectID: id), .baseServerURL(projectID: id),
             .runScheduleNow(scheduleID: id), .setSchedulePaused(scheduleID: id, paused: true),
@@ -113,6 +113,7 @@ final class WireTests: XCTestCase {
         new.projects[0].name = "Other"
         new.schedules![0].paused = false
         new.scheduleDraft = new.schedules![0]
+        new.pushStates = [old.projects[0].id: PushState(remote: "origin", unpushed: 1, branches: ["main"])]
         let messages = new.changes(since: old)
         // Whole entities, and only the ones that changed.
         XCTAssertTrue(messages.contains { if case .task(let task) = $0 { task.id == 3001 && task.title == "Renamed" } else { false } })
