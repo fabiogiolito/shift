@@ -39,7 +39,8 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         if let model = request.model { arguments += ["--model", model] }
         arguments += ["--append-system-prompt", request.chat ? OutcomeProtocol.chatInstructions + request.chatContext
             : OutcomeProtocol.instructions(firstTurn: request.needsDescription, description: request.description,
-                                           screenshots: request.screenshots, server: request.environment["SHIFT_ACCESS"] != nil)]
+                                           screenshots: request.screenshots, server: request.environment["SHIFT_ACCESS"] != nil,
+                                           tags: request.tags)]
         if let sessionID = request.sessionID { arguments += ["--resume", sessionID] }
         return arguments
     }
