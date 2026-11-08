@@ -105,24 +105,28 @@ struct TaskListView: View {
         }
         .navigationTitle(project?.name ?? "Tasks")
         .toolbar {
-            // As on the Mac: there whenever the project has a remote, the count of commits its merged tasks left to push.
-            if let push = model.state.pushStates?[projectID] {
-                Button { Task { await model.push(projectID: projectID) } } label: {
-                    HStack(spacing: 4) {
-                        if push.isPushing { ProgressView() } else { Image(systemName: "arrow.up") }
-                        if push.unpushed > 0 { Text(String(push.unpushed)).monospacedDigit() }
+            // Push and preview act on the base, so they share a capsule; a new task is its own thing.
+            ToolbarItemGroup {
+                // As on the Mac: there whenever the project has a remote, the count of commits its merged tasks left to push.
+                if let push = model.state.pushStates?[projectID] {
+                    Button { Task { await model.push(projectID: projectID) } } label: {
+                        HStack(spacing: 4) {
+                            if push.isPushing { ProgressView() } else { Image(systemName: "arrow.up") }
+                            if push.unpushed > 0 { Text(String(push.unpushed)).monospacedDigit() }
+                        }
                     }
+                    .disabled(push.unpushed == 0 || push.isPushing)
+                    .accessibilityLabel(push.title)
                 }
-                .disabled(push.unpushed == 0 || push.isPushing)
-                .accessibilityLabel(push.title)
-            }
-            if let project, !project.isApp {
-                Button(action: openSite) {
-                    if isOpeningSite { ProgressView() } else { Label("Open \(project.baseBranch)", systemImage: "globe") }
+                if let project, !project.isApp {
+                    Button(action: openSite) {
+                        if isOpeningSite { ProgressView() } else { Label("Open \(project.baseBranch)", systemImage: "globe") }
+                    }
+                    .disabled(isOpeningSite)
                 }
-                .disabled(isOpeningSite)
             }
-            Button("New Task", systemImage: "plus") { isCreating = true }
+            ToolbarSpacer(.fixed)
+            ToolbarItem { Button("New Task", systemImage: "plus") { isCreating = true } }
         }
         .sheet(isPresented: Binding(get: { site != nil }, set: { if !$0 { site = nil } })) {
             if let site { SafariView(url: site).ignoresSafeArea() }
