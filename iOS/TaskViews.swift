@@ -31,7 +31,7 @@ struct ProjectsView: View {
                                             // The text's center sits above its x-height; this looks centered.
                                             .offset(y: 2)
                                     } else {
-                                        Image(systemName: "folder").foregroundStyle(.tint)
+                                        Image(systemName: "folder").font(.system(size: 15)).foregroundStyle(.secondary)
                                     }
                                 }
                                 .frame(width: 28, height: 28)
