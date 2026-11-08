@@ -10,12 +10,17 @@ struct TaskListView: View {
     /// Lowercased tag names to show tasks with; empty shows every task.
     @State private var tagFilter: Set<String> = []
     @State private var showingFilter = false
+    @State private var search = ""
+    @FocusState private var searchFocused: Bool
+    /// Per task, what search finds besides its own fields: the agent's replies and the changed files' paths.
+    /// Read when a search starts, as it needs every log and worktree.
+    @State private var searchText: [TaskItem.ID: String] = [:]
     /// The layout key while a row's tags popover is open: a rebuild would take the row, and the popover, away.
     @State private var heldKey: String?
 
     var body: some View {
         let all = model.tasks(in: project.id)
-        let tasks = Self.filter(all, tags: tagFilter)
+        let tasks = Self.filter(all, tags: tagFilter, search: search, extra: searchText)
         let sections = Self.sections(tasks)
         let schedules = Self.schedules(model.schedules(in: project.id))
         // The list doesn't re-measure rows and headers that are inserted or moved in place (a task moving to a new
@@ -51,19 +56,18 @@ struct TaskListView: View {
         .overlay {
             if tasks.isEmpty && !all.isEmpty {
                 EmptyState("No Matching Tasks", systemImage: "line.3.horizontal.decrease.circle",
-                           description: Text("No tasks have the chosen tags."))
+                           description: Text(search.isEmpty ? "No tasks have the chosen tags." : "No tasks match the search."))
             } else if tasks.isEmpty && schedules.isEmpty {
                 EmptyState("No Tasks", systemImage: "tray", description: Text("Describe a task below to start one."))
             }
         }
+        .safeAreaBar(edge: .top) { searchBar(project.tagNames) }
         .safeAreaBar(edge: .bottom) { footer }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .toolbar {
             let pushState = model.pushStates[project.id]
-            let tagNames = project.tagNames
             // Pushes the buttons to the column's trailing end, away from the project name.
             ToolbarSpacer(.flexible)
-            ToolbarItem { filterMenu(tagNames) }
             if !project.isApp {
                 ToolbarItem {
                     let opening = model.openingBase.contains(project.id)
@@ -86,6 +90,17 @@ struct TaskListView: View {
         }
         // A tag that leaves the project leaves the filter too, or the list would stay filtered by a tag it no longer offers.
         .onChange(of: project.tagNames) { tagFilter.formIntersection(project.tagNames.map { $0.lowercased() }) }
+        .focusedSceneValue(\.focusSearch) { searchFocused = true }
+        .task(id: search.isEmpty ? nil : project.id) {
+            guard !search.isEmpty else { return searchText = [:] }
+            for task in model.tasks(in: project.id) where searchText[task.id] == nil {
+                let turns = await model.transcript(taskID: task.id)?.update() ?? []
+                let replies = turns.flatMap(\.blocks).compactMap { if case .message(let text) = $0 { text } else { nil } }
+                let files = await model.changes(taskID: task.id)?.files.map(\.path) ?? []
+                guard !Task.isCancelled else { return }
+                searchText[task.id] = (replies + files).joined(separator: "\n")
+            }
+        }
         // Commits may have been made or pushed outside Shift while the user was away.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in activations += 1 }
         .task(id: "\(project.id)|\(model.bases(of: project.id))|\(activations)") {
@@ -95,10 +110,42 @@ struct TaskListView: View {
         }
     }
 
-    /// Tasks with any of `tags` (lowercased). Nothing chosen: all of them.
-    static func filter(_ tasks: [TaskItem], tags: Set<String>) -> [TaskItem] {
-        guard !tags.isEmpty else { return tasks }
-        return tasks.filter { ($0.tags ?? []).contains { tags.contains($0.lowercased()) } }
+    /// Tasks with any of `tags` (lowercased) whose title, description, tags, prompts or `extra` text contain `search`.
+    /// Nothing chosen and no search: all of them.
+    static func filter(_ tasks: [TaskItem], tags: Set<String>, search: String = "",
+                       extra: [TaskItem.ID: String] = [:]) -> [TaskItem] {
+        let search = search.trimmingCharacters(in: .whitespaces)
+        return tasks.filter { task in
+            guard tags.isEmpty || (task.tags ?? []).contains(where: { tags.contains($0.lowercased()) }) else { return false }
+            guard !search.isEmpty else { return true }
+            let fields = [task.title, task.description ?? "", extra[task.id] ?? ""] + (task.tags ?? []) + task.prompts.map(\.text)
+            return fields.contains { $0.localizedStandardContains(search) }
+        }
+    }
+
+    private func searchBar(_ tagNames: [String]) -> some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search", text: $search)
+                    .textFieldStyle(.plain)
+                    .focused($searchFocused)
+                    .onExitCommand { search = ""; searchFocused = false }
+                if !search.isEmpty {
+                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                        .help("Clear search")
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            filterMenu(tagNames)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     /// A popover rather than a menu: it stays open, so several tags can be picked in one go.
