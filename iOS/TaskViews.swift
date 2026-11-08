@@ -105,13 +105,28 @@ struct TaskListView: View {
         }
         .navigationTitle(project?.name ?? "Tasks")
         .toolbar {
-            if let project, !project.isApp {
-                Button(action: openSite) {
-                    if isOpeningSite { ProgressView() } else { Label("Open \(project.baseBranch)", systemImage: "globe") }
+            // Push and preview act on the base, so they share a capsule; a new task is its own thing.
+            ToolbarItemGroup {
+                // As on the Mac: there whenever the project has a remote, the count of commits its merged tasks left to push.
+                if let push = model.state.pushStates?[projectID] {
+                    Button { Task { await model.push(projectID: projectID) } } label: {
+                        HStack(spacing: 4) {
+                            if push.isPushing { ProgressView() } else { Image(systemName: "arrow.up") }
+                            if push.unpushed > 0 { Text(String(push.unpushed)).monospacedDigit() }
+                        }
+                    }
+                    .disabled(push.unpushed == 0 || push.isPushing)
+                    .accessibilityLabel(push.title)
                 }
-                .disabled(isOpeningSite)
+                if let project, !project.isApp {
+                    Button(action: openSite) {
+                        if isOpeningSite { ProgressView() } else { Label("Open \(project.baseBranch)", systemImage: "globe") }
+                    }
+                    .disabled(isOpeningSite)
+                }
             }
-            Button("New Task", systemImage: "plus") { isCreating = true }
+            ToolbarSpacer(.fixed)
+            ToolbarItem { Button("New Task", systemImage: "plus") { isCreating = true } }
         }
         .sheet(isPresented: Binding(get: { site != nil }, set: { if !$0 { site = nil } })) {
             if let site { SafariView(url: site).ignoresSafeArea() }
@@ -1084,14 +1099,14 @@ extension RemoteModel {
             let merge = TaskAction(title: "Merge into \(task.base(in: project))", systemImage: "arrow.triangle.merge") { await model.merge(taskID: id) }
             if pullRequest?.state == .open {
                 let push = TaskAction(title: "Push Changes", systemImage: "arrow.up") { await model.push(taskID: id) }
-                return (pullRequest?.hasNewWork == true ? [push] : []) + viewing + [merge]
+                return [merge] + (pullRequest?.hasNewWork == true ? [push] : []) + viewing
             }
             // Its squashed commit is on the base by now, so a new one would repeat that work. On the Mac, which can re-sync first.
             if pullRequest?.state == .merged { return [merge] + viewing }
             let open = TaskAction(title: "Open Pull Request", systemImage: PullRequest.symbol()) {
                 if let url = await model.pullRequestURL(taskID: id) { openURL(url) }
             }
-            return (project.opensPullRequests || pullRequest != nil ? [open, merge] : [merge, open]) + viewing
+            return [merge, open] + viewing
         case .conflict:
             return [TaskAction(title: "Resolve", systemImage: "wrench.and.screwdriver") { await model.resolveConflict(taskID: id) }] + viewing
         default:

@@ -80,6 +80,8 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     case resolveConflict(taskID: Int)
     case conflictedFiles(taskID: Int)
     case pushBranch(taskID: Int)
+    /// Pushes the project's bases, as the Mac's push button does. A Mac from before it answers that it can't.
+    case push(projectID: UUID)
     case pullRequestURL(taskID: Int)
     case loadChanges(taskID: Int)
     case loadDiff(taskID: Int)
@@ -144,6 +146,8 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// All of them, whenever any changes. An older phone doesn't know this message and skips it.
     case schedules([Schedule])
     case scheduleDraft(Schedule?)
+    /// All of them, whenever any changes. An older phone skips it.
+    case pushStates([UUID: PushState])
     /// One reply per `.command`: a result, or why there is none.
     case reply(id: Int, result: RemoteResult?, error: String?)
     /// Bytes of a subscribed log, from `offset`.
@@ -167,6 +171,8 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
     public var schedules: [Schedule]?
     /// The schedule form open on the Mac, filled in (by the chat, `/schedule`…), not saved yet. Nil: none, or an older Mac.
     public var scheduleDraft: Schedule?
+    /// Each project's commits to push. No entry: no remote. Nil: an older Mac.
+    public var pushStates: [UUID: PushState]?
 
     public init() {}
 
@@ -196,6 +202,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         if isOffline != old.isOffline { messages.append(.offline(isOffline ?? false)) }
         if schedules != old.schedules { messages.append(.schedules(schedules ?? [])) }
         if scheduleDraft != old.scheduleDraft { messages.append(.scheduleDraft(scheduleDraft)) }
+        if pushStates != old.pushStates { messages.append(.pushStates(pushStates ?? [:])) }
         return messages
     }
 
@@ -218,6 +225,7 @@ public struct RemoteSnapshot: Codable, Equatable, Sendable {
         case .offline(let offline): isOffline = offline
         case .schedules(let schedules): self.schedules = schedules
         case .scheduleDraft(let draft): scheduleDraft = draft
+        case .pushStates(let states): pushStates = states
         case .hello, .reply, .log: break
         }
     }

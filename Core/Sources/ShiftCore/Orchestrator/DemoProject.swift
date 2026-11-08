@@ -4,6 +4,7 @@ import Foundation
 /// What a development build of Shift always has to test with: a Next.js project with two finished tasks, so the
 /// servers on main and on each task, and their previews, can be tried on Mac and iOS without spending an agent run.
 /// Two more tasks show pull requests: one finished with an open one (see `addDemoPullRequests`), one merged through one.
+/// Its `origin` is a bare repo beside it, so merged tasks have commits to push.
 /// Added next to whatever else the build's data holds. Start over: remove the project and relaunch; merging all its
 /// tasks does the same.
 /// ponytail: every checkout installs its own node_modules (about 400 MB), in each build's own SHIFT_HOME.
@@ -51,6 +52,13 @@ public enum DemoProject {
         try fm.createDirectory(at: repo.appendingPathComponent(".git"), withIntermediateDirectories: true)
         try "ref: refs/heads/\(base)\n".write(to: repo.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
         try await git.initRepository(repo)
+        // A stand-in for GitHub next to it, so the push button has somewhere to push merged tasks. Not on github.com,
+        // so the pull request check still leaves the demo be.
+        let origin = root.appendingPathComponent("demo/shift-demo-origin.git")
+        try? fm.removeItem(at: origin)
+        try runGit(["init", "--bare", "--initial-branch=\(base)", origin.path], in: root)
+        try runGit(["remote", "add", "origin", origin.path], in: repo)
+        try await git.push(repo: repo, branch: base, remote: "origin")
 
         var id = max(state.nextTaskID, (state.tasks.map(\.id).max() ?? 0) + 1)
         var tasks: [TaskItem] = []
@@ -76,6 +84,16 @@ public enum DemoProject {
     }
 
     static func repo(root: URL) -> URL { root.appendingPathComponent("demo/shift-demo") }
+
+    private static func runGit(_ args: [String], in dir: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = args
+        process.currentDirectoryURL = dir
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { throw GitError(message: "git \(args[0]) failed") }
+    }
 
     private static let changes = [
         (title: "Change the background to blue", from: #"background: "white""#, to: #"background: "blue""#,

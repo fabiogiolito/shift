@@ -26,21 +26,7 @@ public final class AppModel {
     /// it was not checked yet).
     public internal(set) var pushStates: [Project.ID: PushState] = [:]
 
-    public struct PushState: Equatable, Sendable {
-        public var remote: String
-        /// Commits on the project's bases that the remote does not have, as of the last fetch.
-        public var unpushed: Int
-        /// The bases those commits are on.
-        public var branches: [String]
-        public var isPushing = false
-
-        public init(remote: String, unpushed: Int, branches: [String] = [], isPushing: Bool = false) {
-            self.remote = remote
-            self.unpushed = unpushed
-            self.branches = branches
-            self.isPushing = isPushing
-        }
-    }
+    public typealias PushState = ShiftProtocol.PushState
 
     /// Each task's latest pull request, as of the last check. No entry: none, or not known (no `gh`).
     public internal(set) var pullRequests: [TaskItem.ID: PullRequest] = [:]
