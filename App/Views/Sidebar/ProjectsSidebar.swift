@@ -7,21 +7,15 @@ struct ProjectsSidebar: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(SetupFlow.self) private var setup
     @Binding var selection: Project.ID?
-    @State private var search = ""
-    @FocusState private var searchFocused: Bool
     @State private var settingsProject: Project?
     /// A new project's settings, opened once its setup sheet closes: a window shows one sheet at a time.
     @State private var settingsAfterSetup: Project?
     @State private var removingProject: Project?
     @State private var scrolledUnderBar = false
 
-    private var projects: [Project] {
-        search.isEmpty ? model.projects : model.projects.filter { $0.name.localizedCaseInsensitiveContains(search) }
-    }
-
     var body: some View {
         List(selection: $selection) {
-            ForEach(projects) { project in
+            ForEach(model.projects) { project in
                 HStack {
                     Label {
                         VStack(alignment: .leading) {
@@ -60,13 +54,9 @@ struct ProjectsSidebar: View {
                     Button("Remove", role: .destructive) { removingProject = project }
                 }
             }
-            // Offsets refer to the full list, so reordering is off while filtering.
-            .onMove(perform: search.isEmpty ? { model.moveProjects(from: $0, to: $1) } : nil)
+            .onMove { model.moveProjects(from: $0, to: $1) }
         }
         .listStyle(.sidebar)
-        .searchable(text: $search, placement: .sidebar)
-        .searchFocused($searchFocused)
-        .focusedSceneValue(\.focusSearch) { searchFocused = true }
         .contentMargins(.top, 8, for: .scrollContent)
         // A background and divider only once projects scroll under New Project, like the task prompt bar.
         .safeAreaInset(edge: .bottom, spacing: 0) {

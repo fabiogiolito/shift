@@ -264,6 +264,7 @@ public final class RemoteServer {
             return .success(.data(await ProjectIconFinder.png(in: URL(fileURLWithPath: project.repoPath))))
         case .runScheduleNow(let id): return .success(.taskID(model.runScheduleNow(id)))
         case .setSchedulePaused(let id, let paused): model.setSchedulePaused(id, paused)
+        case .searchTasks(let id, let query): return .success(.taskIDs(await model.searchTasks(projectID: id, query: query)))
         case .saveScheduleDraft(let id):
             // Only what the phone was shown: not a draft that changed on the Mac since.
             guard let draft = model.scheduleDraft, draft.id == id else { return .failure(ScheduleDraftGone()) }

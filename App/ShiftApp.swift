@@ -149,7 +149,7 @@ private struct ShortcutCommands: Commands {
                 .disabled(focusPrompt == nil)
         }
         CommandGroup(before: .textEditing) {
-            Button("Search Projects") { focusSearch?() }
+            Button("Search Tasks") { focusSearch?() }
                 .keyboardShortcut("f")
                 .disabled(focusSearch == nil)
         }
