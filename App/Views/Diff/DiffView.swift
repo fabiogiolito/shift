@@ -15,13 +15,20 @@ struct DiffView: View {
     @State private var loadError: String?
     /// Bumped by Try Again to load again.
     @State private var attempt = 0
+    /// Files that conflict with the base; with any, the diff can show the merge into it instead.
+    private let conflicts: [String]
+    private let base: String
+    /// Shows what merging into the base would do now, conflict markers and all, in place of the task's changes.
+    @State private var showingMerge = false
     @Environment(\.textScale) private var textScale
 
     /// `selecting` is the path of the file to open at.
-    init(taskID: TaskItem.ID, isSettled: Bool, selecting path: String? = nil) {
+    init(taskID: TaskItem.ID, isSettled: Bool, selecting path: String? = nil, conflicts: [String] = [], base: String = "") {
         self.taskID = taskID
         self.source = nil
         self.isSettled = isSettled
+        self.conflicts = conflicts
+        self.base = base
         _selection = State(initialValue: path)
     }
 
@@ -30,15 +37,28 @@ struct DiffView: View {
         self.taskID = nil
         self.source = files
         self.isSettled = true
+        self.conflicts = []
+        self.base = ""
     }
 
     var body: some View {
         let ready = isSettled ? files : nil
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Changes").font(.headline)
-                // A blank line until then, so the header keeps its height.
-                Text(ready.map(summary) ?? " ").font(.subheadline).foregroundStyle(.secondary)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(showingMerge ? "Merging into \(base)" : "Changes").font(.headline)
+                    // A blank line until then, so the header keeps its height.
+                    Text(ready.map(summary) ?? " ").font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if !conflicts.isEmpty {
+                    Picker("Show", selection: $showingMerge) {
+                        Text("Changes").tag(false)
+                        Text("Merge Preview").tag(true)
+                    }
+                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    .help("Changes: what this task changed. Merge Preview: what merging into \(base) now would do, with the conflicts marked.")
+                }
             }
             .padding()
             Divider()
@@ -53,7 +73,7 @@ struct DiffView: View {
             } else if let files = ready {
                 if files.isEmpty {
                     EmptyState("No changes", systemImage: "doc.text.magnifyingglass",
-                               description: Text("This task has not changed any files."))
+                               description: Text(showingMerge ? "Merging would not change \(base)." : "This task has not changed any files."))
                 } else {
                     content(files)
                 }
@@ -61,9 +81,11 @@ struct DiffView: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: attempt) {
+        .task(id: [attempt, showingMerge ? 1 : 0]) {
+            files = nil
             let result: Result<[FileDiff], Error> = if let source { .success(source) }
-                else if let taskID { await model.loadDiff(taskID: taskID) } else { .success([]) }
+                else if let taskID { showingMerge ? await model.loadMergeDiff(taskID: taskID) : await model.loadDiff(taskID: taskID) }
+                else { .success([]) }
             let diff: [FileDiff]
             switch result {
             case .success(let value): diff = value
@@ -85,6 +107,7 @@ struct DiffView: View {
                         .lineLimit(1).truncationMode(.head)
                         .help(file.change.path)
                     Spacer()
+                    conflictMark(file.change.path)
                     counts(file.change)
                 }
             }
@@ -117,6 +140,10 @@ struct DiffView: View {
         return "\(files.count) \(files.count == 1 ? "file" : "files") · +\(additions) −\(deletions)"
     }
 
+    @ViewBuilder private func conflictMark(_ path: String) -> some View {
+        if conflicts.contains(path) { ConflictMark(base: base) }
+    }
+
     private func counts(_ change: FileChange) -> some View {
         HStack(spacing: 4) {
             if change.isBinary {
@@ -141,6 +168,7 @@ struct DiffView: View {
                 case .modified: EmptyView()
                 }
                 Spacer()
+                conflictMark(change.path)
                 counts(change)
             }
             .padding(.horizontal)
@@ -203,6 +231,18 @@ struct DiffView: View {
 
     private func note(_ text: String) -> some View {
         Text(text).foregroundStyle(.secondary).padding()
+    }
+}
+
+/// A file that conflicts with the base branch, beside its line counts.
+struct ConflictMark: View {
+    let base: String
+
+    var body: some View {
+        Image(systemName: "exclamationmark.triangle.fill")
+            .foregroundStyle(.secondary)
+            .help("Conflicts with \(base)")
+            .accessibilityLabel("Conflicts with \(base)")
     }
 }
 
@@ -312,8 +352,14 @@ private struct DiffLineRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 1)
-        .background(line.kind == .added ? Color.green.opacity(0.15)
+        .background(isConflictMarker ? Color.orange.opacity(0.25)
+                    : line.kind == .added ? Color.green.opacity(0.15)
                     : line.kind == .removed ? Color.red.opacity(0.15) : Color.clear)
+    }
+
+    /// git's `<<<<<<<`, `=======` and `>>>>>>>` lines around the two sides of a conflict.
+    private var isConflictMarker: Bool {
+        line.kind == .added && (line.text == "=======" || line.text.hasPrefix("<<<<<<< ") || line.text.hasPrefix(">>>>>>> "))
     }
 
     /// Sized by an invisible placeholder so the gutter fits the widest line number without a hard-coded width.

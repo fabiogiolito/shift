@@ -44,6 +44,9 @@ public protocol GitServicing: Sendable {
     /// Paths (relative to the repo root) that conflict when merging `branch` into `base`; empty if it
     /// merges cleanly. Must not touch any working tree.
     func conflictedFiles(repo: URL, branch: String, base: String) async throws -> [String]
+    /// What merging `branch` into `base` right now would change on `base`, conflicting files with git's
+    /// conflict markers in them. Must not touch any working tree.
+    func mergeDiff(repo: URL, branch: String, base: String) async throws -> [FileDiff]
     /// Integrates `branch` into `base`. Must leave the repo untouched when returning `.conflict`.
     func merge(repo: URL, branch: String, into base: String, message: String) async throws -> MergeResult
     /// True if `path` (relative to the repo root) is tracked by git.

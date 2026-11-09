@@ -258,6 +258,18 @@ public struct GitService: GitServicing {
         }
     }
 
+    public func mergeDiff(repo: URL, branch: String, base: String) async throws -> [FileDiff] {
+        // Exit 1 is a conflict: the tree is still written, with conflict markers in the conflicting files.
+        let out = try await run(["merge-tree", "--write-tree", "--no-messages", base, branch], in: repo)
+        guard out.status <= 1, let tree = out.stdout.split(separator: "\n").first.map(String.init) else {
+            throw GitError(message: out.stderr)
+        }
+        let diffArgs = ["diff", "-M", "--no-color", "--no-ext-diff", "--no-textconv", base, tree]
+        let status = try await git(diffArgs + ["--name-status", "-z"], in: repo)
+        let patch = try await git(diffArgs + ["--patch"], in: repo, trim: false)
+        return Self.parse(nameStatus: status, patch: patch)
+    }
+
     /// A branch that never got a commit of its own is contained in base too, but nobody merged it.
     /// ponytail: "commits of its own" is read from the branch's reflog (more than the entry for its
     /// creation); record the starting commit on the task if reflogs turn out not to be reliable.
