@@ -396,5 +396,19 @@
 - Larger tags in task details, plus new icons for pull requests, branches and project folders]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.13/Shift-0.2.13.zip" sparkle:edSignature="lugVcpSqY3etSJtlDsasYKPAV3Nc478ohwzXMREkc0E9FxoppNgtSp8Q1260MQr7q0Fpjm7Ej9GhwJqiU12eCw==" length="5542056" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.14</title>
+      <pubDate>Mon, 09 Nov 2026 13:46:37 +0000</pubDate>
+      <sparkle:version>31</sparkle:version>
+      <sparkle:shortVersionString>0.2.14</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Plan tasks before starting them: `/plan` drafts a Markdown plan you can review, edit and approve to start a task with the plan attached
+- Edit plans with live Markdown styling and shortcuts for bold, italic, code, links, headings and lists
+- Ask the agent for changes to a plan from the prompt
+- Choose where a project keeps its plans: in Shift, in a committed folder, or in an ignored folder
+- Find or remove a project when its folder has been moved or deleted
+- Shift now sends anonymous usage counts (installs, versions) to help improve the app]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.14/Shift-0.2.14.zip" sparkle:edSignature="3PP9Og/LqEGQKjEmmGVeI2t18DgI5H/i1oNvu+3H1/po38P/2Gglat7xN0fqLlhRWfxP3caiyaFU2R60QNU3Aw==" length="6094884" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
