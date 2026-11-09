@@ -41,6 +41,8 @@ public struct Plan: Codable, Identifiable, Hashable, Sendable {
     public var prompts: [Prompt]
     /// Why the agent's last pass failed, until the next one.
     public var error: String?
+    /// The task whose agent created it with `shiftctl plan`. Optional so earlier state still decodes.
+    public var createdBy: TaskItem.ID?
 
     public init(id: UUID = UUID(), projectID: Project.ID, title: String, path: String, createdAt: Date = Date(),
                 prompts: [Prompt] = []) {

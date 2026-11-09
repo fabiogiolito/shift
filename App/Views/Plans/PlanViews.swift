@@ -178,6 +178,12 @@ struct PlanDetailView: View {
             } else if let error = plan.error {
                 Label(error, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red)
             }
+            if let parent = plan.createdBy {
+                Button("Created by #\(parent)") { selection = parent }
+                    .buttonStyle(.link)
+                    .disabled(model.task(parent) == nil)
+                    .help("Open the task whose agent created this plan")
+            }
         }
     }
 }

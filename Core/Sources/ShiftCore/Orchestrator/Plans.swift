@@ -19,7 +19,7 @@ extension AppModel {
 
     /// `/plan <idea>`: a new document, drafted by the agent from the idea. No idea: a blank one for the user to write.
     @discardableResult
-    public func createPlan(projectID: Project.ID, idea: String, attachments: [String] = []) -> Plan.ID? {
+    public func createPlan(projectID: Project.ID, idea: String, attachments: [String] = [], createdBy: TaskItem.ID? = nil) -> Plan.ID? {
         let idea = idea.trimmingCharacters(in: .whitespacesAndNewlines)
         guard services != nil, let project = project(projectID) else { return nil }
         let drafts = !idea.isEmpty || !attachments.isEmpty
@@ -34,6 +34,7 @@ extension AppModel {
             return nil
         }
         var plan = Plan(projectID: projectID, title: title, path: file.path)
+        plan.createdBy = createdBy
         let first = Prompt(text: idea, attachments: attachments)
         if drafts { plan.prompts = [first] }
         plans.append(plan)

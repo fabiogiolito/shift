@@ -510,6 +510,11 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     public var tags: [String]?
     /// The schedule that started it, as one of its runs. Optional so state saved by earlier builds, and older phones, still decode.
     public var scheduleID: UUID?
+    /// The task whose agent created it with `shiftctl create`, or (a run) whose schedule's. Such a task can't create
+    /// more. Optional so state saved by earlier builds, and older phones, still decode.
+    public var createdBy: TaskItem.ID?
+    /// How many plans, tasks and schedules its agent created with `shiftctl`, over its lifetime (at most 10).
+    public var createdCount: Int?
 
     public init(id: Int, projectID: Project.ID, title: String, status: TaskStatus = .working,
                 agent: AgentKind, branch: String, baseBranch: String? = nil, worktreePath: String, sessionID: String? = nil,

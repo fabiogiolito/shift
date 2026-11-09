@@ -44,6 +44,10 @@ extension AppModel {
                                change the fields given (a JSON merge patch: null clears one); applies from the next run
       schedule pause|resume|delete <id>
       schedule run <id>        start a run now, whatever its timing
+    \(scheduleJSONUsage)
+    """
+
+    nonisolated static let scheduleJSONUsage = """
     A schedule's JSON (only "prompt" and "timing.start" are required, but give a "title"; the rest default to the project's):
       {"title", "prompt", "baseBranch", "agent", "model", "permissions",
        "timing": {"start": "2026-11-07T09:00" (local time; the first run, or the only one),
@@ -58,6 +62,22 @@ extension AppModel {
        "wakeMac": false (wakes the Mac before each run; asks the user for their password)}
     No "repeat": it runs once. A run missed while the Mac slept or Shift was closed is logged, not caught up.
     """
+
+    nonisolated static let taskControlUsage = """
+    shiftctl commands for this task (quote arguments; a prompt can span lines):
+      server                   start this task's dev server and print its address
+    Only when the user's prompt asks you to create plans, tasks or schedules (at most \(maxCreatedByTask) in all, in this project):
+      plan "<idea>"            a plan, drafted by its own agent from the idea alone: put everything it needs in it
+      create [--agent claudeCode|codex] "<prompt>"
+                               start a task
+      schedule create '<json>' a schedule that starts a task each time it comes due
+    What you create can't create more.
+
+    \(scheduleJSONUsage)
+    """
+
+    /// The most plans, tasks and schedules one task's agent can create.
+    nonisolated static let maxCreatedByTask = 10
 
     func handleControl(token: String, arguments: [String]) async -> ControlReply {
         if let reply = await handleTaskControl(token: token, arguments: arguments) { return reply }
@@ -107,17 +127,7 @@ extension AppModel {
             let output = Transcript.readable(await rawOutput(taskID: task.id), agent: task.agent)
             return output.isEmpty ? "Nothing yet." : String(output.suffix(8000))
         case "create":
-            var agent: AgentKind?
-            if rest.first == "--agent" {
-                rest.removeFirst()
-                guard let word = rest.popFirst(), let kind = AgentKind(rawValue: word), installedAgents[kind] != nil else {
-                    throw Refusal("Pick an installed agent: \(installedAgents.keys.map(\.rawValue).sorted().joined(separator: ", ")).")
-                }
-                agent = kind
-            }
-            guard let id = createTask(projectID: projectID, prompt: try textArgument("the prompt"), agent: agent) else {
-                throw Refusal("Could not start the task.")
-            }
+            let id = try controlCreateTask(projectID, &rest, createdBy: nil)
             follow(taskID: id)
             return "Started task \(id). Shift will tell you how it goes."
         case "follow":
@@ -239,25 +249,10 @@ extension AppModel {
             guard !word.isEmpty, found.count == 1 else { throw Refusal("No such schedule in this project. Run `schedules`.") }
             return found[0]
         }
-        func jsonArgument() throws -> [String: Any] {
-            let text = rest.joined(separator: " ")
-            guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else {
-                throw Refusal("Give the schedule's fields as a JSON object.")
-            }
-            return object
-        }
+        func jsonArgument() throws -> [String: Any] { try Self.scheduleFields(rest.joined(separator: " ")) }
         switch rest.popFirst() {
         case "create":
-            guard let project = project(projectID) else { throw Refusal("The project no longer exists.") }
-            let fields = try jsonArgument()
-            let defaults = Schedule(projectID: projectID, title: "", prompt: "", baseBranch: project.baseBranch,
-                                    agent: project.defaultAgent, model: project.models[project.defaultAgent],
-                                    permissions: project.permissions, timing: ScheduleTiming(start: Date()))
-            guard (fields["timing"] as? [String: Any])?["start"] != nil else { throw Refusal("Missing timing.start.") }
-            let schedule = try await validSchedule(patching: defaults, with: fields)
-            addSchedule(schedule)
-            let next = schedule.nextRun().map { "Next run: \(Self.controlDateFormatter.string(from: $0))." } ?? "It has no runs to come."
-            return "Created schedule \(schedule.id.uuidString). \(next)"
+            return try await controlCreateSchedule(projectID, rest.joined(separator: " "), createdBy: nil)
         case "draft":
             guard let defaults = newSchedule(projectID: projectID) else {
                 throw Refusal("The project no longer exists.")
@@ -309,7 +304,7 @@ extension AppModel {
         guard let project = project(schedule.projectID) else { throw Refusal("The project no longer exists.") }
         var fields = fields
         // keepAwake: the form no longer offers it, so the chat doesn't either; saved values are kept.
-        for key in ["id", "projectID", "runs", "createdAt", "checkedUntil", "next", "keepAwake"] { fields[key] = nil }
+        for key in ["id", "projectID", "runs", "createdAt", "checkedUntil", "next", "keepAwake", "createdBy"] { fields[key] = nil }
         let merged = Self.mergePatch(try controlObject(schedule), fields)
         var result: Schedule
         do {
@@ -478,6 +473,88 @@ extension AppModel {
         }
         updateProject(project)
         return "Set \(setting)." + note
+    }
+
+    /// `create [--agent <kind>] "<prompt>"`, for the chat and for tasks.
+    private func controlCreateTask(_ projectID: Project.ID, _ rest: inout ArraySlice<String>, createdBy: TaskItem.ID?) throws -> TaskItem.ID {
+        var agent: AgentKind?
+        if rest.first == "--agent" {
+            rest.removeFirst()
+            guard let word = rest.popFirst(), let kind = AgentKind(rawValue: word), installedAgents[kind] != nil else {
+                throw Refusal("Pick an installed agent: \(installedAgents.keys.map(\.rawValue).sorted().joined(separator: ", ")).")
+            }
+            agent = kind
+        }
+        let prompt = rest.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { throw Refusal("Missing the prompt.") }
+        guard let id = createTask(projectID: projectID, prompt: prompt, agent: agent, schedule: nil, createdBy: createdBy) else {
+            throw Refusal("Could not start the task.")
+        }
+        return id
+    }
+
+    /// `schedule create '<json>'`, for the chat and for tasks.
+    private func controlCreateSchedule(_ projectID: Project.ID, _ json: String, createdBy: TaskItem.ID?) async throws -> String {
+        guard let project = project(projectID) else { throw Refusal("The project no longer exists.") }
+        let fields = try Self.scheduleFields(json)
+        var defaults = Schedule(projectID: projectID, title: "", prompt: "", baseBranch: project.baseBranch,
+                                agent: project.defaultAgent, model: project.models[project.defaultAgent],
+                                permissions: project.permissions, timing: ScheduleTiming(start: Date()))
+        defaults.createdBy = createdBy
+        guard (fields["timing"] as? [String: Any])?["start"] != nil else { throw Refusal("Missing timing.start.") }
+        let schedule = try await validSchedule(patching: defaults, with: fields)
+        addSchedule(schedule)
+        let next = schedule.nextRun().map { "Next run: \(Self.controlDateFormatter.string(from: $0))." } ?? "It has no runs to come."
+        return "Created schedule \(schedule.id.uuidString). \(next)"
+    }
+
+    private static func scheduleFields(_ text: String) throws -> [String: Any] {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else {
+            throw Refusal("Give the schedule's fields as a JSON object.")
+        }
+        return object
+    }
+
+    /// A task agent's `shiftctl`, other than `server`: creating plans, tasks and schedules in its own project, at most
+    /// `maxCreatedByTask` over its lifetime. What a task created can't create more, so tasks can't start a chain of them.
+    func taskControl(_ id: TaskItem.ID, _ arguments: [String]) async -> ControlReply {
+        var rest = arguments[...]
+        let command = rest.popFirst() ?? "help"
+        if command == "help" { return ControlReply(ok: true, text: Self.taskControlUsage) }
+        guard ["plan", "create", "schedule"].contains(command) else {
+            return ControlReply(ok: false, text: "Unknown command \(command).\n\n\(Self.taskControlUsage)")
+        }
+        guard let task = task(id) else { return ControlReply(ok: false, text: "This task no longer exists.") }
+        if task.status.isClosed {
+            return ControlReply(ok: false, text: "This task is \(task.status.rawValue): it can't create anything.")
+        }
+        if let parent = task.createdBy {
+            return ControlReply(ok: false, text: "This task was created by task \(parent), and what a task creates can't create more.")
+        }
+        if (task.createdCount ?? 0) >= Self.maxCreatedByTask {
+            return ControlReply(ok: false, text: "This task already created \(Self.maxCreatedByTask) plans, tasks and schedules, the most one task can. Tell the user what's left to create.")
+        }
+        do {
+            let text: String
+            switch command {
+            case "plan":
+                let idea = rest.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !idea.isEmpty else { throw Refusal("Missing the idea.") }
+                var planID: Plan.ID?
+                let note = await collectingError { planID = createPlan(projectID: task.projectID, idea: idea, createdBy: id) }
+                guard let planID, let plan = plan(planID) else { throw Refusal(note ?? "Could not create the plan.") }
+                text = "Created plan \(plan.id.uuidString) “\(plan.title)”. Its agent is drafting it for the user to review."
+            case "create":
+                text = "Started task \(try controlCreateTask(task.projectID, &rest, createdBy: id))."
+            default:
+                guard rest.popFirst() == "create" else { throw Refusal("Tasks can only `schedule create`.") }
+                text = try await controlCreateSchedule(task.projectID, rest.joined(separator: " "), createdBy: id)
+            }
+            update(id) { $0.createdCount = ($0.createdCount ?? 0) + 1 }
+            return ControlReply(ok: true, text: text)
+        } catch {
+            return ControlReply(ok: false, text: (error as? Refusal)?.text ?? String(describing: error))
+        }
     }
 
     /// What `operation` put in `lastError`, for the agent instead of an alert for the user.

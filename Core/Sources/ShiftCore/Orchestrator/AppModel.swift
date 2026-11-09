@@ -138,7 +138,7 @@ public final class AppModel {
     @ObservationIgnored private var controlPort: Int?
     @ObservationIgnored var controlTokens: [String: Project.ID] = [:]
     /// The same for tasks' agents, which may only start their own task's dev server (`shiftctl server`).
-    @ObservationIgnored private var taskControlTokens: [String: TaskItem.ID] = [:]
+    @ObservationIgnored var taskControlTokens: [String: TaskItem.ID] = [:]
     @ObservationIgnored private var chatRuns: [Project.ID: ChatRun] = [:]
     @ObservationIgnored private var nextTaskID = 3001
     @ObservationIgnored private var runs: [TaskItem.ID: Run] = [:]
@@ -610,7 +610,7 @@ public final class AppModel {
 
     /// `schedule`: a run of it, with its base, agent, model and permissions instead of the project's.
     func createTask(projectID: Project.ID, prompt: String, attachments: [String] = [], agent: AgentKind? = nil,
-                    baseBranch: String? = nil, schedule: Schedule?) -> TaskItem.ID? {
+                    baseBranch: String? = nil, schedule: Schedule?, createdBy: TaskItem.ID? = nil) -> TaskItem.ID? {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard services != nil, let project = project(projectID), !prompt.isEmpty || !attachments.isEmpty else { return nil }
         let first = Prompt(text: prompt, attachments: attachments)
@@ -632,6 +632,7 @@ public final class AppModel {
             task.permissions = schedule.permissions
             task.scheduleID = schedule.id
         }
+        task.createdBy = createdBy ?? schedule?.createdBy
         tasks.append(task)
         changed()
         startRun(id, prompt: first.agentText, promptIDs: [first.id])
@@ -1864,7 +1865,7 @@ public final class AppModel {
         return ["SHIFT_URL": "http://127.0.0.1:\(controlPort)", "SHIFT_ACCESS": token]
     }
 
-    /// What `shiftctl server` needs to start this task's dev server, and nothing else, from the task's agent.
+    /// What the task's agent needs for its own `shiftctl` (`handleTaskControl`): its dev server, and creating plans, tasks and schedules.
     private func taskControlEnvironment(_ id: TaskItem.ID) -> [String: String] {
         guard let controlPort else { return [:] }
         let token = taskControlTokens.first { $0.value == id }?.key ?? UUID().uuidString
@@ -1873,12 +1874,10 @@ public final class AppModel {
     }
 
     /// A task agent's `shiftctl`: `server` starts its task's dev server if it is off, and answers with its address
-    /// once it answers. Nil: the token is not a task's.
+    /// once it answers; `plan`, `create` and `schedule create` are in ChatControl. Nil: the token is not a task's.
     func handleTaskControl(token: String, arguments: [String]) async -> ControlReply? {
         guard let id = taskControlTokens[token] else { return nil }
-        guard arguments.first == "server" else {
-            return ControlReply(ok: false, text: "shiftctl server    start this task's dev server and print its address")
-        }
+        guard arguments.first == "server" else { return await taskControl(id, arguments) }
         guard let services, let task = task(id), task.status != .merged, let url = task.serverURL else {
             return ControlReply(ok: false, text: "This task has no dev server.")
         }
@@ -2107,7 +2106,7 @@ public final class AppModel {
             markDelivered(id)
             let channel = ApprovalChannel()
             let request = AgentRequest(prompt: text, sessionID: task.sessionID, worktree: task.worktreeURL,
-                                       environment: task.port.map { ["PORT": String($0)].merging(taskControlEnvironment(id)) { $1 } } ?? [:],
+                                       environment: taskControlEnvironment(id).merging(task.port.map { ["PORT": String($0)] } ?? [:]) { $1 },
                                        permissions: task.permissions ?? project(for: task)?.permissions ?? .bypass,
                                        // A fallback agent (see `adapter(for:)`) doesn't run the other one's model.
                                        model: adapter.kind == task.agent ? task.model : project(for: task)?.models[adapter.kind],

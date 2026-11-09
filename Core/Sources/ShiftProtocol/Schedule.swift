@@ -25,6 +25,9 @@ public struct Schedule: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     /// Every occurrence up to here has been started or logged as missed.
     public var checkedUntil: Date
+    /// The task whose agent created it with `shiftctl schedule create`. Its runs can't create anything either.
+    /// Optional so earlier state still decodes.
+    public var createdBy: TaskItem.ID?
 
     public enum FinishAction: String, Codable, CaseIterable, Sendable {
         case review, archive, pullRequest, merge
