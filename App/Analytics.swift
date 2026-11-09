@@ -64,7 +64,7 @@ enum Analytics {
         signal["isTestMode"] = true
         #endif
         guard let body = try? JSONSerialization.data(withJSONObject: [signal]) else { return }
-        var request = URLRequest(url: URL(string: "https://nom.telemetrydeck.com/v2/")!)
+        var request = URLRequest(url: URL(string: "https://nom.telemetrydeck.com/v2/namespace/com.shiftapp/")!)
         request.httpMethod = "POST"
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
