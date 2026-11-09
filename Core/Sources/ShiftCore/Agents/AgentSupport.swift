@@ -18,10 +18,11 @@ extension OutcomeProtocol {
     /// `description`: the one it has, for the agent to build on; a new session has no memory of writing it.
     /// `screenshots`: how this turn's are taken, and what the agent has to do for them.
     /// `server`: the task has a dev server, which the agent starts with `shiftctl server` if it needs it.
+    /// `control`: the agent has its own `shiftctl`, which can also create plans, tasks and schedules.
     /// `tags`: non-nil, the agent tags the task, preferring these.
     static func instructions(firstTurn: Bool, description: String? = nil, screenshots: ScreenshotRequest? = nil,
-                             server: Bool = false, tags: [String]? = nil) -> String {
-        var text = (server ? devServer + "\n\n" : "") + outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
+                             server: Bool = false, control: Bool = false, tags: [String]? = nil) -> String {
+        var text = (server ? devServer + "\n\n" : "") + (control ? creating + "\n\n" : "") + outcome + "\n\n" + (firstTurn ? describeFirst + "\n\n" + describeRules : describeAgain(description))
         if let tags { text += "\n\n" + tagRules(tags) }
         switch screenshots {
         case .page: text += "\n\n" + namePage
@@ -238,6 +239,14 @@ extension OutcomeProtocol {
     The project's dev server is off until something needs it. If you need it running, for example to check your \
     work in a browser, run `\(ShiftPaths.controlScript.path) server`: it starts it and prints its address once it \
     answers. Never start a dev server yourself. Don't start it at all if you don't need it.
+    """
+
+    static let creating = """
+    Only if the user's prompt asks you to create plans, tasks or schedules in Shift, never on your own initiative: \
+    `\(ShiftPaths.controlScript.path) plan "<idea>"` creates a plan for the user to review, `create "<prompt>"` starts \
+    a task, and `schedule create '<json>'` a schedule; run `help` for the details. At most 10 in all. A plan's agent \
+    and a new task's start with no context, so the idea or prompt must carry everything they need, such as an \
+    issue's full title, description and link.
     """
 
     static let outcome = """

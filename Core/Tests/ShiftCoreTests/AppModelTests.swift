@@ -2892,6 +2892,76 @@ final class ChatControlTests: XCTestCase {
         XCTAssertTrue(reply.text.contains("\"serverCommand\" : \"pnpm dev\""), reply.text)
     }
 
+    // MARK: A task's own shiftctl
+
+    private func taskRun(_ id: TaskItem.ID, _ arguments: String...) async -> ControlReply {
+        model.taskControlTokens["task-\(id)"] = id
+        return await model.handleControl(token: "task-\(id)", arguments: arguments)
+    }
+
+    func testATaskCreatesPlansTasksAndSchedulesInItsProject() async throws {
+        let parent = try XCTUnwrap(model.createTask(projectID: project.id, prompt: "Check Linear"))
+        var reply = await taskRun(parent, "plan", "Fix the login bug\n\nFull issue text, https://linear.app/x/1")
+        XCTAssertTrue(reply.ok, reply.text)
+        let plan = try XCTUnwrap(model.plans.first)
+        XCTAssertEqual(plan.createdBy, parent)
+        XCTAssertEqual(plan.projectID, project.id)
+        XCTAssertTrue(reply.text.contains(plan.id.uuidString), reply.text)
+
+        reply = await taskRun(parent, "create", "Bump the version")
+        XCTAssertTrue(reply.ok, reply.text)
+        let child = try XCTUnwrap(model.tasks.first { $0.id != parent })
+        XCTAssertEqual(child.createdBy, parent)
+        XCTAssertNil(child.chatID, "a task's task doesn't wake the chat")
+
+        reply = await taskRun(parent, "schedule", "create", #"{"prompt": "Again", "timing": {"start": "2030-01-07T09:00"}}"#)
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertEqual(model.schedules.first?.createdBy, parent)
+        XCTAssertEqual(model.task(parent)?.createdCount, 3)
+
+        // Nothing else the chat can do.
+        reply = await taskRun(parent, "merge", "\(child.id)")
+        XCTAssertFalse(reply.ok)
+        reply = await taskRun(parent, "schedule", "delete", "x")
+        XCTAssertFalse(reply.ok)
+        reply = await taskRun(parent, "help")
+        XCTAssertTrue(reply.ok && reply.text.contains("plan \"<idea>\""), reply.text)
+    }
+
+    func testATaskCreatesAtMostTen() async throws {
+        let parent = try XCTUnwrap(model.createTask(projectID: project.id, prompt: "Check Linear"))
+        for number in 1...10 {
+            let reply = await taskRun(parent, "plan", "Issue \(number)")
+            XCTAssertTrue(reply.ok, reply.text)
+        }
+        let reply = await taskRun(parent, "create", "One more")
+        XCTAssertFalse(reply.ok)
+        XCTAssertTrue(reply.text.contains("10"), reply.text)
+        XCTAssertEqual(model.tasks.count, 1)
+    }
+
+    func testWhatATaskCreatedCantCreateMore() async throws {
+        let parent = try XCTUnwrap(model.createTask(projectID: project.id, prompt: "Check Linear"))
+        _ = await taskRun(parent, "create", "Child")
+        let child = try XCTUnwrap(model.tasks.first { $0.id != parent }).id
+        let reply = await taskRun(child, "plan", "Grandchild")
+        XCTAssertFalse(reply.ok)
+        XCTAssertTrue(model.plans.isEmpty)
+
+        // Nor the runs of a schedule a task created.
+        _ = await taskRun(parent, "schedule", "create", #"{"prompt": "Run", "timing": {"start": "2030-01-07T09:00"}}"#)
+        let run = try XCTUnwrap(model.runScheduleNow(try XCTUnwrap(model.schedules.first).id))
+        XCTAssertEqual(model.task(run)?.createdBy, parent)
+    }
+
+    func testAClosedTaskCantCreate() async throws {
+        let id = try XCTUnwrap(model.createTask(projectID: project.id, prompt: "Check Linear"))
+        model.update(id) { $0.status = .archived }
+        let reply = await taskRun(id, "plan", "Idea")
+        XCTAssertFalse(reply.ok)
+        XCTAssertTrue(model.plans.isEmpty)
+    }
+
     func testTheChatsAgentGetsAccessOnlyWithAServer() async {
         await startChat()
         XCTAssertNil(claude.requests[0].environment["SHIFT_ACCESS"])

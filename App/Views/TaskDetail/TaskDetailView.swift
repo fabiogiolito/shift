@@ -205,6 +205,12 @@ struct TaskDetailView: View {
                 .buttonStyle(.link)
                 .help("Open the schedule")
             }
+            if let parent = task.createdBy {
+                Button("Created by #\(parent)") { selectedRow = parent }
+                    .buttonStyle(.link)
+                    .disabled(model.task(parent) == nil)
+                    .help("Open the task whose agent created this one")
+            }
         }
     }
 
