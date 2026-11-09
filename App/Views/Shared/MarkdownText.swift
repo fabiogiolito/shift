@@ -159,6 +159,13 @@ struct MarkdownText: View {
         #endif
     }
 
+    /// A light fill behind inline code, so it stands out from the prose around it.
+    #if os(macOS)
+    static let codeBackground = Color(nsColor: .tertiarySystemFill)
+    #else
+    static let codeBackground = Color(uiColor: .tertiarySystemFill)
+    #endif
+
     /// Bold, a step above the semibold of bold text, so a heading reads as one.
     private static func headingFont(_ level: Int, _ scale: Double) -> Font {
         .scaled(level == 1 ? .title2 : level == 2 ? .title3 : .headline, scale).weight(.bold)
@@ -166,7 +173,8 @@ struct MarkdownText: View {
 
     private func inline(_ text: String) -> LinkedText { LinkedText(string: Self.inline(text, scale: textScale)) }
 
-    private static func inline(_ text: String, scale: Double) -> AttributedString {
+    /// Inline markdown styled as in a reply, for one-line places outside one (a question, an approval).
+    static func inline(_ text: String, scale: Double) -> AttributedString {
         var string = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
         // Bold text is semibold: full bold shouts in a long reply.
         let strong = string.runs[\.inlinePresentationIntent].filter { $0.0?.contains(.stronglyEmphasized) == true }
@@ -176,7 +184,10 @@ struct MarkdownText: View {
         }
         // Monospaced at the text's own size looks larger than the prose around it: inline code gets the code blocks' size.
         let code = string.runs[\.inlinePresentationIntent].filter { $0.0?.contains(.code) == true }.map(\.1)
-        for range in code { string[range].font = .scaled(.callout, scale, design: .monospaced) }
+        for range in code {
+            string[range].font = .scaled(.callout, scale, design: .monospaced)
+            string[range].backgroundColor = codeBackground
+        }
         return string
     }
 }

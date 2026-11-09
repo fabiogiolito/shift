@@ -111,6 +111,7 @@ struct ProseTextView: NSViewRepresentable {
             if intent.contains(.emphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
             var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
             if intent.contains(.strikethrough) { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+            if intent.contains(.code) { attributes[.backgroundColor] = NSColor.tertiarySystemFill }
             if let link = run.link { attributes[.link] = link }
             result.append(NSAttributedString(string: String(parsed[run.range].characters), attributes: attributes))
         }

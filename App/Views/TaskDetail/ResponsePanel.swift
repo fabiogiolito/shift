@@ -75,8 +75,7 @@ struct ResponsePanel: View {
         let first = lines.first ?? text
         return VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.subheadline).foregroundStyle(.secondary)
-            Text((try? AttributedString(markdown: first, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                 ?? AttributedString(first))
+            Text(MarkdownText.inline(first, scale: textScale))
                 .font(.scaled(.body, textScale))
                 .textSelection(.enabled)
             if lines.count > 1 {
