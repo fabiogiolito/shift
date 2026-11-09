@@ -180,8 +180,7 @@ struct ChatView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("The agent wants to").font(.subheadline).foregroundStyle(.secondary)
-                Text((try? AttributedString(markdown: request, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                     ?? AttributedString(request))
+                Text(MarkdownText.inline(request, scale: 1))
                     .textSelection(.enabled)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
