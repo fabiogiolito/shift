@@ -65,9 +65,8 @@ struct PlanDetailView: View {
                 header(plan, writing: writing)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, TaskDetailView.margin)
-                    // Level with the task list's search field.
-                    .padding(.top, 14)
-                    .padding(.bottom, 8)
+                    // Level with the task list's search field, and as much room under it as over it.
+                    .padding(.vertical, 14)
                     // Opaque, and above the editor: the document draws past its top edge as it scrolls.
                     .background(.background)
                     .overlay(alignment: .bottom) { if scrolled { Divider() } }
