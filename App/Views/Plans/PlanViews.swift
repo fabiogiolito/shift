@@ -52,20 +52,28 @@ struct PlanDetailView: View {
     @State private var text = ""
     @State private var prompting = false
     @State private var approving = false
+    /// The document is scrolled away from its top: the header gets an edge, as the toolbar does.
+    @State private var scrolled = false
 
     var body: some View {
         if let plan = model.plan(planID) {
             let writing = model.isWriting(planID: planID)
             VStack(alignment: .leading, spacing: 0) {
                 header(plan, writing: writing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding([.horizontal, .top], TaskDetailView.margin)
                     .padding(.bottom, 8)
+                    // Opaque, and above the editor: the document draws past its top edge as it scrolls.
+                    .background(.background)
+                    .overlay(alignment: .bottom) { if scrolled { Divider() } }
+                    .zIndex(1)
                 NativeTextViewWrapper(text: $text,
                                       configuration: MarkdownEditorConfiguration(textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12)),
                                       fontName: NSFont.systemFont(ofSize: 0).fontName,
                                       fontSize: (NSFont.preferredFont(forTextStyle: .body).pointSize + 2) * textScale,
                                       documentId: plan.id.uuidString,
                                       isEditable: !writing)
+                    .background { EditorScrollProbe(scrolled: $scrolled) }
             }
             .safeAreaBar(edge: .bottom) {
                 if prompting {
@@ -197,5 +205,52 @@ private struct FormattingShortcuts: ViewModifier {
         case ([.command, .shift], _, 25): return .set(.checklist, in: text, selection: selection)
         default: return nil
         }
+    }
+}
+
+/// Whether the plan's editor is scrolled down. The editor is AppKit's, so its scroll view is found in the window and its
+/// clip view watched.
+private struct EditorScrollProbe: NSViewRepresentable {
+    @Binding var scrolled: Bool
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ probe: Probe, context: Context) {
+        probe.onChange = { value in if scrolled != value { scrolled = value } }
+    }
+
+    final class Probe: NSView {
+        var onChange: (Bool) -> Void = { _ in }
+        private var observer: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // After this pass, once the editor next to it is in the window too.
+            DispatchQueue.main.async { [weak self] in self?.attach() }
+        }
+
+        private func attach() {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            guard let root = window?.contentView, let scroll = Self.editorScrollView(in: root) else { return }
+            let clip = scroll.contentView
+            clip.postsBoundsChangedNotifications = true
+            observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip,
+                                                              queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onChange(clip.bounds.minY + clip.contentInsets.top > 1) }
+            }
+        }
+
+        private static func editorScrollView(in view: NSView) -> NSScrollView? {
+            if let scroll = view as? NSScrollView, let document = scroll.documentView, isEditor(document) { return scroll }
+            return view.subviews.lazy.compactMap(editorScrollView).first
+        }
+
+        /// The engine's text view, `NativeTextView`, is internal to it: known by name.
+        private static func isEditor(_ view: NSView) -> Bool {
+            String(describing: type(of: view)) == "NativeTextView" || view.subviews.contains(where: isEditor)
+        }
+
+        deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
     }
 }
