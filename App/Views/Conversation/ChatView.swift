@@ -34,6 +34,8 @@ struct ChatView: View {
     let project: Project
     @State private var reader: TranscriptReader?
     @State private var turns: [TranscriptTurn] = []
+    /// The log was read once. Until then every prompt would look unanswered.
+    @State private var loaded = false
     /// What the project's folder has checked out, which is what the agent works on.
     @State private var branch: String?
     @State private var confirmingNew = false
@@ -52,13 +54,17 @@ struct ChatView: View {
         let replying = model.replyingChats.contains(project.id)
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                // Lazy, and anchored at the bottom: only the turns in view are built, newest first. A long chat's
+                // replies otherwise took seconds to show.
+                LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(turns) { turn in
                         TurnView(turn: turn, prompts: chat?.prompts.filter { turn.promptIDs.contains($0.id) } ?? [], reader: reader).equatable()
                     }
                     // Sent, and not in the log yet or waiting for the agent to take them.
-                    let shown = Set(turns.flatMap(\.promptIDs))
-                    ForEach(chat?.prompts.filter { !shown.contains($0.id) } ?? []) { PromptBubble(prompt: $0) }
+                    if loaded {
+                        let shown = Set(turns.flatMap(\.promptIDs))
+                        ForEach(chat?.prompts.filter { !shown.contains($0.id) } ?? []) { PromptBubble(prompt: $0) }
+                    }
                     if let error = model.chatErrors[project.id] {
                         Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).textSelection(.enabled)
                     }
@@ -168,6 +174,7 @@ struct ChatView: View {
             if reader == nil { reader = model.chatTranscript(projectID: project.id) }
             repeat {
                 if let new = await reader?.update() { turns = new }
+                loaded = true
                 guard replying else { break }
                 try? await Task.sleep(for: .milliseconds(300))
             } while !Task.isCancelled

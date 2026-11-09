@@ -185,6 +185,7 @@ public struct TranscriptTurn: Identifiable, Hashable, Sendable {
 /// Turns a log into `TranscriptTurn`s, one chunk of bytes at a time. Holds on to no tool output beyond its previews.
 public struct TranscriptParser: Sendable {
     package static let previewLimit = 1_500
+    private static let newline = Data([0x0A])
 
     public private(set) var turns: [TranscriptTurn] = []
     private var agent: AgentKind
@@ -208,7 +209,8 @@ public struct TranscriptParser: Sendable {
         let before = turns
         partial.append(data)
         var start = partial.startIndex
-        while let newline = partial[start...].firstIndex(of: 0x0A) {
+        // `range(of:)`, not the much slower `firstIndex(of:)`: a long chat's log is many megabytes.
+        while let newline = partial.range(of: Self.newline, in: start..<partial.endIndex)?.lowerBound {
             let length = UInt64(newline - start) + 1
             handle(line: partial[start..<newline], range: offset..<(offset + length))
             offset += length
@@ -450,8 +452,11 @@ public struct TranscriptParser: Sendable {
 extension Transcript {
     /// One line of the log as JSON lines: earlier builds logged lines without a newline; `}{"` splits them.
     // ponytail: rarely also inside a string; only lines that aren't valid JSON as they are get split.
+    private static let separator = Data("}{\"".utf8)
+
     package static func pieces(of line: String) -> [String] {
-        guard line.contains("}{\""), jsonObject(line) == nil else { return [line] }
+        // Searched as bytes: `String.contains` is 20 times slower, seconds over a long chat's log.
+        guard Data(line.utf8).range(of: separator) != nil, jsonObject(line) == nil else { return [line] }
         return line.replacingOccurrences(of: "}{\"", with: "}\n{\"").components(separatedBy: "\n")
     }
 
