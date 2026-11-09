@@ -12,8 +12,8 @@ options:
 # Both apps ship the same version and build number. scripts/release.sh bumps them.
 settings:
   base:
-    MARKETING_VERSION: "0.2.13"
-    CURRENT_PROJECT_VERSION: "30"
+    MARKETING_VERSION: "0.2.14"
+    CURRENT_PROJECT_VERSION: "31"
 packages:
   ShiftCore:
     path: Core
