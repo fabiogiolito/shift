@@ -65,6 +65,12 @@ public final class AppModel {
     /// A schedule waiting in the schedule form for the user to check and save: new, or a copy of one being edited.
     /// Set by `/schedule`, the project chat (`shiftctl schedule draft`) and Create Schedule from This; the form clears it.
     public var scheduleDraft: Schedule?
+    /// Every project's plans (docs/specs/plans.md). Changed through the methods in Plans.swift.
+    public internal(set) var plans: [Plan] = []
+    /// Plans whose agent is writing, with what it's doing right now.
+    public internal(set) var planActivity: [Plan.ID: String] = [:]
+    /// Each writing plan's agent run; it may only write to the plan while it's the entry here.
+    @ObservationIgnored var planRuns: [Plan.ID: (id: UUID, task: Task<Void, Never>)] = [:]
     /// Kept by Schedules.swift: see AppState.
     @ObservationIgnored var lastAlive: Date?
     @ObservationIgnored var asleepSince: Date?
@@ -124,6 +130,8 @@ public final class AppModel {
     private let worktreesRoot: URL
     /// Where tasks' builds keep their data (`ShiftPaths.build`).
     private let buildsRoot: URL
+    /// Where plans stored in Shift go (`ShiftPaths.plans`).
+    var plansRoot: URL { worktreesRoot.deletingLastPathComponent().appendingPathComponent("plans") }
     /// What happened to the tasks each chat follows, until its agent has been told.
     @ObservationIgnored private var chatReports: [Project.ID: [String]] = [:]
     /// Where the chats' agents reach `shiftctl`'s server, and which project each one's access is for.
@@ -268,6 +276,7 @@ public final class AppModel {
         }
         nextTaskID = max(state.nextTaskID, (tasks.map(\.id).max() ?? 0) + 1)
         schedules = state.schedules
+        plans = state.plans.filter { plan in projects.contains { $0.id == plan.projectID } }
         lastAlive = state.lastAlive
         asleepSince = state.asleepSince
         wakes = state.wakes
@@ -347,6 +356,9 @@ public final class AppModel {
         for run in running { await run.value }
         runs = [:]
         for id in chatRuns.keys { await cancelChat(id) }
+        let planned = planRuns.values.map(\.task)
+        planRuns.keys.forEach(stopPlan)
+        for run in planned { await run.value }
         await services.servers.stopAll()
         for task in tasks where task.serverPID != nil {
             update(task.id) { $0.serverPID = nil }
@@ -540,6 +552,9 @@ public final class AppModel {
         if let chat = chat(projectID: id) { await services?.store.deleteChatLog(chatID: chat.id) }
         chats.removeAll { $0.projectID == id }
         chatErrors[id] = nil
+        // Their files stay: they may be in the project's folder.
+        for plan in plans where plan.projectID == id { stopPlan(plan.id) }
+        plans.removeAll { $0.projectID == id }
         projects.removeAll { $0.id == id }
         pushStates[id] = nil
         await startBaseServer(id)
@@ -1629,10 +1644,14 @@ public final class AppModel {
 
     /// Sends a message to the project's chat. While the agent replies it goes into the running session as
     /// soon as it can take it, or else into a next turn.
-    /// `/task <prompt>` starts a new task instead.
+    /// `/task <prompt>` starts a new task instead, `/plan <idea>` a plan.
     public func sendChat(projectID: Project.ID, text: String, attachments: [String] = []) {
         if let prompt = Self.command("task", text) {
             createTask(projectID: projectID, prompt: prompt, attachments: attachments)
+            return
+        }
+        if let idea = Self.command("plan", text) {
+            createPlan(projectID: projectID, idea: idea, attachments: attachments)
             return
         }
         // `/schedule` alone opens an empty form; with words, the chat's agent drafts it from them.
@@ -2765,7 +2784,7 @@ public final class AppModel {
                 guard let self else { return }
                 self.savePending = false
                 await services.store.save(AppState(projects: self.projects, tasks: self.tasks,
-                                                   nextTaskID: self.nextTaskID, chats: self.chats, schedules: self.schedules,
+                                                   nextTaskID: self.nextTaskID, chats: self.chats, schedules: self.schedules, plans: self.plans,
                                                    lastAlive: self.lastAlive, asleepSince: self.asleepSince, wakes: self.wakes))
             }
         }

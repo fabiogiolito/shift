@@ -4,13 +4,14 @@ import SwiftUI
 /// Every command a prompt field can offer; each `PromptField` lists the ones its messages handle
 /// (`AppModel.sendPrompt`, `sendChat`, and the New Task field in `TaskListView`).
 enum SlashCommand: String, CaseIterable, Identifiable {
-    case task, tag, schedule
+    case task, plan, tag, schedule
 
     var id: String { rawValue }
 
     var usage: String {
         switch self {
         case .task: "/task <prompt>"
+        case .plan: "/plan <idea>"
         case .tag: "/tag <name>"
         case .schedule: "/schedule"
         }
@@ -19,6 +20,7 @@ enum SlashCommand: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .task: "plus"
+        case .plan: "doc.text"
         case .tag: "tag"
         case .schedule: "calendar"
         }
@@ -27,6 +29,7 @@ enum SlashCommand: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .task: "Start a new task"
+        case .plan: "Write a plan to review before it becomes a task"
         case .tag: "Tag this task"
         case .schedule: "Run a prompt on a schedule"
         }

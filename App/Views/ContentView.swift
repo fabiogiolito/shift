@@ -15,10 +15,11 @@ struct ContentView: View {
     /// The selected project, while its folder can't be found.
     @State private var missingProject: Project?
 
-    /// The project a selected row belongs to: a task's, or a schedule's.
+    /// The project a selected row belongs to: a task's, a schedule's or a plan's.
     private func owner(_ id: TaskItem.ID?) -> Project.ID? {
         guard let id else { return nil }
         return model.task(id)?.projectID ?? model.schedules.first { $0.selectionID == id }?.projectID
+            ?? model.plans.first { $0.id.selectionID == id }?.projectID
     }
 
     var body: some View {
@@ -60,6 +61,8 @@ struct ContentView: View {
                     TaskDetailView(taskID: selectedTask).id(selectedTask)
                 } else if let project, let schedule = model.schedules(in: project.id).first(where: { $0.selectionID == selectedTask }) {
                     ScheduleDetailView(scheduleID: schedule.id, selection: $selectedTask).id(schedule.id)
+                } else if let project, let plan = model.plans(in: project.id).first(where: { $0.id.selectionID == selectedTask }) {
+                    PlanDetailView(planID: plan.id, selection: $selectedTask).id(plan.id)
                 } else {
                     EmptyState("No Task Selected", systemImage: "checklist")
                         // An empty detail column gives the toolbar nothing to anchor, and the task list's

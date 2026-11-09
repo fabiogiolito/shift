@@ -112,7 +112,7 @@ struct ChatView: View {
                     }
                     .padding(.leading, TaskDetailView.margin - 12)
                 }
-                PromptField(placeholder: "Ask or tell the agent anything…", focusOnAppear: true, draftKey: "chat \(project.id)", commands: [.task, .schedule]) {
+                PromptField(placeholder: "Ask or tell the agent anything…", focusOnAppear: true, draftKey: "chat \(project.id)", commands: [.task, .plan, .schedule]) {
                     model.sendChat(projectID: project.id, text: $0, attachments: $1)
                 }
             }

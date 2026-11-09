@@ -20,6 +20,10 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.10.0
+  # The plan editor: Markdown styled as it's typed (App/Views/Plans).
+  MarkdownEngine:
+    url: https://github.com/nodes-app/swift-markdown-engine
+    exactVersion: 0.9.0
 targets:
   Shift:
     type: application
@@ -30,6 +34,8 @@ targets:
       - package: ShiftCore
         product: ShiftProtocol
       - package: Sparkle
+      - package: MarkdownEngine
+        product: MarkdownEngine
     # Merged with the generated Info.plist. xcodegen writes this file on every generate.
     info:
       path: App/Info.plist

@@ -271,6 +271,10 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
     public var tagColors: [String: TagColor] = [:]
     /// A new task's agent tags it from `tagNames`, adding a new one only when none fits.
     public var autoTags = false
+    /// Where new plans are written.
+    public var planStorage: PlanStorage = .shift
+    /// The folder of the repository plans go in, when they go in the repository.
+    public var plansFolder = "plans"
 
     /// The key `tag` is stored under, whatever its case.
     public func tagKey(_ tag: String) -> String? {
@@ -328,6 +332,8 @@ public struct Project: Codable, Identifiable, Hashable, Sendable {
         serversOff = try values.decodeIfPresent(Bool.self, forKey: .serversOff) ?? false
         tagColors = try values.decodeIfPresent([String: TagColor].self, forKey: .tagColors) ?? [:]
         autoTags = try values.decodeIfPresent(Bool.self, forKey: .autoTags) ?? false
+        planStorage = try values.decodeIfPresent(PlanStorage.self, forKey: .planStorage) ?? .shift
+        plansFolder = try values.decodeIfPresent(String.self, forKey: .plansFolder) ?? "plans"
         type = try values.decodeIfPresent(ProjectType.self, forKey: .type)
             ?? (!legacyCommand.isEmpty ? .nativeApp : !serverCommand.isEmpty ? .dynamicWebsite
                 : setupCommand.isEmpty ? .staticWebsite : .other)

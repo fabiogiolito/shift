@@ -3,9 +3,13 @@ import AppKit
 import ShiftCore
 
 extension Schedule {
-    /// What selects it in the task list's selection: negative, and never -1 (the chat). The same on every launch.
+    var selectionID: TaskItem.ID { id.selectionID }
+}
+
+extension UUID {
+    /// What selects a schedule or plan in the task list's selection: negative, and never -1 (the chat). The same on every launch.
     var selectionID: TaskItem.ID {
-        let bytes = id.uuid
+        let bytes = uuid
         let high = [bytes.0, bytes.1, bytes.2, bytes.3, bytes.4, bytes.5, bytes.6].reduce(0) { $0 << 8 | Int($1) }
         return -2 - high
     }

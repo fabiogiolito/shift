@@ -228,6 +228,23 @@ struct ProjectSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            Section {
+                Picker("Store plans", selection: project.planStorage) {
+                    ForEach(PlanStorage.allCases) { Text($0.displayName).tag($0) }
+                }
+                if current.planStorage != .shift {
+                    TextField("Folder", text: project.plansFolder, prompt: Text(verbatim: "plans"))
+                        .fontDesign(.monospaced)
+                        .autocorrectionDisabled()
+                }
+            } header: {
+                Text("Plans")
+            } footer: {
+                Text(current.planStorage.footer)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if let remote = model.pushStates[projectID]?.remote {
                 Section {
                     Toggle("Push task branches to \(remote)", isOn: project.pushTaskBranches)
@@ -248,4 +265,14 @@ struct ProjectSettingsView: View {
 #Preview {
     let model = AppModel.preview()
     return ProjectSettingsView(projectID: model.projects[0].id).environment(model)
+}
+
+private extension PlanStorage {
+    var footer: String {
+        switch self {
+        case .shift: "/plan writes a document for you to review before it becomes a task. Kept by Shift, outside the project, so every branch sees the same plans."
+        case .repository: "Plans are Markdown files in this folder of the project, to commit. An approved plan is committed with its task's work."
+        case .ignored: "Plans are Markdown files in this folder of the project, which Git ignores, so they're never committed."
+        }
+    }
 }

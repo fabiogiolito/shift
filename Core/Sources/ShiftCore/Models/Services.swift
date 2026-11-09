@@ -159,11 +159,13 @@ public struct AgentRequest: Sendable {
     public var chatContext: String
     /// The agent must say what shows this turn's change (`.screenshots`).
     public var screenshots: ScreenshotRequest?
+    /// Replaces the task's or the chat's instructions, e.g. a plan's.
+    public var instructions: String?
 
     public init(prompt: String, sessionID: String? = nil, worktree: URL, environment: [String: String] = [:],
                 permissions: AgentPermissions = .bypass, model: String? = nil, needsDescription: Bool? = nil,
                 description: String? = nil, tags: [String]? = nil, approvals: ApprovalChannel = ApprovalChannel(), chat: Bool = false,
-                chatContext: String = "", screenshots: ScreenshotRequest? = nil) {
+                chatContext: String = "", screenshots: ScreenshotRequest? = nil, instructions: String? = nil) {
         self.prompt = prompt
         self.sessionID = sessionID
         self.worktree = worktree
@@ -177,6 +179,7 @@ public struct AgentRequest: Sendable {
         self.chat = chat
         self.chatContext = chatContext
         self.screenshots = screenshots
+        self.instructions = instructions
     }
 }
 
@@ -324,6 +327,8 @@ public enum ShiftPaths {
     public static let controlScript = root.appendingPathComponent("bin/shiftctl")
     public static let screenshots = root.appendingPathComponent("screenshots")
     public static let builds = root.appendingPathComponent("builds")
+    /// Plans stored in Shift, and approved plans taken out of a repository, by project.
+    public static let plans = root.appendingPathComponent("plans")
     /// SHIFT_HOME of a task's build when Shift opens it, so a build of Shift keeps its own data. Removed with the task.
     public static func build(taskID: Int, root: URL = builds) -> URL { root.appendingPathComponent(String(taskID)) }
 

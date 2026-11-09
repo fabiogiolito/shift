@@ -152,6 +152,8 @@ public struct AppState: Codable, Equatable, Sendable {
     public var chats: [ProjectChat]
     /// Absent in state saved before schedules existed.
     public var schedules: [Schedule]
+    /// Absent in state saved before plans existed.
+    public var plans: [Plan]
     /// When Shift was last seen running, so a run due after it is known to be missed because Shift wasn't.
     public var lastAlive: Date?
     /// Set while the Mac sleeps with Shift running: a run due after it was missed because the Mac was asleep.
@@ -160,12 +162,13 @@ public struct AppState: Codable, Equatable, Sendable {
     public var wakes: [Date]
 
     public init(projects: [Project] = [], tasks: [TaskItem] = [], nextTaskID: Int = 3001, chats: [ProjectChat] = [],
-                schedules: [Schedule] = [], lastAlive: Date? = nil, asleepSince: Date? = nil, wakes: [Date] = []) {
+                schedules: [Schedule] = [], plans: [Plan] = [], lastAlive: Date? = nil, asleepSince: Date? = nil, wakes: [Date] = []) {
         self.projects = projects
         self.tasks = tasks
         self.nextTaskID = nextTaskID
         self.chats = chats
         self.schedules = schedules
+        self.plans = plans
         self.lastAlive = lastAlive
         self.asleepSince = asleepSince
         self.wakes = wakes
@@ -178,6 +181,7 @@ public struct AppState: Codable, Equatable, Sendable {
         nextTaskID = try values.decode(Int.self, forKey: .nextTaskID)
         chats = try values.decodeIfPresent([ProjectChat].self, forKey: .chats) ?? []
         schedules = try values.decodeIfPresent([Schedule].self, forKey: .schedules) ?? []
+        plans = try values.decodeIfPresent([Plan].self, forKey: .plans) ?? []
         lastAlive = try values.decodeIfPresent(Date.self, forKey: .lastAlive)
         asleepSince = try values.decodeIfPresent(Date.self, forKey: .asleepSince)
         wakes = try values.decodeIfPresent([Date].self, forKey: .wakes) ?? []
