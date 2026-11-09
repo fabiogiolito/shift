@@ -894,8 +894,9 @@ struct TaskDetailView: View {
         case .working: "Add instructions…"
         case .needsInput: "Answer…"
         case .blocked: "Give instructions…"
-        case .completed: "Ask for changes…"
-        case .conflict, .merged, .archived: nil
+        // A conflict only matters when merging: work on the branch goes on until then.
+        case .completed, .conflict: "Ask for changes…"
+        case .merged, .archived: nil
         }
     }
 }
