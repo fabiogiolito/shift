@@ -42,6 +42,7 @@ struct ShiftApp: App {
                 delegate.model.addDemoPullRequests()
                 #endif
                 ready = true
+                Analytics.start(model: delegate.model)
                 delegate.applyScreenshotSize()
                 await delegate.openSetupIfNeeded()
             }

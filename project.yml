@@ -45,6 +45,8 @@ targets:
         SUFeedURL: $(SHIFT_FEED_URL)
         SUPublicEDKey: qJaiI+TqlGhpnbTJmAnkUuB5E5NLM/exMMkEyjxGf90=
         SUEnableAutomaticChecks: true
+        # TelemetryDeck app ID for anonymous usage counts (App/Analytics.swift). Empty: nothing is sent.
+        ShiftTelemetryAppID: $(SHIFT_TELEMETRY_APP_ID)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fabiogiolito.shift
@@ -58,6 +60,7 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         # scripts/release.sh overrides it only to test against a local feed.
         SHIFT_FEED_URL: https://raw.githubusercontent.com/fabiogiolito/shift/main/appcast.xml
+        SHIFT_TELEMETRY_APP_ID: ""
       configs:
         # Development builds are a separate app, "Shift Dev", with their own settings and data (~/.shift-dev),
         # so they never touch the tasks of the installed Shift.
