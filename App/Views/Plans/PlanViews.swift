@@ -101,6 +101,7 @@ struct PlanDetailView: View {
                     try? await Task.sleep(for: .seconds(1))
                 } while !Task.isCancelled
             }
+            .modifier(FormattingShortcuts())
             // Edited in another app meanwhile.
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 text = model.planText(planID)
@@ -144,6 +145,57 @@ struct PlanDetailView: View {
             } else if let error = plan.error {
                 Label(error, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red)
             }
+        }
+    }
+}
+
+/// The usual text editor shortcuts, as Markdown, while the plan's editor has the keyboard: ⌘B bold, ⌘I italic, ⇧⌘X
+/// strikethrough, ⌘E code, ⌘K link, ⌥⌘1–3 headings, ⌥⌘0 body text, ⇧⌘7 numbered list, ⇧⌘8 bulleted list,
+/// ⇧⌘9 checklist. Each one undoes with ⌘Z.
+private struct FormattingShortcuts: ViewModifier {
+    @State private var monitor: Any?
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                    // The engine's editor is the only `NativeTextView` in the app.
+                    guard let view = event.window?.firstResponder as? NSTextView, view.isEditable,
+                          String(describing: type(of: view)) == "NativeTextView",
+                          let edit = Self.edit(for: event, text: view.string, selection: view.selectedRange()) else { return event }
+                    // Through the text view, so it's one undo step and the editor restyles and saves as after typing.
+                    if view.shouldChangeText(in: edit.range, replacementString: edit.replacement) {
+                        view.textStorage?.replaceCharacters(in: edit.range, with: edit.replacement)
+                        view.didChangeText()
+                        view.setSelectedRange(edit.selection)
+                    }
+                    return nil
+                }
+            }
+            .onDisappear {
+                if let monitor { NSEvent.removeMonitor(monitor) }
+                monitor = nil
+            }
+    }
+
+    private static func edit(for event: NSEvent, text: String, selection: NSRange) -> MarkdownEdit? {
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        // Digits by key code: with ⇧ their characters are symbols that depend on the layout.
+        switch (flags, key, event.keyCode) {
+        case ([.command], "b", _): return .toggle("**", in: text, selection: selection)
+        case ([.command], "i", _): return .toggle("_", in: text, selection: selection)
+        case ([.command], "e", _): return .toggle("`", in: text, selection: selection)
+        case ([.command], "k", _): return .link(in: text, selection: selection)
+        case ([.command, .shift], "x", _): return .toggle("~~", in: text, selection: selection)
+        case ([.command, .option], _, 29): return .set(.paragraph, in: text, selection: selection)
+        case ([.command, .option], _, 18): return .set(.heading(1), in: text, selection: selection)
+        case ([.command, .option], _, 19): return .set(.heading(2), in: text, selection: selection)
+        case ([.command, .option], _, 20): return .set(.heading(3), in: text, selection: selection)
+        case ([.command, .shift], _, 26): return .set(.numbered, in: text, selection: selection)
+        case ([.command, .shift], _, 28): return .set(.bullet, in: text, selection: selection)
+        case ([.command, .shift], _, 25): return .set(.checklist, in: text, selection: selection)
+        default: return nil
         }
     }
 }
