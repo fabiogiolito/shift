@@ -60,7 +60,7 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         # scripts/release.sh overrides it only to test against a local feed.
         SHIFT_FEED_URL: https://raw.githubusercontent.com/fabiogiolito/shift/main/appcast.xml
-        SHIFT_TELEMETRY_APP_ID: ""
+        SHIFT_TELEMETRY_APP_ID: A521B2DB-056E-40F2-8D7C-24AFD65C877C
       configs:
         # Development builds are a separate app, "Shift Dev", with their own settings and data (~/.shift-dev),
         # so they never touch the tasks of the installed Shift.
