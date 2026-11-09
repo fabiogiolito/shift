@@ -1533,6 +1533,13 @@ public final class AppModel {
             ?? .success(Self.previewDiff(task(taskID)))
     }
 
+    /// What merging the task into its base would change there now, conflicts included.
+    public func loadMergeDiff(taskID: TaskItem.ID) async -> Result<[FileDiff], Error> {
+        guard let task = task(taskID), let project = project(for: task) else { return .success([]) }
+        return await readDiff(taskID) { git, _, base in try await git.mergeDiff(repo: project.repoURL, branch: task.branch, base: base) }
+            ?? .success(Self.previewDiff(task))
+    }
+
     /// Files for the two sides of a changed image, for thumbnails and Quick Look: the worktree's copy after,
     /// and the base's copy before, written to a temporary folder. nil for a side that doesn't exist.
     public func imageVersions(taskID: TaskItem.ID, change: FileChange) async -> (before: URL?, after: URL?) {

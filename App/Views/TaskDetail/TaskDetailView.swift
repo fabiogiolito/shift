@@ -63,7 +63,8 @@ struct TaskDetailView: View {
         if let task = model.task(taskID), let project = model.project(for: task) {
             Group {
                 if showingDiff {
-                    DiffView(taskID: taskID, isSettled: diffSettled, selecting: diffPath).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    DiffView(taskID: taskID, isSettled: diffSettled, selecting: diffPath,
+                             conflicts: conflicts, base: task.base(in: project)).frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(reduceMotion ? .opacity : .move(edge: .trailing))
                 } else {
                     ScrollView {
@@ -78,7 +79,7 @@ struct TaskDetailView: View {
                                 .foregroundStyle(.secondary)
                             }
                             screenshotsRow(task)
-                            if task.status == .completed { changesSection }
+                            if task.status == .completed || task.status == .conflict { changesSection(task.base(in: project)) }
                             if !task.prompts.isEmpty { promptList(task) }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -121,7 +122,7 @@ struct TaskDetailView: View {
                 } while !Task.isCancelled
             }
             .task(id: task.status) {
-                changes = task.status == .completed ? await model.loadChanges(taskID: taskID) : nil
+                changes = task.status == .completed || task.status == .conflict ? await model.loadChanges(taskID: taskID) : nil
                 menu.unchanged = (try? changes?.get())?.files.isEmpty == true
             }
             .task(id: task.status) { conflicts = await model.conflictedFiles(taskID: taskID) }
@@ -218,8 +219,8 @@ struct TaskDetailView: View {
         switch task.status {
         case .conflict:
             VStack(alignment: .leading, spacing: 4) {
-                Text("Its changes conflict with changes made to \(task.base(in: project)) since it started\(conflicts.isEmpty ? "." : ", in:")")
-                ForEach(conflicts, id: \.self) { Text($0).monospaced().textSelection(.enabled) }
+                Text(conflicts.isEmpty ? "Its changes conflict with changes made to \(task.base(in: project)) since it started."
+                     : "Its changes conflict with changes made to \(task.base(in: project)) since it started, in \(conflicts.count) \(conflicts.count == 1 ? "file" : "files")., marked below.")
                 if let line = pullRequestLine { Text(line) }
             }
             .foregroundStyle(.secondary)
@@ -714,7 +715,7 @@ struct TaskDetailView: View {
         }
     }
 
-    @ViewBuilder private var changesSection: some View {
+    @ViewBuilder private func changesSection(_ base: String) -> some View {
         switch changes {
         case .success(let changes) where !changes.files.isEmpty:
             VStack(alignment: .leading, spacing: 8) {
@@ -732,6 +733,7 @@ struct TaskDetailView: View {
                             HStack {
                                 Label(file.path, systemImage: fileSymbol(file.path)).lineLimit(1).truncationMode(.middle)
                                 Spacer()
+                                if conflicts.contains(file.path) { ConflictMark(base: base) }
                                 if file.isBinary { Text("Binary").foregroundStyle(.secondary) }
                                 else if file.kind == .added { Text("Added").foregroundStyle(.green) }
                                 else if file.kind == .deleted { Text("Deleted").foregroundStyle(.red) }
@@ -894,8 +896,9 @@ struct TaskDetailView: View {
         case .working: "Add instructions…"
         case .needsInput: "Answer…"
         case .blocked: "Give instructions…"
-        case .completed: "Ask for changes…"
-        case .conflict, .merged, .archived: nil
+        // A conflict only matters when merging: work on the branch goes on until then.
+        case .completed, .conflict: "Ask for changes…"
+        case .merged, .archived: nil
         }
     }
 }

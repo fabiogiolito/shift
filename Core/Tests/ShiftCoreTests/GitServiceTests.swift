@@ -354,6 +354,9 @@ final class GitServiceTests: XCTestCase {
         let files = try await service.conflictedFiles(repo: repo, branch: "clash", base: "main")
         XCTAssertEqual(none, [])
         XCTAssertEqual(files, ["a.txt"])
+        let preview = try await service.mergeDiff(repo: repo, branch: "clash", base: "main")
+        XCTAssertEqual(preview.map(\.change.path), ["a.txt"])
+        XCTAssertTrue(preview[0].hunks.flatMap(\.lines).contains { $0.text.hasPrefix("<<<<<<< main") })
         XCTAssertEqual(try snapshot(), before)
 
         let notYet = try await service.isMerged(repo: repo, branch: "clean", base: "main")
