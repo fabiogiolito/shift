@@ -54,6 +54,9 @@ struct PlanDetailView: View {
     @State private var approving = false
     /// The document is scrolled away from its top: the header gets an edge, as the toolbar does.
     @State private var scrolled = false
+    /// The editor is made with the document already in it: text set after it's made counts as an edit, and it
+    /// scrolls to the end.
+    @State private var loaded = false
 
     var body: some View {
         if let plan = model.plan(planID) {
@@ -61,19 +64,25 @@ struct PlanDetailView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header(plan, writing: writing)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding([.horizontal, .top], TaskDetailView.margin)
+                    .padding(.horizontal, TaskDetailView.margin)
+                    // Level with the task list's search field.
+                    .padding(.top, 14)
                     .padding(.bottom, 8)
                     // Opaque, and above the editor: the document draws past its top edge as it scrolls.
                     .background(.background)
                     .overlay(alignment: .bottom) { if scrolled { Divider() } }
                     .zIndex(1)
-                NativeTextViewWrapper(text: $text,
-                                      configuration: MarkdownEditorConfiguration(textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12)),
-                                      fontName: NSFont.systemFont(ofSize: 0).fontName,
-                                      fontSize: (NSFont.preferredFont(forTextStyle: .body).pointSize + 2) * textScale,
-                                      documentId: plan.id.uuidString,
-                                      isEditable: !writing)
-                    .background { EditorScrollProbe(scrolled: $scrolled) }
+                if loaded {
+                    NativeTextViewWrapper(text: $text,
+                                          configuration: MarkdownEditorConfiguration(textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12)),
+                                          fontName: NSFont.systemFont(ofSize: 0).fontName,
+                                          fontSize: (NSFont.preferredFont(forTextStyle: .body).pointSize + 2) * textScale,
+                                          documentId: plan.id.uuidString,
+                                          isEditable: !writing)
+                        .background { EditorScrollProbe(scrolled: $scrolled) }
+                } else {
+                    Spacer()
+                }
             }
             .safeAreaBar(edge: .bottom) {
                 if prompting {
@@ -99,7 +108,10 @@ struct PlanDetailView: View {
                     }
                 }
             }
-            .onAppear { text = model.planText(planID) }
+            .onAppear {
+                text = model.planText(planID)
+                loaded = true
+            }
             .onChange(of: text) { model.savePlanText(planID, text) }
             // What the agent has written so far, while it writes, then all of it.
             .task(id: writing) {
@@ -142,7 +154,6 @@ struct PlanDetailView: View {
                 }
                 Spacer()
             }
-            .controlSize(.large)
             .buttonBorderShape(.roundedRectangle)
             if writing {
                 HStack(spacing: 8) {
