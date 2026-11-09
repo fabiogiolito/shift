@@ -73,7 +73,7 @@ struct PlanDetailView: View {
                     .zIndex(1)
                 if loaded {
                     NativeTextViewWrapper(text: $text,
-                                          configuration: MarkdownEditorConfiguration(textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12)),
+                                          configuration: Self.editorConfiguration,
                                           fontName: NSFont.systemFont(ofSize: 0).fontName,
                                           fontSize: (NSFont.preferredFont(forTextStyle: .body).pointSize + 2) * textScale,
                                           documentId: plan.id.uuidString,
@@ -129,6 +129,21 @@ struct PlanDetailView: View {
             EmptyState("Plan Deleted", systemImage: "doc.text")
         }
     }
+
+    private static let editorConfiguration: MarkdownEditorConfiguration = {
+        var theme = MarkdownEditorTheme.default
+        // `---` is drawn in this with its opacity set to 40%, so it must be opaque: a quarter of the way from the background
+        // to the text, which at 40% is as light as the system's separator lines, in light and dark. Also strikes done
+        // checklist items.
+        theme.strikethroughColor = NSColor(name: nil) { appearance in
+            var color = NSColor.gray
+            appearance.performAsCurrentDrawingAppearance {
+                color = NSColor.textBackgroundColor.blended(withFraction: 0.25, of: .labelColor) ?? .gray
+            }
+            return color
+        }
+        return MarkdownEditorConfiguration(theme: theme, textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12))
+    }()
 
     private func header(_ plan: Plan, writing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 16) {
