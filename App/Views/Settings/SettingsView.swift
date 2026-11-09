@@ -24,6 +24,7 @@ private struct GeneralSettingsView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(OpenInMenu.editorKey) private var editorPath: String?
     @AppStorage(OpenInMenu.terminalKey) private var terminalPath: String?
+    @AppStorage(Analytics.enabledKey) private var shareUsage = true
     private let apps = ExternalApps()
 
     var body: some View {
@@ -51,6 +52,14 @@ private struct GeneralSettingsView: View {
                 Text("Dev servers")
             } footer: {
                 Text("A server is idle while no agent runs on its task and no browser tab is connected to it. A new prompt, or clicking the server's button, starts it again.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Section {
+                Toggle("Share anonymous usage", isOn: $shareUsage)
+            } footer: {
+                Text("Your Shift version and how many projects, tasks, plans and schedules you have. Never names, prompts, code or anything that identifies you.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
