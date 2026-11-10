@@ -60,14 +60,20 @@ struct PromptField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !attachments.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 6) {
-                        ForEach(attachments, id: \.self) { url in
-                            AttachmentChip(url: url) { attachments.removeAll { $0 == url } }
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 6) {
+                            ForEach(attachments, id: \.self) { url in
+                                AttachmentChip(url: url) { attachments.removeAll { $0 == url } }
+                            }
                         }
                     }
+                    .scrollIndicators(.never)
+                    // New attachments go at the end; bring the latest one into view.
+                    .onChange(of: attachments.count) { old, new in
+                        if new > old, let last = attachments.last { withAnimation { proxy.scrollTo(last, anchor: .trailing) } }
+                    }
                 }
-                .scrollIndicators(.never)
             }
             editor
             if externalText == nil { toolbar }

@@ -776,33 +776,39 @@ private struct PromptBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !images.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(images) { image in
-                            Button { viewing = image } label: {
-                                Group {
-                                    if let picture = image.image {
-                                        Image(uiImage: picture).resizable().scaledToFill()
-                                    } else {
-                                        VStack(spacing: 2) {
-                                            Image(systemName: "doc").font(.title3)
-                                            Text(image.file?.name ?? "").font(.caption2).lineLimit(1).padding(.horizontal, 4)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 8) {
+                            ForEach(images) { image in
+                                Button { viewing = image } label: {
+                                    Group {
+                                        if let picture = image.image {
+                                            Image(uiImage: picture).resizable().scaledToFill()
+                                        } else {
+                                            VStack(spacing: 2) {
+                                                Image(systemName: "doc").font(.title3)
+                                                Text(image.file?.name ?? "").font(.caption2).lineLimit(1).padding(.horizontal, 4)
+                                            }
+                                            .foregroundStyle(Color.secondary)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                            .background(.fill.tertiary)
                                         }
-                                        .foregroundStyle(Color.secondary)
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                        .background(.fill.tertiary)
                                     }
+                                    .frame(width: 56, height: 56)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
-                                .frame(width: 56, height: 56)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .accessibilityLabel(image.file?.name ?? "Attached picture")
                             }
-                            .accessibilityLabel(image.file?.name ?? "Attached picture")
                         }
+                        .padding(.horizontal, 4)
                     }
-                    .padding(.horizontal, 4)
+                    .scrollIndicators(.hidden)
+                    .padding(.top, 3)
+                    // New pictures go at the end; bring the latest one into view.
+                    .onChange(of: images.count) { old, new in
+                        if new > old, let last = images.last { withAnimation { proxy.scrollTo(last.id, anchor: .trailing) } }
+                    }
                 }
-                .scrollIndicators(.hidden)
-                .padding(.top, 3)
             }
             if let accessory {
                 // The text has the full width here: leave the expand button room at its end.
