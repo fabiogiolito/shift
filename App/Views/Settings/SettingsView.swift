@@ -25,6 +25,7 @@ private struct GeneralSettingsView: View {
     @AppStorage(OpenInMenu.editorKey) private var editorPath: String?
     @AppStorage(OpenInMenu.terminalKey) private var terminalPath: String?
     @AppStorage(Analytics.enabledKey) private var shareUsage = true
+    @AppStorage(ProjectsSidebar.sortByRecentKey) private var sortProjectsByRecent = false
     private let apps = ExternalApps()
 
     var body: some View {
@@ -38,6 +39,17 @@ private struct GeneralSettingsView: View {
                 Text("Open in")
             } footer: {
                 Text("Shown first in Open in, and opened with ⇧⌘E and ⇧⌘T.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Section {
+                Picker("Sort projects", selection: $sortProjectsByRecent) {
+                    Text("Manually").tag(false)
+                    Text("Recently updated").tag(true)
+                }
+            } footer: {
+                Text("Recently updated puts first the project whose tasks were last created, prompted, worked on or merged.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
