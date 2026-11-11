@@ -40,7 +40,9 @@ struct ResponsePanel: View {
                     trailingActions
                 }
                 if let resetsAt = model.limitResetsAt(taskID: task.id) { limitReset(resetsAt) }
-                if hasChoices {
+                // Nothing reaches a signed-out agent: Sign In is the way on.
+                if task.isSignedOut {
+                } else if hasChoices {
                     choices
                 } else {
                     PromptField(placeholder: placeholder, focusOnAppear: true, draftKey: "task \(task.id)", commands: [.tag]) { model.sendPrompt(taskID: task.id, text: $0, attachments: $1) }
@@ -72,11 +74,8 @@ struct ResponsePanel: View {
 
     /// Long reasons (e.g. tool output) keep their first line as the message and the rest as detail under it.
     private var message: some View {
-        var text = task.approvalRequest ?? task.question ?? task.blockedReason ?? ""
-        // The agent's own error under it, as detail.
-        if task.isSignedOut {
-            text = "Sign in again and this task continues where it stopped.\n" + text
-        }
+        let text = task.isSignedOut ? "Sign in again and this task continues where it stopped."
+            : task.approvalRequest ?? task.question ?? task.blockedReason ?? ""
         let lines = text.split(separator: "\n", maxSplits: 1).map(String.init)
         let first = lines.first ?? text
         return VStack(alignment: .leading, spacing: 4) {

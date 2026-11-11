@@ -33,6 +33,15 @@ struct ShiftApp: App {
             .sheet(isPresented: Bindable(delegate.setupFlow).isPresented) {
                 SetupSheet().environment(delegate.setupFlow)
             }
+            // An agent signed out: straight to signing it in again, unless the sheet is already up. Closed again when
+            // its tasks carry on without it (signed in elsewhere).
+            .onChange(of: delegate.model.tasks.first(where: \.isSignedOut)?.agent, initial: true) { _, agent in
+                let flow = delegate.setupFlow
+                if let agent, !flow.isPresented { flow.signInAgain(agent) }
+                if agent == nil, flow.isPresented, flow.page == .step(.signInAgain), flow.state(.signInAgain) == .notDone {
+                    flow.isPresented = false
+                }
+            }
             .task {
                 #if DEBUG
                 if ProcessInfo.processInfo.environment["SHIFT_PREVIEW"] == nil { await DemoProject.seed() }

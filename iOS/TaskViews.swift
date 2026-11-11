@@ -671,12 +671,15 @@ private struct ResponsePanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(task.isSignedOut ? "Signed out. Sign in again on your Mac; the task continues by itself."
+                    Text(task.isSignedOut ? TaskItem.signedOutReason(task.agent)
                          : task.status == .blocked ? "Couldn't continue" : "The agent needs a decision")
                         .font(.subheadline).foregroundStyle(.secondary)
-                    MarkdownText(text: task.question ?? task.blockedReason ?? "")
+                    MarkdownText(text: task.isSignedOut ? "Sign in again on your Mac, and this task continues where it stopped."
+                                 : task.question ?? task.blockedReason ?? "")
                 }
-                if options.isEmpty {
+                if task.isSignedOut {
+                    // Nothing reaches a signed-out agent.
+                } else if options.isEmpty {
                     answerField
                 } else {
                     VStack(alignment: .leading, spacing: 0) {

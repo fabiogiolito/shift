@@ -765,7 +765,9 @@ public final class AppModel {
         guard services != nil, let task = task(taskID), task.canResume, !busy.contains(taskID),
               runs[taskID]?.active != true else { return }
         beginWorking(taskID)
-        startRun(taskID, prompt: Self.resumePrompt(task))
+        // After a sign-in failure the run answers the last prompt, which it sends again: listed under it.
+        startRun(taskID, prompt: Self.resumePrompt(task),
+                 promptIDs: task.isSignedOut ? task.prompts.last.map { [$0.id] } ?? [] : [])
     }
 
     /// "Continue the task.", except after a sign-in failure: the last prompt may never have reached the agent, so it's
@@ -2452,7 +2454,7 @@ public final class AppModel {
         task.summary = settled.summary ?? task.summary
         task.question = settled.question
         task.approvalRequest = nil
-        task.blockedReason = settled.blockedReason
+        task.blockedReason = settled.blockedReason.map { OutcomeProtocol.isSignedOut($0) ? TaskItem.signedOutReason(task.agent) : $0 }
         task.options = settled.options
         task.activity = nil
         task.isResolvingConflict = false
