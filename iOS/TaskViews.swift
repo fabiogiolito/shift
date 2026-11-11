@@ -1544,7 +1544,18 @@ private struct TurnView: View {
             if let note = turn.note { Label(note, systemImage: "info.circle").font(.footnote).foregroundStyle(.secondary) }
             ForEach(prompts) { PromptBubble(prompt: $0) }
             if let text = turn.text { Text(text).font(.footnote).foregroundStyle(.secondary).lineLimit(3) }
-            ForEach(turn.sections) { SectionView(section: $0) }
+            if let done = turn.answer {
+                // Done: the work folds away under one line, leaving the answer.
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 12) { ForEach(done.work) { SectionView(section: $0) } }
+                        .padding(.top, 12)
+                } label: {
+                    Text(TranscriptTurn.summary(of: done.work)).font(.footnote).foregroundStyle(.secondary)
+                }
+                SectionView(section: done.answer)
+            } else {
+                ForEach(turn.sections) { SectionView(section: $0) }
+            }
         }
     }
 }

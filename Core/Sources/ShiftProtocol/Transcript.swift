@@ -147,6 +147,25 @@ public struct TranscriptTurn: Identifiable, Hashable, Sendable {
     public var text: String?
     public var note: String?
     public var blocks: [TranscriptBlock] = []
+    /// The agent's run ended, and nothing came after.
+    public var isFinished = false
+
+    /// A finished turn that ends on a message, as the work that led to it and that answer. nil while running, when it
+    /// ends otherwise (an error, an approval), or when there's only one section of work to fold away.
+    public var answer: (work: [TranscriptSection], answer: TranscriptSection)? {
+        guard isFinished else { return nil }
+        var sections = self.sections
+        guard case .message = sections.last, let answer = sections.popLast(), sections.count > 1 else { return nil }
+        return (sections, answer)
+    }
+
+    /// Say "Ran 6 commands, read 2 files" for the work before an answer.
+    public static func summary(of work: [TranscriptSection]) -> String {
+        let steps = work.flatMap { section -> [TranscriptStep] in
+            if case .steps(_, let steps) = section { steps } else { [] }
+        }
+        return steps.isEmpty ? "Worked through it" : TranscriptStep.summary(steps)
+    }
 
     public var sections: [TranscriptSection] {
         var sections: [TranscriptSection] = []
@@ -263,6 +282,7 @@ public struct TranscriptParser: Sendable {
             startTurn()
         }
         turns[turns.count - 1].blocks.append(block)
+        turns[turns.count - 1].isFinished = false
         return turns[turns.count - 1].blocks.count - 1
     }
 
@@ -299,6 +319,10 @@ public struct TranscriptParser: Sendable {
         // A failed run's last message is usually its error too.
         if turns.last?.blocks.last == .message(Transcript.withoutProtocol(text)) { turns[turns.count - 1].blocks.removeLast() }
         _ = append(.error(OutcomeProtocol.short(text)))
+    }
+
+    private mutating func finishTurn() {
+        if !turns.isEmpty { turns[turns.count - 1].isFinished = true }
     }
 
     private mutating func finishStep(_ id: String, output: String, failed: Bool, range: Range<UInt64>) {
@@ -347,7 +371,10 @@ public struct TranscriptParser: Sendable {
             _ = ClaudeStream.parse(line: line, state: &state)
             state.approvals.forEach { _ = append(.approval($0.summary)) }
             if let error = state.error { addError(error) }
-            if event["type"] as? String == "result", !hasMarkers { endedTurn = true }
+            if event["type"] as? String == "result" {
+                finishTurn()
+                if !hasMarkers { endedTurn = true }
+            }
         default:
             break // rate limit events and the like
         }
@@ -412,6 +439,7 @@ public struct TranscriptParser: Sendable {
             }
         case "turn/completed":
             if let error = state.error { addError(error) }
+            finishTurn()
             if !hasMarkers { endedTurn = true }
         case "error":
             // Codex retries many of these by itself; only the last one, if any, is the turn's.
