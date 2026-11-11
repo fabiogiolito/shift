@@ -1071,13 +1071,13 @@ async function run() {
   running = true
   while (shown !== target) {
     const next = shown + 1
-    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]); fill(300); break }
+    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]); fill(300, true); break }
     speed = target > next ? 2.5 : 1
     aim(FOCUS[next])
     if (next === target) fill(DUR[next])
     try { await BEATS[next](); shown = next }
     catch (e) { if (e !== ABORT) throw e; S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]) }
-    if (shown === target) fill(300)
+    if (shown === target) fill(300, true)
   }
   speed = 1
   running = false
@@ -1086,10 +1086,12 @@ async function run() {
 // Step dots: the current step's bar fills over its animation's length, measured at normal speed
 // ponytail: hand-measured; re-measure if a beat's waits change much
 const DUR = [0, 3940, 4730, 4120, 4120, 4040, 6670, 2560, 6340, 6030], dots = [...$("dots").children]
-function fill(ms) {
+// done: finish from wherever the bar is, instead of starting over
+function fill(ms, done) {
   const d = dots[target - 1]
   if (!d) return
-  d.style.setProperty("--d", "0s"); d.style.setProperty("--p", 0); void d.offsetWidth
+  if (done) { d.style.setProperty("--p", getComputedStyle(d, "::after").transform.split(/[(,]/)[1] ?? 1); void d.offsetWidth }
+  else { d.style.setProperty("--d", "0s"); d.style.setProperty("--p", 0); void d.offsetWidth }
   d.style.setProperty("--d", `${ms}ms`); d.style.setProperty("--p", 1)
 }
 // When a step's animation ends, highlight the down arrow; with no click or scroll for 5s, go on by itself
