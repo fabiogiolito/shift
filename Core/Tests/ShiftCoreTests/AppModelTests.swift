@@ -1514,6 +1514,8 @@ final class AppModelTests: XCTestCase {
         store.state = AppState(projects: [project], tasks: [other, old], nextTaskID: 2003)
         model = makeModel()
         await model.start()
+        // On launch already, so the task shows its server button.
+        XCTAssertEqual(model.task(2001)?.port, 2003, "2001 is in use and 2002 belongs to the other task")
         await model.restartServer(taskID: 2002)
         await model.restartServer(taskID: 2001)
         await model.flush()
