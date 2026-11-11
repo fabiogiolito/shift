@@ -528,12 +528,14 @@ public final class AppModel {
             + "To build on that work, continue in that task, or merge it first."
     }
 
-    public func moveProjects(from source: IndexSet, to destination: Int) {
+    /// Indexes are into `shown`, the order the sidebar displays (the saved order by default), which becomes the saved order.
+    public func moveProjects(from source: IndexSet, to destination: Int, shown: [Project]? = nil) {
         guard services != nil else { return }
+        let projects = shown ?? self.projects
         let moved = source.map { projects[$0] }
         var rest = projects.indices.filter { !source.contains($0) }.map { projects[$0] }
         rest.insert(contentsOf: moved, at: destination - source.count(in: 0..<destination))
-        projects = rest
+        self.projects = rest
         changed()
     }
 

@@ -12,10 +12,13 @@ struct ProjectsSidebar: View {
     @State private var settingsAfterSetup: Project?
     @State private var removingProject: Project?
     @State private var scrolledUnderBar = false
+    @AppStorage(ProjectsSidebar.sortByRecentKey) private var sortByRecent = false
+    static let sortByRecentKey = "sortProjectsByRecent"
+    @State private var sortingDisabledAlert = false
 
     var body: some View {
         List(selection: $selection) {
-            ForEach(model.projects) { project in
+            ForEach(sortedProjects) { project in
                 HStack {
                     Label {
                         VStack(alignment: .leading) {
@@ -54,7 +57,11 @@ struct ProjectsSidebar: View {
                     Button("Remove", role: .destructive) { removingProject = project }
                 }
             }
-            .onMove { model.moveProjects(from: $0, to: $1) }
+            .onMove { source, destination in
+                // Dragging keeps the order on screen as the manual one, so recent sorting is turned off.
+                model.moveProjects(from: source, to: destination, shown: sortedProjects)
+                if sortByRecent { sortByRecent = false; sortingDisabledAlert = true }
+            }
         }
         .listStyle(.sidebar)
         .contentMargins(.top, 8, for: .scrollContent)
@@ -75,6 +82,10 @@ struct ProjectsSidebar: View {
             if !shown, let project = settingsAfterSetup { settingsAfterSetup = nil; settingsProject = project }
         }
         .onReceive(NotificationCenter.default.publisher(for: .addProject)) { _ in addProject() }
+        .alert("Sorting by most recent was disabled", isPresented: $sortingDisabledAlert) {
+        } message: {
+            Text("Projects now keep the order you drag them into. Turn it back on in Settings.")
+        }
         .confirmationDialog("Remove “\(removingProject?.name ?? "")”?",
                             isPresented: Binding(get: { removingProject != nil }, set: { if !$0 { removingProject = nil } }),
                             presenting: removingProject) { project in
@@ -82,6 +93,19 @@ struct ProjectsSidebar: View {
         } message: { _ in
             Text("Its tasks are deleted without merging. The repository itself is not touched.")
         }
+    }
+
+    private var sortedProjects: [Project] {
+        guard sortByRecent else { return model.projects }
+        // Stable sort: projects without tasks keep their manual order, at the bottom.
+        return model.projects.sorted { lastUpdate(of: $0) > lastUpdate(of: $1) }
+    }
+
+    /// When any of the project's tasks was last created, prompted, started working or closed.
+    private func lastUpdate(of project: Project) -> Date {
+        model.tasks(in: project.id).flatMap { task in
+            [task.createdAt, task.workingSince, task.mergedAt, task.prompts.last?.date].compactMap { $0 }
+        }.max() ?? .distantPast
     }
 
     private func subtitle(for project: Project) -> String {
