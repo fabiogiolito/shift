@@ -332,10 +332,6 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 @supports (animation-timeline: view()) {
   .screen h2, .screen .sub, .screen .visual { animation: rise linear both; animation-timeline: view(); animation-range: entry 10% cover 35%; }
 }
-.week { display: flex; justify-content: center; gap: clamp(.5rem, 2vw, 1rem); margin-top: 3.5rem; font-family: var(--mono); font-size: clamp(1rem, 2.3vw, 1.375rem); }
-.week span { display: grid; place-items: center; width: 2.5em; height: 2.5em; border-radius: 50%; border: 1px solid var(--line); color: #555; }
-.week .on { border-color: var(--fg); background: var(--fg); color: var(--bg); }
-.clock { margin-top: 1.5rem; font-family: var(--mono); font-size: clamp(4rem, 12vw, 8.5rem); font-weight: 500; letter-spacing: -.06em; line-height: 1; background: linear-gradient(var(--fg), #3a3a3c); -webkit-background-clip: text; background-clip: text; color: transparent; }
 /* And much more */
 .extras { max-width: 72rem; margin: 0 auto; padding: 8rem 1.5rem 4rem; text-align: center; }
 .bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 3.5rem; text-align: left; }
@@ -345,13 +341,18 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .card h3 { margin-top: auto; padding-top: 1.5rem; font-size: 1.0625rem; font-weight: 500; letter-spacing: -.01em; }
 .card p { margin-top: .25rem; font-size: .9375rem; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
 .ui { display: flex; flex-direction: column; justify-content: center; min-height: 140px; font-size: 13px; }
-.sched { align-items: center; flex: 1; }
-.srow { display: flex; align-items: center; gap: 10px; align-self: stretch; max-width: 22rem; margin: 0 auto; padding: 10px 12px; border-radius: 12px; background: #1c1c1e; }
-.srow b { display: block; font-weight: 500; }
-.srow small { color: var(--muted); font-size: 12px; }
-.sic { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(10,132,255,.18); color: var(--blue); font-size: 15px; }
-.sched .week { margin-top: 1.25rem; font-size: 13px; gap: 8px; }
-.sched .clock { margin-top: .75rem; font-size: clamp(2.75rem, 5vw, 4rem); }
+.plan { align-items: center; gap: 14px; flex: 1; }
+.doc { align-self: stretch; max-width: 24rem; margin: 0 auto; padding: 14px 16px; border-radius: 12px; background: #1c1c1e; }
+.dh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dh b { font-weight: 600; }
+.dh small, .doc li { color: var(--muted); font-size: 12px; }
+.doc ul { margin: 8px 0 0; padding-left: 16px; }
+.doc li { padding: 2px 0; }
+.doc li.hl { color: var(--fg); background: linear-gradient(rgba(255, 214, 10, .16), rgba(255, 214, 10, .16)) no-repeat 0 0 / 100% 100%; border-radius: 3px; }
+.note { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 7px 9px; border-radius: 9px; background: #2c2c2e; font-size: 12px; }
+.av { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; background: #ff9f0a; color: #000; font-size: 10px; font-weight: 600; }
+.conv { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; background: var(--blue); color: #fff; font-weight: 500; }
+.conv svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .ui.menu { flex: none; justify-content: flex-start; min-height: 0; margin-top: .5rem; }
 .menu { align-self: center; width: min(100%, 15rem); padding: 5px; border-radius: 10px; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 12px 30px rgba(0,0,0,.5); }
 .mi { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; }
@@ -544,13 +545,20 @@ body > footer a:hover { color: var(--fg); }
     <h2>And much <span>more.</span></h2>
     <div class="bento">
       <article class="card wide">
-        <div class="ui sched" aria-hidden="true">
-          <div class="srow"><span class="sic">↻</span><div><b>Update dependencies</b><small>Weekdays at 06:00 · Storefront</small></div></div>
-          <div class="week"><span class="on">M</span><span class="on">T</span><span class="on">W</span><span class="on">T</span><span class="on">F</span><span>S</span><span>S</span></div>
-          <div class="clock">06:00</div>
+        <div class="ui plan" aria-hidden="true">
+          <div class="doc">
+            <div class="dh"><b>Dark mode</b><small>Plan · Storefront</small></div>
+            <ul>
+              <li>Follow the system setting, with a toggle in the header</li>
+              <li class="hl">Keep product photos untouched in both themes</li>
+              <li>Remember the choice per device</li>
+            </ul>
+            <div class="note"><span class="av">F</span>Should the toggle live in settings too?</div>
+          </div>
+          <span class="conv">Convert to task<svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
         </div>
-        <h3>Scheduled and recurring tasks</h3>
-        <p>Each run is a new task, ready when you wake up. It even wakes the Mac for it.</p>
+        <h3>Plan first</h3>
+        <p>Collaborate on the spec, then convert it to a task.</p>
       </article>
       <article class="card">
         <div class="ui menu" aria-hidden="true">
