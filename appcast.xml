@@ -410,5 +410,21 @@
 - Shift now sends anonymous usage counts (installs, versions) to help improve the app]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.14/Shift-0.2.14.zip" sparkle:edSignature="3PP9Og/LqEGQKjEmmGVeI2t18DgI5H/i1oNvu+3H1/po38P/2Gglat7xN0fqLlhRWfxP3caiyaFU2R60QNU3Aw==" length="6094884" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.15</title>
+      <pubDate>Wed, 11 Nov 2026 14:29:27 +0000</pubDate>
+      <sparkle:version>32</sparkle:version>
+      <sparkle:shortVersionString>0.2.15</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- When an agent's sign-in expires, its tasks show **Sign In…**, which walks you through signing in again and then resumes them
+- See which files conflict with the base branch, preview what merging would do, and keep working on tasks that have conflicts
+- Long conversations open much faster
+- A finished turn's work folds into one line above its answer
+- Task agents can create plans, tasks and schedules, and these show which task created them
+- Sort projects by most recently updated
+- Inline code in replies, chat and plans has a light background
+- Open tasks show their server button after relaunch, and the attachment strip scrolls to a newly added image]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.15/Shift-0.2.15.zip" sparkle:edSignature="wPKfnUlQB72u6f0JN9YYuxPkqktqSRFoPLcOrtjDLUDUGvohakXsRxacUvw2mSc1JTbZbos2cpAT/IQUnWGQBQ==" length="6147034" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
