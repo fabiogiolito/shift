@@ -556,8 +556,17 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     /// Blocked because it was stopped or interrupted, so `AppModel.resume(taskID:)` can carry on.
     public var canResume: Bool {
         status == .blocked && [Self.interruptedReason, Self.legacyInterruptedReason, Self.stoppedReason].contains(blockedReason)
-            || isUsageLimited
+            || isUsageLimited || isSignedOut
     }
+
+    /// Blocked because the agent's login expired or it was signed out. Saved as `signedOutReason`; the agent's own
+    /// wording is matched too, for tasks saved before.
+    public var isSignedOut: Bool {
+        status == .blocked && blockedReason.map { $0 == Self.signedOutReason(agent) || OutcomeProtocol.isSignedOut($0) } == true
+    }
+
+    /// In place of the agent's own error, which tells you to run a command: Shift signs it in.
+    public static func signedOutReason(_ agent: AgentKind) -> String { "Signed out of \(agent.displayName)" }
 
     /// Blocked because the agent's subscription limit was reached ("You've hit your usage limit…").
     // ponytail: matched on the agent's wording; an agent-written reason with these words also counts.

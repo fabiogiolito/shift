@@ -318,6 +318,7 @@ public struct TranscriptParser: Sendable {
         if OutcomeProtocol.isNetworkFailure(text) { return }
         // A failed run's last message is usually its error too.
         if turns.last?.blocks.last == .message(Transcript.withoutProtocol(text)) { turns[turns.count - 1].blocks.removeLast() }
+        let text = OutcomeProtocol.isSignedOut(text) ? TaskItem.signedOutReason(agent) : text
         _ = append(.error(OutcomeProtocol.short(text)))
     }
 

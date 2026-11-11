@@ -9,6 +9,8 @@ enum SetupStep: String, CaseIterable, Identifiable {
     case folderAccess, packageManager, xcode
     /// From Settings only: for pairing a phone and sharing servers.
     case tailscale
+    /// When an agent's login expired and tasks stopped: `SetupFlow.signInAgain`.
+    case signInAgain
 
     static let firstLaunch: [SetupStep] = [.commandLineTools, .node, .agent, .signIn, .gitIdentity, .github, .notifications]
     static let projectSteps: [SetupStep] = [.folderAccess, .packageManager, .xcode]
@@ -20,6 +22,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .commandLineTools: "Command Line Tools"
         case .agent: "Choose your agent"
         case .signIn: "Sign in"
+        case .signInAgain: "Sign in again"
         case .gitIdentity: "Your name for commits"
         case .github: "Connect GitHub"
         case .notifications: "Know when a task needs you"
@@ -36,6 +39,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .commandLineTools: "terminal"
         case .agent: "sparkles"
         case .signIn: "person.crop.circle"
+        case .signInAgain: "person.crop.circle.badge.exclamationmark"
         case .gitIdentity: "signature"
         case .github: "arrow.triangle.pull"
         case .notifications: "bell.badge"
@@ -52,6 +56,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
         case .commandLineTools: "Apple's developer tools, including Git. Shift needs them for every project."
         case .agent: "The coding agent that works on your tasks. Choose one or both."
         case .signIn: "Each agent needs your account. Signing in opens Terminal."
+        case .signInAgain: "The agent's login expired, so its tasks stopped. Signing in opens Terminal."
         case .gitIdentity: "Every commit is signed with a name and email."
         case .github: "Lets Shift open pull requests, follow them, and push your branches."
         case .notifications: "Shift tells you when a task is ready for review or waiting on an answer, so you don't have to keep checking. macOS will ask you to allow it."
@@ -65,7 +70,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
 
     var actionTitle: String {
         switch self {
-        case .signIn: "Sign In"
+        case .signIn, .signInAgain: "Sign In"
         case .gitIdentity: "Save"
         case .github: "Connect GitHub"
         case .notifications: "Allow Notifications"
@@ -77,7 +82,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
 
     var workingTitle: String {
         switch self {
-        case .signIn: "Waiting for sign-in…"
+        case .signIn, .signInAgain: "Waiting for sign-in…"
         case .gitIdentity: "Saving…"
         case .github, .tailscale: "Connecting…"
         case .notifications, .folderAccess: "Waiting for your answer…"
@@ -87,7 +92,7 @@ enum SetupStep: String, CaseIterable, Identifiable {
 
     var doneTitle: String {
         switch self {
-        case .signIn: "Signed in"
+        case .signIn, .signInAgain: "Signed in"
         case .gitIdentity: "Saved"
         case .github, .tailscale: "Connected"
         case .notifications, .folderAccess: "Allowed"
@@ -180,6 +185,16 @@ final class SetupFlow {
 
     // MARK: Opening
 
+    /// The agent whose login expired, for `.signInAgain`.
+    private(set) var signedOutAgent: AgentKind = .claudeCode
+
+    /// Signs `agent` in again, then continues its tasks that stopped for it.
+    func signInAgain(_ agent: AgentKind) {
+        signedOutAgent = agent
+        if states[.signInAgain] != .working { states[.signInAgain] = .notDone }
+        start([.signInAgain])
+    }
+
     func startFirstLaunch() {
         start(SetupStep.firstLaunch.filter { state($0) != .done }, endsReady: true)
     }
@@ -195,6 +210,7 @@ final class SetupFlow {
     /// The step's title and summary as shown, with this project's details.
     func title(_ step: SetupStep) -> String {
         switch step {
+        case .signInAgain: "Sign in to \(signedOutAgent.displayName) again"
         case .packageManager: "This project needs \(packageManager)"
         case .folderAccess: "Let Shift work in \(protectedFolder.map(MacSetup.displayName(ofProtected:)) ?? "this folder")"
         default: step.title
@@ -203,6 +219,8 @@ final class SetupFlow {
 
     func summary(_ step: SetupStep) -> String {
         switch step {
+        case .signInAgain:
+            "Your \(signedOutAgent.displayName) login expired, so its tasks stopped. Sign in in Terminal, and they'll continue where they left off."
         case .packageManager: "It installs its packages with \(packageManager), which Node.js doesn't include."
         case .folderAccess:
             "macOS asks before an app reads your \(protectedFolder.map(MacSetup.displayName(ofProtected:)) ?? "folder"). The agents, Git and dev servers all run as Shift, so they can't work on this project without it."
@@ -352,6 +370,10 @@ final class SetupFlow {
             guard let protectedFolder else { return }
             try await MacSetup.allowAccess(to: protectedFolder)
             allowedFolders.insert(protectedFolder.path)
+        case .signInAgain:
+            let agent = signedOutAgent
+            try await MacSetup.signIn(agent)
+            for task in model.tasks where task.isSignedOut && task.agent == agent { model.resume(taskID: task.id) }
         case .agent, .signIn, .notifications: break
         }
     }

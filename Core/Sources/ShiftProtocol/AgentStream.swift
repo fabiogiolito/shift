@@ -12,6 +12,13 @@ package enum OutcomeProtocol {
 
     /// The agent's error is a lost or failed connection to its API, which passes once the internet is back.
     // ponytail: matched on the CLIs' wording; an agent-written reason with these words also counts.
+    /// The agent's login expired or it was signed out ("Failed to authenticate", "Not logged in · Please run /login").
+    // ponytail: matched on the agents' wording.
+    package static func isSignedOut(_ error: String) -> Bool {
+        error.range(of: "failed to authenticate|run /login|not logged in|auth login|codex login|oauth token (has )?expired|invalid api key",
+                    options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     package static func isNetworkFailure(_ error: String) -> Bool {
         error.range(of: #"connection error|connection refused|connection reset|network|timed out|timeout|ECONN|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|EHOSTUNREACH|socket hang up|fetch failed|stream disconnected|error sending request|could not resolve|offline"#,
                     options: [.regularExpression, .caseInsensitive]) != nil

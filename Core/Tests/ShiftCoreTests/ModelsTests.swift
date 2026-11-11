@@ -12,6 +12,21 @@ final class ModelsTests: XCTestCase {
         XCTAssertFalse(TaskStatus.conflict.notifies(from: .conflict))
     }
 
+    func testSignedOutTasksResumeWithTheirLastPrompt() {
+        var task = TaskItem(id: 1, projectID: UUID(), title: "T", agent: .claudeCode, branch: "b", worktreePath: "/w",
+                            prompts: [Prompt(text: "Make it blue")])
+        task.status = .blocked
+        task.blockedReason = "Failed to authenticate: this login reached its time limit and cannot be renewed. Run claude auth login to sign in again"
+        XCTAssertTrue(task.isSignedOut)
+        XCTAssertTrue(task.canResume)
+        XCTAssertEqual(AppModel.resumePrompt(task), "Make it blue", "no session: the prompt never got there")
+        task.sessionID = "s"
+        XCTAssertTrue(AppModel.resumePrompt(task).hasSuffix("Make it blue"))
+        task.blockedReason = "The tests for the authentication middleware fail."
+        XCTAssertFalse(task.isSignedOut)
+        XCTAssertEqual(AppModel.resumePrompt(task), AppModel.continuePrompt)
+    }
+
     func testUnknownStatusDecodesAsClosed() throws {
         let decoded = try JSONDecoder().decode([TaskStatus].self, from: Data(#"["archived", "scheduled", "working"]"#.utf8))
         XCTAssertEqual(decoded, [.archived, .merged, .working])
