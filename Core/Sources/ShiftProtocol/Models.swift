@@ -556,7 +556,15 @@ public struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     /// Blocked because it was stopped or interrupted, so `AppModel.resume(taskID:)` can carry on.
     public var canResume: Bool {
         status == .blocked && [Self.interruptedReason, Self.legacyInterruptedReason, Self.stoppedReason].contains(blockedReason)
-            || isUsageLimited
+            || isUsageLimited || isSignedOut
+    }
+
+    /// Blocked because the agent's login expired or it was signed out ("Failed to authenticate", "Please run /login").
+    // ponytail: matched on the agents' wording, like `isUsageLimited`.
+    public var isSignedOut: Bool {
+        status == .blocked && blockedReason?.range(
+            of: "failed to authenticate|run /login|not logged in|auth login|codex login|oauth token (has )?expired|invalid api key",
+            options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// Blocked because the agent's subscription limit was reached ("You've hit your usage limit…").

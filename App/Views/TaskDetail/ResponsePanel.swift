@@ -4,6 +4,7 @@ import ShiftCore
 /// The bottom bar of a task waiting on the user: what the agent asks, wants to do or couldn't do, and the ways to answer.
 struct ResponsePanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(SetupFlow.self) private var setup
     @Environment(\.textScale) private var textScale
     let task: TaskItem
     /// The tallest the panel gets before its content scrolls.
@@ -58,6 +59,7 @@ struct ResponsePanel: View {
 
     private var label: String {
         if task.approvalRequest != nil { "The agent wants to" }
+        else if task.isSignedOut { "Signed out of \(task.agent.displayName)" }
         else if task.status == .blocked { "Couldn't continue" }
         else { "The agent needs a decision" }
     }
@@ -70,7 +72,11 @@ struct ResponsePanel: View {
 
     /// Long reasons (e.g. tool output) keep their first line as the message and the rest as detail under it.
     private var message: some View {
-        let text = task.approvalRequest ?? task.question ?? task.blockedReason ?? ""
+        var text = task.approvalRequest ?? task.question ?? task.blockedReason ?? ""
+        // The agent's own error under it, as detail.
+        if task.isSignedOut {
+            text = "Sign in again and this task continues where it stopped.\n" + text
+        }
         let lines = text.split(separator: "\n", maxSplits: 1).map(String.init)
         let first = lines.first ?? text
         return VStack(alignment: .leading, spacing: 4) {
@@ -94,6 +100,8 @@ struct ResponsePanel: View {
         if task.approvalRequest != nil {
             Button("Deny") { model.answerApproval(taskID: task.id, allow: false) }.buttonStyle(.glass)
             Button("Allow") { model.answerApproval(taskID: task.id, allow: true) }.buttonStyle(.glassProminent)
+        } else if task.isSignedOut {
+            Button("Sign In…") { setup.signInAgain(task.agent) }.buttonStyle(.glassProminent)
         } else if task.canResume {
             Button("Continue") { model.resume(taskID: task.id) }.buttonStyle(.glassProminent)
         }

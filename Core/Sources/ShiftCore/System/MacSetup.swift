@@ -22,8 +22,14 @@ public enum MacSetup {
 
     public static func isSignedIn(_ agent: AgentKind) async -> Bool {
         switch agent {
-        case .claudeCode: await run(["claude", "auth", "status"]).output.contains(#""loggedIn": true"#)
-        case .codex: await run(["codex", "login", "status"]).output.contains("Logged in")
+        case .claudeCode:
+            // A login past its time limit still says loggedIn.
+            let output = await run(["claude", "auth", "status"]).output
+            guard output.contains(#""loggedIn": true"#) else { return false }
+            guard let expires = output.firstMatch(of: #/"loginExpiresAt":\s*"([^"]+)"/#)?.1,
+                  let date = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(String(expires)) else { return true }
+            return date > .now
+        case .codex: return await run(["codex", "login", "status"]).output.contains("Logged in")
         }
     }
 

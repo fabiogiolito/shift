@@ -259,6 +259,19 @@ public final class AppModel {
         }
     }
 
+    /// Continues the tasks stopped because `agent` (or any agent, if nil) was signed out, once it's signed in again.
+    /// Each at most once every 10 minutes, so a sign-in check that is wrong can't retry them in a loop.
+    public func continueSignedOutTasks(_ agent: AgentKind? = nil) async {
+        let agents = Set(tasks.filter { $0.isSignedOut && (agent == nil || $0.agent == agent) }.map(\.agent))
+        for kind in agents where await MacSetup.isSignedIn(kind) {
+            for task in tasks where task.isSignedOut && task.agent == kind
+                && autoContinued[task.id].map({ $0.timeIntervalSinceNow < -600 }) ?? true {
+                autoContinued[task.id] = .now
+                resume(taskID: task.id)
+            }
+        }
+    }
+
     // MARK: Lifecycle
 
     /// Loads persisted state, detects agents, reconciles with reality (see docs/specs/orchestrator.md).
@@ -322,7 +335,10 @@ public final class AppModel {
         changed()
         startSchedules()
         Task { [weak self] in
-            while (try? await Task.sleep(for: .seconds(30))) != nil, let self { await self.continueLimitedTasks() }
+            while (try? await Task.sleep(for: .seconds(30))) != nil, let self {
+                await self.continueLimitedTasks()
+                await self.continueSignedOutTasks()
+            }
         }
         if let connectivity = services.connectivity {
             Task { [weak self] in
@@ -749,7 +765,15 @@ public final class AppModel {
         guard services != nil, let task = task(taskID), task.canResume, !busy.contains(taskID),
               runs[taskID]?.active != true else { return }
         beginWorking(taskID)
-        startRun(taskID, prompt: Self.continuePrompt)
+        startRun(taskID, prompt: Self.resumePrompt(task))
+    }
+
+    /// "Continue the task.", except after a sign-in failure: the last prompt may never have reached the agent, so it's
+    /// sent again (alone when there's no session yet).
+    nonisolated static func resumePrompt(_ task: TaskItem) -> String {
+        guard task.isSignedOut, let last = task.prompts.last?.agentText else { return continuePrompt }
+        guard task.sessionID != nil else { return last }
+        return continuePrompt + " In case my last message didn't reach you, here it is again:\n\n" + last
     }
 
     public func merge(taskID: TaskItem.ID) async {

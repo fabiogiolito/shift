@@ -671,7 +671,8 @@ private struct ResponsePanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(task.status == .blocked ? "Couldn't continue" : "The agent needs a decision")
+                    Text(task.isSignedOut ? "Signed out. Sign in again on your Mac; the task continues by itself."
+                         : task.status == .blocked ? "Couldn't continue" : "The agent needs a decision")
                         .font(.subheadline).foregroundStyle(.secondary)
                     MarkdownText(text: task.question ?? task.blockedReason ?? "")
                 }
