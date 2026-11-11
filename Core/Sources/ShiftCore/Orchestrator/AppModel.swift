@@ -2755,6 +2755,13 @@ public final class AppModel {
                 Self.apply(Settled(status: .blocked, blockedReason: Self.branchMissingReason(task, project)), to: &$0)
             }
         } else if hasWorktree {
+            // A worktree made without Shift's setup (the demo's tasks, or one from before every task had a server)
+            // has no port, and without one there is no server button to start it.
+            if task.port == nil && !project.isApp {
+                let reserved = Set(tasks.filter { $0.id != id && !$0.status.isClosed }.compactMap(\.port)).union(basePorts.values)
+                let port = await services.ports.allocate(preferred: id, reserved: reserved)
+                update(id) { $0.port = port }
+            }
             // Started once the task is opened: servers for every open task would take a lot of memory.
             dormant.insert(id)
         }
