@@ -305,6 +305,8 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
   .rphone { --pw: var(--rpw); left: calc(50% - var(--pw) / 2); }
   .mac { transition: --z .9s var(--ease), --zx .9s var(--ease), filter .5s; }
   .scene:has(.rphone.on) .mac { filter: blur(5px) brightness(.55); }
+  /* The checkmark step looks at the task list, so the notification drops in above it */
+  .notif { right: auto; left: 230px; }
   .ctrl { right: 12px; bottom: 12px; flex-direction: row; gap: 8px; }
   .ctrl .grp { flex-direction: row; }
   .ctrl .grp button + button { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .08); }
@@ -918,8 +920,8 @@ async function type(field, text) {
 function addAct() { S.acts++; $("acts").outerHTML = actsList(S.acts) }
 
 // On phones the window is zoomed in, panned so window x `f` sits mid-screen (its edges stop 16px inside the screen); "phone" shows it whole, fit to the screen, behind the iPhone
-// Where each step's activity is, in window x: sidebar and list, list, detail, the preview
-const FOCUS = [null, 0, 560, W, W, W, 650, W, "phone", 560]
+// Where each step's activity is, in window x: sidebar and list, list, detail, the preview (step 5 watches the list fill with checkmarks)
+const FOCUS = [null, 0, 560, W, W, 560, 650, W, "phone", 560]
 let fit = 1, fx = null
 function aim(f) {
   fx = f
