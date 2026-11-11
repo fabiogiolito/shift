@@ -298,6 +298,7 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .ctrl #next.flash { background: rgba(120, 120, 125, .9); transition: background .3s; }
 .ctrl #replay.spin svg { animation: spin-back .6s var(--ease); }
 @keyframes spin-back { to { rotate: -360deg; } }
+.dots { display: none; }
 @media (max-width: 639px) {
   .scene { margin-bottom: 60px; }
   /* The phone step: a larger phone, centered, over the window blurred and dimmed */
@@ -309,6 +310,19 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
   .ctrl .grp button + button { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .08); }
   .ctrl button { width: 40px; height: 40px; border-radius: 13px; }
   .ctrl .grp { border-radius: 13px; }
+  /* Captions sit left-aligned in the bottom-left corner, below the window, over the step dots */
+  .heads { display: contents; }
+  .head { z-index: 2; padding-inline: 1.5rem; }
+  .head[data-i="0"] { translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px) - var(--t, 0) * 160px); }
+  .head:not([data-i="0"]) { position: absolute; inset: auto 0 76px; margin-top: 0; text-align: left; }
+  .head:not([data-i="0"]) h3, .head:not([data-i="0"]) p { max-width: 22rem; margin-inline: 0; text-wrap: pretty; }
+  .scene { margin-bottom: 0; }
+  .ctrl { left: 1.5rem; }
+  /* One dot per step; the current one is a bar that fills as its animation plays */
+  .dots { display: flex; gap: 6px; margin-right: auto; }
+  .dots i { position: relative; width: 6px; height: 6px; overflow: hidden; border-radius: 3px; background: #48484a; transition: width .5s var(--ease); }
+  .dots i.on { width: 28px; }
+  .dots i::after { content: ""; position: absolute; inset: 0; background: var(--fg); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); transition: transform var(--d, 0s) linear; }
 }
 
 /* Full-screen sections */
@@ -468,6 +482,7 @@ body > footer a:hover { color: var(--fg); }
         <div class="head" data-i="9"><h3>Schedule recurring tasks</h3><p>Each run starts on time as its own task, even while you sleep.</p></div>
       </div>
       <div class="ctrl" id="ctrl">
+        <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <button id="replay" type="button" aria-label="Replay this step" title="Replay"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
         <div class="grp">
           <button id="prev" type="button" aria-label="Previous step" title="Previous"><svg viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
@@ -1056,15 +1071,28 @@ async function run() {
   running = true
   while (shown !== target) {
     const next = shown + 1
-    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]); break }
+    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]); fill(300, true); break }
     speed = target > next ? 2.5 : 1
     aim(FOCUS[next])
+    if (next === target) fill(DUR[next])
     try { await BEATS[next](); shown = next }
     catch (e) { if (e !== ABORT) throw e; S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]) }
+    if (shown === target) fill(300, true)
   }
   speed = 1
   running = false
   if (shown === target && target > 0) idle()
+}
+// Step dots: the current step's bar fills over its animation's length, measured at normal speed
+// ponytail: hand-measured; re-measure if a beat's waits change much
+const DUR = [0, 3940, 4730, 4120, 4120, 4040, 6670, 2560, 6340, 6030], dots = [...$("dots").children]
+// done: finish from wherever the bar is, instead of starting over
+function fill(ms, done) {
+  const d = dots[target - 1]
+  if (!d) return
+  if (done) { d.style.setProperty("--p", getComputedStyle(d, "::after").transform.split(/[(,]/)[1] ?? 1); void d.offsetWidth }
+  else { d.style.setProperty("--d", "0s"); d.style.setProperty("--p", 0); void d.offsetWidth }
+  d.style.setProperty("--d", `${ms}ms`); d.style.setProperty("--p", 1)
 }
 // When a step's animation ends, highlight the down arrow; with no click or scroll for 5s, go on by itself
 let idleTimer = 0
@@ -1082,10 +1110,13 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
 function layout() {
   const w = scene.clientWidth, h = scene.clientHeight
   // Steps have a shorter heading than the opening, so once upright the window moves up by the difference
-  const lift = Math.max(0, heads[0].offsetHeight - Math.max(...heads.slice(1).map((e) => e.offsetHeight)))
-  fit = Math.min((w - 40) / W, (h + lift - 56) / H, .8)
+  // Phones: the captions sit below the window, so the window gets all the room between the nav and the captions
+  const phone = innerWidth < 640, capH = Math.max(...heads.slice(1).map((e) => e.offsetHeight))
+  const lift = phone ? scene.offsetTop - 72 : Math.max(0, heads[0].offsetHeight - capH)
+  const room = phone ? scene.parentElement.clientHeight - 76 - capH - 24 - 72 : h + lift - 56
+  fit = Math.min((w - 40) / W, room / H / (phone ? 1.5 : 1), .8)
   // Whatever room is left below the window is split, so title and window sit centered together (zoomed in, on phones)
-  const bal = Math.max(0, (h + lift - 56 - H * fit * (innerWidth < 640 ? 1.5 : 1)) / 2)
+  const bal = Math.max(0, (room - H * fit * (phone ? 1.5 : 1)) / 2)
   scene.style.setProperty("--lift", `${lift - bal}px`)
   scene.parentElement.style.setProperty("--bal", `${bal}px`)
   mac.style.setProperty("--w", `${W}px`); mac.style.setProperty("--h", `${H}px`)
@@ -1094,12 +1125,12 @@ function layout() {
   scene.style.setProperty("--mw", `${W * fit * .84}px`)
   scene.style.setProperty("--mw1", `${W * fit}px`)
   // In the opening, center the headline between the nav and the tilted window's top edge
-  const hs = document.querySelector(".heads"), hh = heads[0].offsetHeight
+  const hs = phone ? heads[0] : document.querySelector(".heads"), hh = heads[0].offsetHeight
   scene.parentElement.style.setProperty("--hy", `${Math.max(0, (56 + scene.offsetTop + h * .4) / 2 - (hs.offsetTop + hh / 2))}px`)
   scene.style.setProperty("--pw", `${Math.round(Math.max(130, Math.min(260, W * fit * .28, h * .5)))}px`)
   // On phones the iPhone is as large as fits between its top and the step controls (it is about 2.12 widths tall)
   const phoneTop = scene.offsetTop + h * .04 - (lift - bal)
-  scene.style.setProperty("--rpw", `${Math.round(Math.min(w * .7, (scene.parentElement.clientHeight - 72 - phoneTop) / 2.12))}px`)
+  scene.style.setProperty("--rpw", `${Math.round(Math.min(w * .7, (scene.parentElement.clientHeight - (phone ? 100 + capH : 72) - phoneTop) / 2.12))}px`)
   aim(fx)
   onScroll()
 }
@@ -1115,7 +1146,11 @@ function onScroll() {
   if (over > 0) tags.style.setProperty("--ty", `${(tv.clientHeight / 3 - Math.min(1, Math.max(0, (innerHeight - r.top) / (innerHeight + r.height))) * (over + tv.clientHeight * 2 / 3)).toFixed(1)}px`)
   // Gone just before the story lets go and the next section scrolls in
   $("ctrl").classList.toggle("on", beat > 0 && p < 9.75)
-  if (beat !== target) { stopIdle(); target = beat; run() }
+  if (beat !== target) {
+    stopIdle(); target = beat
+    dots.forEach((d, i) => { d.classList.toggle("on", i === beat - 1); d.style.setProperty("--d", "0s"); d.style.setProperty("--p", 0) })
+    run()
+  }
 }
 
 // Step controls
