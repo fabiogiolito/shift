@@ -179,6 +179,20 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(last.count, 1)
     }
 
+    func testFinishedTurnFoldsItsWorkAwayFromTheAnswer() {
+        let id = UUID()
+        let work = [marker([id]), text("Looking."), bash("t1", "ls"), toolResult("t1", "a"), text("Done: it works.")]
+        let live = turns(work)
+        XCTAssertNil(live[0].answer, "Still running: nothing folds")
+        let ended = turns(work + [result])
+        guard let done = ended[0].answer, case .message(_, let reply) = done.answer else { return XCTFail("Expected an answer") }
+        XCTAssertEqual(reply, "Done: it works.")
+        XCTAssertEqual(done.work.count, 2)
+        XCTAssertEqual(TranscriptTurn.summary(of: done.work), "Ran 1 command")
+        // Ends on an error: shown as it is.
+        XCTAssertNil(turns([marker([id]), text("Looking."), bash("t1", "ls"), toolResult("t1", "a"), #"{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Boom","session_id":"s"}"#])[0].answer)
+    }
+
     func testFailedStepSaysWhy() {
         let turns = turns([bash("t1", "ls images"), toolResult("t1", #"Exit code 1\ntotal 8\nls: images: No such file"#, error: true)])
         guard case .step(let step) = turns[0].blocks[0] else { return XCTFail("Expected a step") }

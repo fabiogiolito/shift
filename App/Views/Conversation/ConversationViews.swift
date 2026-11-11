@@ -24,25 +24,38 @@ struct TurnView: View, Equatable {
                 // Shift's own instructions, not the user's words.
                 Text(text).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
             }
-            ForEach(turn.sections) { section in
-                switch section {
-                case .message(_, let text): MarkdownText(text: text)
-                case .steps(_, let steps): StepsView(steps: steps, reader: reader)
-                case .error(_, let text):
-                    Label(text, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).textSelection(.enabled)
-                case .approval(_, let summary):
-                    Label {
-                        Text(.init("Asked to \(summary)"))
-                    } icon: {
-                        Image(systemName: "hand.raised.fill")
-                    }
-                    .foregroundStyle(.blue).textSelection(.enabled)
+            if let done = turn.answer {
+                // Done: the work folds away under one line, leaving the answer.
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 12) { ForEach(done.work) { sectionView($0) } }
+                        .padding(.top, 12)
+                } label: {
+                    Text(TranscriptTurn.summary(of: done.work)).foregroundStyle(.secondary)
                 }
+                sectionView(done.answer)
+            } else {
+                ForEach(turn.sections) { sectionView($0) }
             }
         }
         .font(.scaled(.body, textScale))
         .lineSpacing(2 * textScale) // Long replies read easier with a little air between lines.
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func sectionView(_ section: TranscriptSection) -> some View {
+        switch section {
+        case .message(_, let text): MarkdownText(text: text)
+        case .steps(_, let steps): StepsView(steps: steps, reader: reader)
+        case .error(_, let text):
+            Label(text, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).textSelection(.enabled)
+        case .approval(_, let summary):
+            Label {
+                Text(.init("Asked to \(summary)"))
+            } icon: {
+                Image(systemName: "hand.raised.fill")
+            }
+            .foregroundStyle(.blue).textSelection(.enabled)
+        }
     }
 }
 
