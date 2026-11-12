@@ -72,6 +72,20 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(turns[1].blocks, [.message("Now the other thing.")])
     }
 
+    func testPromptSentMidRunStartsWhereClaudeEchoesIt() {
+        let first = UUID(), queued = UUID()
+        func echo(_ text: String) -> String {
+            #"{"type":"user","message":{"role":"user","content":"\#(text)"},"parent_tool_use_id":null,"session_id":"s","isReplay":true}"#
+        }
+        let midRun = RunMarker.line(agent: .claudeCode, promptIDs: [queued], midRun: true).trimmingCharacters(in: .newlines)
+        // Sent while the first prompt's work goes on, which stays with the first prompt until Claude takes it in.
+        let turns = turns([marker([first]), claudeInit, echo("first"), bash("t1", "ls"), midRun, toolResult("t1", "a.txt"),
+                           text("Done with the first."), echo("queued"), text("Now the other thing."), result])
+        XCTAssertEqual(turns.map(\.promptIDs), [[first], [queued]])
+        XCTAssertEqual(turns[0].blocks.count, 2)
+        XCTAssertEqual(turns[1].blocks, [.message("Now the other thing.")])
+    }
+
     func testInterruptedRunNeverSaidResult() {
         let first = UUID(), second = UUID()
         let turns = turns([marker([first]), claudeInit, text("Halfway."), bash("t1", "sleep 100"), marker([second]), claudeInit, text("Again."), result])

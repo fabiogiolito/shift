@@ -1939,7 +1939,7 @@ public final class AppModel {
             chatReports[projectID]?.removeFirst()
             if chatReports[projectID]?.isEmpty == true { chatReports[projectID] = nil }
             if let services, let agent = chat.agent {
-                Task { await services.store.appendChatLog(chatID: chat.id, text: RunMarker.line(agent: agent, promptIDs: [], text: report)) }
+                Task { await services.store.appendChatLog(chatID: chat.id, text: RunMarker.line(agent: agent, promptIDs: [], text: report, midRun: true)) }
             }
         }
         for prompt in chat.prompts where prompt.isPending {
@@ -1950,7 +1950,7 @@ public final class AppModel {
 
     private func markChatDelivered(_ projectID: Project.ID, _ prompt: Prompt) {
         guard let services, let chat = chat(projectID: projectID), let agent = chat.agent else { return }
-        Task { await services.store.appendChatLog(chatID: chat.id, text: RunMarker.line(agent: agent, promptIDs: [prompt.id])) }
+        Task { await services.store.appendChatLog(chatID: chat.id, text: RunMarker.line(agent: agent, promptIDs: [prompt.id], midRun: true)) }
         updateChat(projectID) {
             if let index = $0.prompts.firstIndex(where: { $0.id == prompt.id }) { $0.prompts[index].isPending = false }
         }
@@ -2365,7 +2365,7 @@ public final class AppModel {
     /// Prompts that reached the agent in the middle of a run: what it does from here on answers them.
     private func logDelivered(_ id: TaskItem.ID, _ promptIDs: [Prompt.ID]) {
         guard let services, let agent = task(id)?.agent else { return }
-        Task { await services.store.appendLog(taskID: id, text: RunMarker.line(agent: agent, promptIDs: promptIDs)) }
+        Task { await services.store.appendLog(taskID: id, text: RunMarker.line(agent: agent, promptIDs: promptIDs, midRun: true)) }
     }
 
     private func markDelivered(_ id: TaskItem.ID) {

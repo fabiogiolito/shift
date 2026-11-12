@@ -32,7 +32,9 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         // The prompt goes in on stdin as a user message, and stdin stays open for follow-ups: Claude Code
         // takes a user message that arrives mid-turn into that turn, and one that arrives after
         // the turn's result as a new turn before it exits.
-        var arguments = ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+        // Each is echoed as it's taken in, which is where its reply starts (see `RunMarker`).
+        var arguments = ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                         "--replay-user-messages"]
         // The chat's reply arrives as it's written; for tasks the whole messages will do.
         if request.chat { arguments.append("--include-partial-messages") }
         arguments += autonomyArguments(request.permissions)
