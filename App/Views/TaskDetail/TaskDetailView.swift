@@ -104,9 +104,9 @@ struct TaskDetailView: View {
             }
             .toolbar { toolbar(task, project) }
             .background { shortcuts(task, project) }
-            // The latest prompt the agent has opens in place of the one before it; any others opened by hand stay.
-            // A queued prompt waits for delivery, so the work in progress stays visible until then.
-            .onChange(of: task.prompts.last { !$0.isPending }?.id, initial: true) { old, new in
+            // The latest prompt the agent has taken up opens in place of the one before it; any others opened by hand
+            // stay. One sent mid-run waits for the agent to get to it, so the work in progress stays visible until then.
+            .onChange(of: task.prompts.last { prompt in turns.contains { $0.promptIDs.contains(prompt.id) } }?.id, initial: true) { old, new in
                 withAnimation(reduceMotion || old == new ? nil : .snappy(duration: 0.2)) {
                     if let old, old != new { openPrompts.remove(old) }
                     if let new { openPrompts.insert(new) }

@@ -226,7 +226,8 @@ final class AgentAdapterTests: XCTestCase {
 
     func testClaudeArguments() {
         let worktree = URL(fileURLWithPath: "/tmp/wt")
-        let base = ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+        let base = ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                    "--replay-user-messages"]
         let tail = ["--append-system-prompt", OutcomeProtocol.instructions(firstTurn: true)]
         let bypass = base + ["--permission-mode", "bypassPermissions", "--permission-prompts", "none",
                              "--settings", #"{"sandbox":{"enabled":false}}"#] + tail

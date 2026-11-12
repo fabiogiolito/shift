@@ -60,10 +60,15 @@ package enum RunMarker {
 
     /// `text`: Shift's own instructions, for a run no `Prompt` stands for ("Continue the task.").
     /// `note`: something to tell the user at this point in the conversation.
-    package static func line(agent: AgentKind, promptIDs: [Prompt.ID], text: String? = nil, note: String? = nil) -> String {
+    /// `midRun`: sent into a run in progress. Claude Code takes it in only once it's done with what it's doing, and
+    /// says so by echoing it (`--replay-user-messages`): its turn starts there, so the work before stays with the
+    /// prompt before. Codex echoes nothing; its turn starts here.
+    package static func line(agent: AgentKind, promptIDs: [Prompt.ID], text: String? = nil, note: String? = nil,
+                             midRun: Bool = false) -> String {
         var marker: [String: Any] = ["type": type, "agent": agent.rawValue, "prompts": promptIDs.map(\.uuidString)]
         marker["text"] = text
         marker["note"] = note
+        if midRun && agent == .claudeCode { marker["midRun"] = true }
         return jsonLine(marker)
     }
 }
@@ -220,6 +225,10 @@ public struct TranscriptParser: Sendable {
     private var endedTurn = false
     /// Codex: the thread being read. Its subagents' threads report on the same stream.
     private var thread: String?
+    /// Claude Code: mid-run markers whose message it hasn't echoed yet, and the echoes still owed to the
+    /// run's own first message, which come before theirs.
+    private var waiting: [[String: Any]] = []
+    private var owedEchoes = 0
 
     public init(agent: AgentKind) { self.agent = agent }
 
@@ -254,6 +263,13 @@ public struct TranscriptParser: Sendable {
             guard let event = jsonObject(piece) else { continue }
             if event["type"] as? String == RunMarker.type {
                 hasMarkers = true
+                if event["midRun"] as? Bool == true {
+                    waiting.append(event)
+                    continue
+                }
+                // A new run: whatever the last one never took in is gone with it.
+                waiting = []
+                owedEchoes = 1
                 endedTurn = false
                 startTurn(event)
                 continue
@@ -361,7 +377,16 @@ public struct TranscriptParser: Sendable {
                 }
             }
         case "user":
-            // Prompts aren't echoed here (they come from the markers). What is text here is injected by
+            if event["isReplay"] as? Bool == true {
+                if owedEchoes > 0 {
+                    owedEchoes -= 1
+                } else if !waiting.isEmpty {
+                    endedTurn = false
+                    startTurn(waiting.removeFirst())
+                }
+                return
+            }
+            // Prompts are known from the markers, not from here. What is text here is injected by
             // Claude Code ("[Image: original 3200x2000…]", `isSynthetic`), so only tool results count.
             for block in content where block["type"] as? String == "tool_result" {
                 finishStep(block["tool_use_id"] as? String ?? "", output: Transcript.claudeOutput(block),
