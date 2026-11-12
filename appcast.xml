@@ -426,5 +426,15 @@
 - Open tasks show their server button after relaunch, and the attachment strip scrolls to a newly added image]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.15/Shift-0.2.15.zip" sparkle:edSignature="wPKfnUlQB72u6f0JN9YYuxPkqktqSRFoPLcOrtjDLUDUGvohakXsRxacUvw2mSc1JTbZbos2cpAT/IQUnWGQBQ==" length="6147034" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.16</title>
+      <pubDate>Thu, 12 Nov 2026 13:09:15 +0000</pubDate>
+      <sparkle:version>33</sparkle:version>
+      <sparkle:shortVersionString>0.2.16</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- After a crash, Shift offers to report it on the next launch. It opens a GitHub issue with the details already filled in and shows the full crash report in Finder so you can attach it.
+- If a project is missing its dependencies, Shift now installs them before starting the project's main server, so projects cloned without `node_modules` run on main.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.16/Shift-0.2.16.zip" sparkle:edSignature="4X38QEzhjQjRpGGD7tbl7Wv/M2KlUuFHFsRi8mjql1s8Poj2guRQqUWBrBxzbxMErQb6tIWrCP3ySG/GWWOsDg==" length="6164418" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
