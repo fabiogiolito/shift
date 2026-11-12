@@ -36,42 +36,29 @@ private struct GeneralSettingsView: View {
                           options: apps.installedEditors().filter { $0 != .finder }.compactMap(apps.appURL))
                 appPicker("Terminal", selection: $terminalPath, options: apps.installedTerminals())
             } header: {
-                Text("Open in")
+                Text("Preferred apps")
             } footer: {
-                Text("Shown first in Open in, and opened with ⇧⌘E and ⇧⌘T.")
+                Text("Open current task in these apps with ⇧⌘E and ⇧⌘T.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            Section {
+            Section("Preferences") {
                 Picker("Sort projects", selection: $sortProjectsByRecent) {
                     Text("Manually").tag(false)
                     Text("Recently updated").tag(true)
                 }
-            } footer: {
-                Text("Recently updated puts first the project whose tasks were last created, prompted, worked on or merged.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Section {
                 Picker("Stop idle servers after", selection: $model.serverTTL) {
                     ForEach([1, 5, 15, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
                     Divider()
                     Text("Never").tag(0)
                 }
-            } header: {
-                Text("Dev servers")
-            } footer: {
-                Text("A server is idle while no agent runs on its task and no browser tab is connected to it. A new prompt, or clicking the server's button, starts it again.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Section {
                 Toggle("Share anonymous usage", isOn: $shareUsage)
             } footer: {
-                Text("Your Shift version and how many projects, tasks, plans and schedules you have. Never names, prompts, code or anything that identifies you.")
+                Text("Only your app version and counts of projects, tasks, plans and schedules. Never names, prompts, code or anything that identifies you.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
