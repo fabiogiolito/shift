@@ -1067,13 +1067,15 @@ public final class AppModel {
 
         openingBase.insert(projectID)
         defer { openingBase.remove(projectID) }
+        // Installing dependencies first (see `startBaseServer`) takes minutes, not seconds.
+        let installing = project(projectID).flatMap { ProjectSetup.missingInstall(in: $0.repoURL) } != nil
         await startBaseServer(projectID)
         guard let project = project(projectID), let id = baseServerIDs[projectID],
               var port = basePorts[projectID] else { return nil }
         // Up for 3 seconds before it counts: Next.js listens for a second or two before it finds another
-        // dev server running on the folder and quits. Given up on after 30 seconds.
+        // dev server running on the folder and quits. Given up on after 30 seconds, 10 minutes when installing.
         var up = 0, polls = 0, retries = 0
-        while polls < 150 {
+        while polls < (installing ? 3000 : 150) {
             polls += 1
             guard await services.servers.isRunning(taskID: id) else {
                 guard retries < Self.portRetries, await lostPort(id) else { break }
@@ -1134,9 +1136,11 @@ public final class AppModel {
         let reserved = Set(tasks.filter { !$0.status.isClosed }.compactMap(\.port))
             .union(basePorts.filter { $0.key != projectID }.values)
         let port = await services.ports.allocate(preferred: basePorts[projectID] ?? 3000, reserved: reserved)
+        let command = ProjectSetup.serverCommand(for: project, in: project.repoURL)
+        let install = ProjectSetup.missingInstall(in: project.repoURL)
         do {
             baseGroups[projectID] = try await services.servers.start(
-                taskID: id, command: ProjectSetup.serverCommand(for: project, in: project.repoURL),
+                taskID: id, command: install.map { "\($0) && \(command)" } ?? command,
                 directory: project.repoURL, port: port)
             basePorts[projectID] = port
             serverUsed[id] = .now
