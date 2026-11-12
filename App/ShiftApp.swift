@@ -53,6 +53,7 @@ struct ShiftApp: App {
                 ready = true
                 Analytics.start(model: delegate.model)
                 delegate.applyScreenshotSize()
+                CrashReport.offerIfCrashed()
                 await delegate.openSetupIfNeeded()
             }
         }
