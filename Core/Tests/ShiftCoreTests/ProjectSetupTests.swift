@@ -282,4 +282,17 @@ final class ProjectSetupTests: XCTestCase {
         XCTAssertEqual(project.forTask(task(base: "main")), project)
         XCTAssertEqual(project.forTask(task(base: nil)), project)
     }
+
+    /// The base server runs in the repo folder, where no setup command ran: a fresh clone needs an install.
+    func testMissingInstallOnlyWithoutNodeModules() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        XCTAssertNil(ProjectSetup.missingInstall(in: dir))
+        FileManager.default.createFile(atPath: dir.appendingPathComponent("package.json").path, contents: Data("{}".utf8))
+        FileManager.default.createFile(atPath: dir.appendingPathComponent("pnpm-lock.yaml").path, contents: Data())
+        XCTAssertEqual(ProjectSetup.missingInstall(in: dir), "pnpm install")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
+        XCTAssertNil(ProjectSetup.missingInstall(in: dir))
+    }
 }

@@ -306,6 +306,12 @@ enum ProjectSetup {
     static func installStep(for project: Project, in directory: URL) -> String? {
         guard project.serverCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               project.setupCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return missingInstall(in: directory)
+    }
+
+    /// The install a JavaScript project needs before it can run: it has a package.json and no node_modules.
+    /// The base server runs in the repo folder, which no setup command ever touches.
+    static func missingInstall(in directory: URL) -> String? {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         guard files.contains("package.json"), !files.contains("node_modules") else { return nil }
         return "\(lockfiles.first { files.contains($0.0) }?.1 ?? "npm") install"
