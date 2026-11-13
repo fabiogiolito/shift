@@ -1216,6 +1216,27 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.buildLog(taskID: id, target: target).hasSuffix("error: nope\n"))
     }
 
+    func testBaseBranchBuildsInTheProjectFolder() async throws {
+        project.buildCommand = "scripts/build.sh"
+        model.updateProject(project)
+        let app = temp.appendingPathComponent("Spot.app")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        servers.runResult = CommandResult(exitCode: 0, output: app.path + "\n")
+        let target = project.targets[0].id
+        let built = await model.buildBase(projectID: project.id, target: target)
+        XCTAssertEqual(built?.path, app.path)
+        XCTAssertEqual(servers.runs.last?.directory, project.repoURL.path)
+        XCTAssertNil(servers.runs.last?.environment["SHIFT_TASK"])
+        let id = model.baseBuildID(projectID: project.id)
+        XCTAssertLessThan(id, 0)
+        XCTAssertEqual(model.buildState(taskID: id, target: target), .succeeded(app: built))
+
+        servers.runResult = CommandResult(exitCode: 65, output: "error: nope\n")
+        let failed = await model.buildBase(projectID: project.id, target: target)
+        XCTAssertNil(failed)
+        XCTAssertTrue(model.lastError?.hasSuffix("error: nope") == true)
+    }
+
     func testNativeAppWithoutABuildCommandDetectsItWhenBuilding() async throws {
         project.type = .nativeApp
         project.serverCommand = ""
