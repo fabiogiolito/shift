@@ -512,18 +512,20 @@ public final class AppModel {
 
     /// A project added as an empty folder gets Static website and no commands. Once its base has code (a merged
     /// task, the chat's work), it takes the type and commands that code calls for, so its servers run.
+    /// One set to Native app by hand keeps its type and takes the build targets found, so they show in its settings.
     // ponytail: also re-types a project the user set to Static website by hand on a repo with a dev script;
     // a "type chosen by the user" flag if that comes up.
     func adoptDetectedType(_ projectID: Project.ID) async {
         func undetected(_ project: Project) -> Bool {
-            [.staticWebsite, .other].contains(project.type) && project.serverCommand.isEmpty
+            [.staticWebsite, .other, .nativeApp].contains(project.type) && project.serverCommand.isEmpty
                 && project.setupCommand.isEmpty && !project.buildTargets.contains(where: \.hasCommand)
         }
         // Only the base's own files: not a gh-pages site, nor whatever other branch the repo has checked out.
         guard let services, let project = project(projectID), undetected(project), project.baseBranch != Project.staticSiteBranch,
               (try? await services.git.currentBranch(repo: project.repoURL)) == project.baseBranch else { return }
-        let suggested = await ProjectSetup.suggest(repo: project.repoURL, git: services.git, servers: services.servers)
-        guard [.dynamicWebsite, .nativeApp, .electronApp].contains(suggested.type),
+        let forced: ProjectType? = project.type == .nativeApp ? .nativeApp : nil
+        let suggested = await ProjectSetup.suggest(repo: project.repoURL, git: services.git, servers: services.servers, as: forced)
+        guard [.dynamicWebsite, .nativeApp, .electronApp].contains(suggested.type), forced == nil || !suggested.targets.isEmpty,
               var now = self.project(projectID), undetected(now) else { return }
         now.type = suggested.type
         now.serverCommand = suggested.server

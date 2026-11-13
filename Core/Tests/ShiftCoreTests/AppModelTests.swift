@@ -461,6 +461,25 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.project(added.id)?.type, .staticWebsite)
     }
 
+    func testEmptyNativeAppTakesTheBuildTargetItsCodeCallsFor() async throws {
+        let repo = temp.appendingPathComponent("blank-app")
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        let maybeAdded = await model.addProject(at: repo)
+        var added = try XCTUnwrap(maybeAdded)
+        added.type = .nativeApp
+        model.updateProject(added)
+        await model.adoptDetectedType(added.id)
+        XCTAssertEqual(model.project(added.id)?.buildTargets, [], "nothing to build yet")
+
+        // A merged task made the app, with a build script.
+        XCTAssertTrue(FileManager.default.createFile(atPath: repo.appendingPathComponent("build.sh").path, contents: nil,
+                                                    attributes: [.posixPermissions: 0o755]))
+        await model.adoptDetectedType(added.id)
+        let now = try XCTUnwrap(model.project(added.id))
+        XCTAssertEqual(now.type, .nativeApp)
+        XCTAssertEqual(now.buildTargets.map(\.command), ["./build.sh"])
+    }
+
     func testTaskKeepsItsOwnModelAndPermissions() async {
         project.models[project.defaultAgent] = "opus"
         model.updateProject(project)

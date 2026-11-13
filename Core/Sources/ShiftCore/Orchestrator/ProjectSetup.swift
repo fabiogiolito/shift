@@ -4,7 +4,13 @@ import Foundation
 /// ponytail: JavaScript package managers only; add other ecosystems when someone needs them.
 enum ProjectSetup {
     static let envFiles = [".env", ".env.local"]
-    static let buildScript = "scripts/build.sh"
+
+    /// The build script in `directory`, as a command: scripts/build.sh, else build.sh. Nil when neither is executable.
+    static func buildScript(in directory: URL) -> String? {
+        ["scripts/build.sh", "build.sh"]
+            .first { FileManager.default.isExecutableFile(atPath: directory.appendingPathComponent($0).path) }
+            .map { $0.contains("/") ? $0 : "./" + $0 }
+    }
 
     /// lockfile -> package manager, in order of precedence.
     static let lockfiles = [("pnpm-lock.yaml", "pnpm"), ("yarn.lock", "yarn"), ("bun.lockb", "bun"),
@@ -17,12 +23,12 @@ enum ProjectSetup {
     ///   - forced: the type to suggest commands for. Nil: the type the repo looks like.
     ///   - projectYML: contents of the root project.yml, if there is one.
     ///   - schemes: the application schemes of its Xcode project, when it has no project.yml.
-    ///   - hasBuildScript: whether scripts/build.sh is there and executable.
+    ///   - buildScript: the repo's build script, as a command (see `buildScript(in:)`).
     // ponytail: only looks at the repo root; an Electron app in a monorepo package needs Other.
     static func suggest(rootFiles: [String], packageJSON: Data? = nil, tracked: Set<String> = [],
                         as forced: ProjectType? = nil, projectYML: String? = nil, schemes: [DetectedApp] = [],
                         xcodeProject: String? = nil,
-                        hasBuildScript: Bool = false) -> (type: ProjectType, setup: String, server: String, targets: [BuildTarget]) {
+                        buildScript: String? = nil) -> (type: ProjectType, setup: String, server: String, targets: [BuildTarget]) {
         let manager = lockfiles.first { rootFiles.contains($0.0) }?.1
         let runner = manager ?? "npm"
         let copies = envFiles.filter { rootFiles.contains($0) && !tracked.contains($0) }
@@ -62,7 +68,7 @@ enum ProjectSetup {
         case .nativeApp:
             let apps = projectYML.map(applications(projectYML:)) ?? schemes
             return (type, setup, "", targets(apps: apps, xcodeGen: projectYML != nil, xcodeProject: xcodeProject,
-                                             hasBuildScript: hasBuildScript))
+                                             buildScript: buildScript))
         case .other:
             return (type, setup, "", [])
         }
@@ -82,15 +88,15 @@ enum ProjectSetup {
     /// script if it has one, since the script may do more than `xcodebuild` (Shift's patches the generated project).
     /// The script is called with no arguments: what it takes is its own business (Shift's first argument is the
     /// derived data folder). It can read `SHIFT_TARGET` to tell targets apart.
-    static func targets(apps: [DetectedApp], xcodeGen: Bool, xcodeProject: String? = nil, hasBuildScript: Bool) -> [BuildTarget] {
-        var scriptIsFree = hasBuildScript
+    static func targets(apps: [DetectedApp], xcodeGen: Bool, xcodeProject: String? = nil, buildScript: String?) -> [BuildTarget] {
+        var script = buildScript
         var targets = apps.map { app in
-            let useScript = scriptIsFree && app.kind == .macApp
-            if useScript { scriptIsFree = false }
-            let command = useScript ? buildScript : buildCommand(for: app, xcodeGen: xcodeGen, xcodeProject: xcodeProject)
+            let useScript = script != nil && app.kind == .macApp
+            let command = useScript ? script! : buildCommand(for: app, xcodeGen: xcodeGen, xcodeProject: xcodeProject)
+            if useScript { script = nil }
             return BuildTarget(name: app.name, command: command, kind: app.kind, paths: app.paths)
         }
-        if scriptIsFree { targets.insert(BuildTarget(name: "App", command: buildScript), at: 0) }
+        if let script { targets.insert(BuildTarget(name: "App", command: script), at: 0) }
         return targets
     }
 
@@ -107,6 +113,22 @@ enum ProjectSetup {
         // Builds side by side would fail generating the project at once, or rewrite it under each other: one at a
         // time, and skipped when nothing changed.
         return xcodeGen ? "mkdir -p build && /usr/bin/lockf -k build/.xcodegen.lock xcodegen --quiet --use-cache && " + build : build
+    }
+
+    /// For a Swift package with an executable (`Package.swift`'s contents): builds it and wraps it in a .app,
+    /// which a SwiftUI app needs to open as one, then prints that .app. Nil when the package has no executable.
+    // ponytail: reads the first executable by regex; a package with several apps needs its own command.
+    static func swiftPackageCommand(_ package: String) -> String? {
+        guard let match = package.firstMatch(of: #/\.executable(?:Target)?\(\s*name:\s*"([^"]+)"/#) else { return nil }
+        let name = String(match.1)
+        let plist = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict>"
+            + "<key>CFBundleExecutable</key><string>\(name)</string><key>CFBundleName</key><string>\(name)</string>"
+            + "<key>CFBundleIdentifier</key><string>local.shift.\(name.filter { $0.isLetter || $0.isNumber })</string>"
+            + "<key>CFBundlePackageType</key><string>APPL</string><key>NSHighResolutionCapable</key><true/></dict></plist>"
+        let app = #""$PWD/.build/\#(name).app""#
+        return #"swift build && A=\#(app) && rm -rf "$A" && mkdir -p "$A/Contents/MacOS" && "#
+            + #"cp "$(swift build --show-bin-path)/"\#(quoted(name)) "$A/Contents/MacOS/" && "#
+            + #"printf '%s' \#(quoted(plist)) > "$A/Contents/Info.plist" && echo "$A""#
     }
 
     /// A word for the shell.
@@ -265,13 +287,13 @@ enum ProjectSetup {
         }
         let package = FileManager.default.contents(atPath: repo.appendingPathComponent("package.json").path)
         let projectYML = try? String(contentsOf: repo.appendingPathComponent("project.yml"), encoding: .utf8)
-        let hasScript = FileManager.default.isExecutableFile(atPath: repo.appendingPathComponent(buildScript).path)
+        let script = buildScript(in: repo)
         var suggested = suggest(rootFiles: files, packageJSON: package, tracked: tracked, as: forced)
         guard suggested.type == .nativeApp else { return suggested }
         let xcodeProject = projectYML == nil ? files.first { $0.hasSuffix(".xcodeproj") } : nil
         let schemes = if let xcodeProject { await applicationSchemes(project: xcodeProject, repo: repo, servers: servers) } else { [DetectedApp]() }
         suggested = suggest(rootFiles: files, packageJSON: package, tracked: tracked, as: .nativeApp, projectYML: projectYML,
-                            schemes: schemes, xcodeProject: xcodeProject, hasBuildScript: hasScript)
+                            schemes: schemes, xcodeProject: xcodeProject, buildScript: script)
         if suggested.targets.isEmpty {
             suggested.targets = Project(name: "", repoPath: repo.path, baseBranch: "").defaultBuildTargets
         }
@@ -356,16 +378,18 @@ extension Project {
     /// ponytail: that last guess builds the project's default scheme, not a workspace; a CocoaPods app needs its own command.
     public var defaultBuildTargets: [BuildTarget] {
         let files = FileManager.default
-        let script = files.isExecutableFile(atPath: repoURL.appendingPathComponent(ProjectSetup.buildScript).path)
+        let script = ProjectSetup.buildScript(in: repoURL)
         let yml = repoURL.appendingPathComponent("project.yml")
         let hasYML = files.fileExists(atPath: yml.path)
         let apps = ProjectSetup.applications(projectYML: (try? String(contentsOf: yml, encoding: .utf8)) ?? "")
-        let detected = ProjectSetup.targets(apps: apps, xcodeGen: hasYML, hasBuildScript: script)
+        let detected = ProjectSetup.targets(apps: apps, xcodeGen: hasYML, buildScript: script)
         guard detected.isEmpty else { return detected }
         let xcodebuild = #"xcodebuild -configuration Debug SYMROOT="$PWD/build" -quiet && ls -d "$PWD"/build/Debug/*.app | head -1"#
         if hasYML { return [BuildTarget(name: "App", command: "xcodegen -q && " + xcodebuild)] }
         let entries = (try? files.contentsOfDirectory(atPath: repoPath)) ?? []
-        return entries.contains { $0.hasSuffix(".xcodeproj") } ? [BuildTarget(name: "App", command: xcodebuild)] : []
+        if entries.contains(where: { $0.hasSuffix(".xcodeproj") }) { return [BuildTarget(name: "App", command: xcodebuild)] }
+        let package = (try? String(contentsOf: repoURL.appendingPathComponent("Package.swift"), encoding: .utf8)) ?? ""
+        return ProjectSetup.swiftPackageCommand(package).map { [BuildTarget(name: "App", command: $0)] } ?? []
     }
 
     /// The command of the first target guessed from the repo. Empty when there is nothing to guess.
