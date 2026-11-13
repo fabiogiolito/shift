@@ -1121,8 +1121,7 @@ public final class AppModel {
     /// ponytail: serves the repo folder, which shows base only while base is checked out there.
     private func startBaseServer(_ projectID: Project.ID, restart: Bool = false) async {
         guard let services else { return }
-        let id = baseServerIDs[projectID] ?? -(baseServerIDs.count + 1)
-        baseServerIDs[projectID] = id
+        let id = baseBuildID(projectID: projectID)
         guard let project = project(projectID), !project.isApp, !project.serversOff else {
             basePorts[projectID] = nil
             await services.servers.stop(taskID: id)
@@ -1416,18 +1415,57 @@ public final class AppModel {
             builds[key] = .failed("The task's folder is recreated the next time the agent runs.")
             return nil
         }
-        let target = ProjectSetup.resolved(chosen, in: task.worktreeURL)
+        update(taskID) { $0.lastBuiltTargetID = targetID }
+        return await build(chosen, key: key, in: task.worktreeURL, services: services, environment: [
+            "SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath, "SHIFT_TASK": String(taskID)])
+    }
+
+    /// App projects: builds the target in the project's folder, the way its base server serves it, and returns the
+    /// Mac app to open with `baseBuildHome`. Its state is `buildState(taskID: baseBuildID(projectID:), …)`.
+    /// ponytail: builds the repo folder, which is base only while base is checked out there.
+    public func buildBase(projectID: Project.ID, target targetID: BuildTarget.ID) async -> URL? {
+        let key = BuildKey(taskID: baseBuildID(projectID: projectID), targetID: targetID)
+        guard let services, let project = project(projectID), project.isApp, builds[key] != .building,
+              let chosen = project.targets.first(where: { $0.id == targetID }), chosen.kind != .run else { return nil }
+        guard FileManager.default.fileExists(atPath: project.repoPath) else {
+            builds[key] = .failed("The folder for \(project.name) no longer exists: \(project.repoPath)")
+            return nil
+        }
+        let app = await build(chosen, key: key, in: project.repoURL, services: services,
+                              environment: ["SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": project.repoPath])
+        // No task page to show it on: the alert says why, with the end of the output.
+        if case .failed(let reason) = builds[key] {
+            let tail = (buildLogs[key] ?? "").split(whereSeparator: \.isNewline).suffix(8).joined(separator: "\n")
+            lastError = "Building \(chosen.name) on \(project.baseBranch): \(reason)" + (tail.isEmpty ? "" : "\n\n" + tail)
+        }
+        return app
+    }
+
+    /// The ID the project's base server and builds go by, negative so no task has it.
+    public func baseBuildID(projectID: Project.ID) -> Int {
+        if let id = baseServerIDs[projectID] { return id }
+        let id = -(baseServerIDs.count + 1)
+        baseServerIDs[projectID] = id
+        return id
+    }
+
+    /// Where the project's base build keeps its data, apart from Shift's and every task build's.
+    public func baseBuildHome(projectID: Project.ID) -> URL {
+        ShiftPaths.build(taskID: baseBuildID(projectID: projectID))
+    }
+
+    private func build(_ chosen: BuildTarget, key: BuildKey, in folder: URL, services: Services,
+                       environment: [String: String]) async -> URL? {
+        let target = ProjectSetup.resolved(chosen, in: folder)
         let command = target.command
         guard !command.isEmpty else {
             builds[key] = .failed("Nothing to build yet. Add a build command in the project's settings.")
             return nil
         }
         builds[key] = .building
-        update(taskID) { $0.lastBuiltTargetID = targetID }
         let run = Task {
-            try await services.servers.run(command: command, directory: task.worktreeURL, environment: [
-                "SHIFT_REPO": project.repoPath, "SHIFT_WORKTREE": task.worktreePath, "SHIFT_TASK": String(taskID),
-                "SHIFT_TARGET": target.name])
+            try await services.servers.run(command: command, directory: folder,
+                                           environment: environment.merging(["SHIFT_TARGET": target.name]) { $1 })
         }
         buildRuns[key] = run
         let result = await run.result

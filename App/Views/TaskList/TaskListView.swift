@@ -105,6 +105,10 @@ struct TaskListView: View {
                     .help(opening ? "Starting the server for \(project.baseBranch)…" : "Open \(project.baseBranch) in browser")
                 }
             }
+            let buildable = project.targets.filter { $0.kind != .run }
+            if project.isApp && !buildable.isEmpty {
+                ToolbarItem { baseBuildButton(buildable) }
+            }
             if let pushState {
                 ToolbarItem { pushButton(pushState) }
             }
@@ -207,6 +211,39 @@ struct TaskListView: View {
         let plans: [TaskItem.ID] = model.plans(in: project).map(\.id.selectionID)
         let scheduled: [TaskItem.ID] = schedules(model.schedules(in: project)).map(\.selectionID)
         return [ChatRow.id] + open + plans + scheduled + (sections.last?.1.map(\.id) ?? [])
+    }
+
+    /// Builds the base branch's app from the project's folder, like the globe opens a website's base server.
+    /// Several targets: a menu of them. A Mac app opens with data of its own, apart from every task build's.
+    @ViewBuilder private func baseBuildButton(_ targets: [BuildTarget]) -> some View {
+        let id = model.baseBuildID(projectID: project.id)
+        let building = targets.contains { model.buildState(taskID: id, target: $0.id) == .building }
+        let label = Group {
+            if building { ProgressView().controlSize(.small) } else { Image(systemName: "hammer") }
+        }
+        let help = building ? "Building \(project.baseBranch)…" : "Build \(project.baseBranch)"
+        if targets.count == 1, let target = targets.first {
+            Button { buildBase(target) } label: { label }
+                .disabled(building)
+                .help(help)
+                .accessibilityLabel(help)
+        } else {
+            Menu {
+                ForEach(targets) { target in
+                    Button("Build \(target.name)") { buildBase(target) }
+                        .disabled(model.buildState(taskID: id, target: target.id) == .building)
+                }
+            } label: { label }
+            .help(help)
+            .accessibilityLabel(help)
+        }
+    }
+
+    private func buildBase(_ target: BuildTarget) {
+        Task {
+            guard let app = await model.buildBase(projectID: project.id, target: target.id) else { return }
+            await ExternalApps().relaunch(app, environment: ["SHIFT_HOME": model.baseBuildHome(projectID: project.id).path])
+        }
     }
 
     private func pushButton(_ state: AppModel.PushState) -> some View {
