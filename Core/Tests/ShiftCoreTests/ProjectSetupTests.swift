@@ -161,20 +161,42 @@ final class ProjectSetupTests: XCTestCase {
     }
 
     func testBuildScriptBuildsTheFirstMacApp() {
-        let targets = ProjectSetup.targets(apps: ProjectSetup.applications(projectYML: twoApps), xcodeGen: true, hasBuildScript: true)
+        let targets = ProjectSetup.targets(apps: ProjectSetup.applications(projectYML: twoApps), xcodeGen: true, buildScript: "scripts/build.sh")
         XCTAssertEqual(targets[0].command, "scripts/build.sh", "called with nothing: its first argument is its own business")
         XCTAssertEqual(targets[0].paths, ["App/", "Shared/"])
         XCTAssertTrue(targets[1].command.contains("-scheme 'Sample iOS'"))
 
         // Only the script.
-        let alone = ProjectSetup.targets(apps: [], xcodeGen: false, hasBuildScript: true)
+        let alone = ProjectSetup.targets(apps: [], xcodeGen: false, buildScript: "scripts/build.sh")
         XCTAssertEqual(alone.map(\.command), ["scripts/build.sh"])
         XCTAssertEqual(alone.first?.kind, .macApp)
 
         // No Mac app for it to build: still offered, as it would be today.
-        let iOSOnly = ProjectSetup.targets(apps: [.init(name: "Phone", kind: .iOSSimulator)], xcodeGen: true, hasBuildScript: true)
+        let iOSOnly = ProjectSetup.targets(apps: [.init(name: "Phone", kind: .iOSSimulator)], xcodeGen: true, buildScript: "scripts/build.sh")
         XCTAssertEqual(iOSOnly.map(\.name), ["App", "Phone"])
         XCTAssertEqual(iOSOnly.first?.command, "scripts/build.sh")
+    }
+
+    /// An app an agent made from an empty folder: a Swift package, maybe with a build.sh of its own at the root.
+    func testSwiftPackageAppIsBuiltAndWrapped() throws {
+        let repo = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let package = Project(name: "", repoPath: repo.path, baseBranch: "")
+        XCTAssertEqual(package.defaultBuildTargets, [])
+
+        try Data(#"let package = Package(name: "Cut", targets: [.executableTarget(name: "QuickCut", path: "Sources")])"#.utf8)
+            .write(to: repo.appendingPathComponent("Package.swift"))
+        let command = try XCTUnwrap(package.defaultBuildTargets.first?.command)
+        XCTAssertTrue(command.hasPrefix(#"swift build && A="$PWD/.build/QuickCut.app""#))
+        XCTAssertTrue(command.contains(#"cp "$(swift build --show-bin-path)/"'QuickCut' "#))
+        XCTAssertTrue(command.hasSuffix(#"echo "$A""#), "prints the .app last")
+        XCTAssertNil(ProjectSetup.swiftPackageCommand(#".library(name: "Kit", targets: ["Kit"])"#))
+
+        // Its own script wins.
+        XCTAssertTrue(FileManager.default.createFile(atPath: repo.appendingPathComponent("build.sh").path, contents: nil,
+                                                    attributes: [.posixPermissions: 0o755]))
+        XCTAssertEqual(package.defaultBuildTargets.map(\.command), ["./build.sh"])
     }
 
     /// Shift's own repo: a build script, a Mac app and its iOS app, from its real project.yml.
@@ -182,9 +204,9 @@ final class ProjectSetupTests: XCTestCase {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let yml = try String(contentsOf: root.appendingPathComponent("project.yml"), encoding: .utf8)
-        let hasScript = FileManager.default.isExecutableFile(atPath: root.appendingPathComponent("scripts/build.sh").path)
-        XCTAssertTrue(hasScript)
-        let targets = ProjectSetup.suggest(rootFiles: ["project.yml"], projectYML: yml, hasBuildScript: hasScript).targets
+        let script = ProjectSetup.buildScript(in: root)
+        XCTAssertEqual(script, "scripts/build.sh")
+        let targets = ProjectSetup.suggest(rootFiles: ["project.yml"], projectYML: yml, buildScript: script).targets
         XCTAssertEqual(targets.map(\.name), ["Shift", "ShiftMobile"])
         XCTAssertEqual(targets.map(\.kind), [.macApp, .iOSSimulator])
         XCTAssertEqual(targets[0].paths, ["App/"])
