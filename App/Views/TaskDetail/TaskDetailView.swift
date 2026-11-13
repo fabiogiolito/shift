@@ -24,7 +24,7 @@ struct TaskDetailView: View {
     @State private var isMerging = false
     /// For a conflicting task: the files that conflict with its base.
     @State private var conflicts: [String] = []
-    /// Files a re-sync with the base conflicted in, while the user picks what to do.
+    /// Files an update from the base conflicted in, while the user picks what to do.
     @State private var syncConflicts: [String] = []
     @State private var changes: Result<DiffSummary, Error>?
     /// The target the build button offers, with several to choose from. nil until first checked.
@@ -135,7 +135,7 @@ struct TaskDetailView: View {
             } message: {
                 Text("Its own commits move onto \(newBase ?? ""), without what \(task.base(in: project)) has, and Merge puts them there. If they conflict, the agent resolves it.")
             }
-            .confirmationDialog("Re-syncing with \(task.base(in: project)) conflicts",
+            .confirmationDialog("Updating from \(task.base(in: project)) conflicts",
                                 isPresented: Binding(get: { !syncConflicts.isEmpty }, set: { if !$0 { syncConflicts = [] } })) {
                 Button("Fix with Agent") { model.fixSyncConflict(taskID: taskID) }
                 Button("View Diff") { diffPath = syncConflicts.first; showDiff(true) }
@@ -671,7 +671,7 @@ struct TaskDetailView: View {
             Button("New Branch…") { creatingBranch = true }
         }
         .help("The branch this task merges into")
-        Button("Re-sync Base Branch") { Task { syncConflicts = await model.syncBase(taskID: taskID) } }
+        Button("Update from \(base)") { Task { syncConflicts = await model.syncBase(taskID: taskID) } }
             .help("Merge the latest \(base) into this task")
         if let remote = model.pushStates[project.id]?.remote {
             Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }

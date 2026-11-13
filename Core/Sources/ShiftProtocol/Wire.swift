@@ -98,6 +98,14 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     /// The branches a task in the project could merge into.
     case branches(projectID: UUID)
     case changeBase(taskID: Int, to: String)
+    /// Merges the latest of the task's base in. Answered with `.files`: the conflicting ones, nothing changed;
+    /// empty if it worked. A Mac from before these four doesn't know them.
+    case syncBase(taskID: Int)
+    case fixSyncConflict(taskID: Int)
+    /// Pulls the project's base from its remote. Answered with `.files`, as `syncBase`.
+    case pull(projectID: UUID)
+    /// Answered with `.taskID` of the task fixing it.
+    case fixPullConflict(projectID: UUID)
     /// The project's icon as a PNG, as the Mac's sidebar shows it. `.data(nil)` if it has none.
     case projectIcon(projectID: UUID)
     /// Answered with `.taskID` of the run's task. A Mac from before schedules doesn't know these.

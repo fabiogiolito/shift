@@ -71,6 +71,9 @@ struct TaskListView: View {
     let projectID: UUID
     @State private var isCreating = false
     @State private var isOpeningSite = false
+    @State private var isPulling = false
+    /// Files a pull of the base conflicted in, while the user picks what to do.
+    @State private var pullConflicts: [String] = []
     @State private var site: URL?
     @State private var search = ""
     /// Lowercased tag names to show tasks with; empty shows every task.
@@ -123,7 +126,15 @@ struct TaskListView: View {
             // Push, preview and the tag filter act on the project, so they share a capsule; a new task is its own thing.
             ToolbarItemGroup {
                 // As on the Mac: there whenever the project has a remote, the count of commits its merged tasks left to push.
-                if let push = model.state.pushStates?[projectID] {
+                if let push = model.state.pushStates?[projectID], let project {
+                    Button {
+                        isPulling = true
+                        Task { pullConflicts = await model.pull(projectID: projectID); isPulling = false }
+                    } label: {
+                        if isPulling { ProgressView() } else { Image(systemName: "arrow.down") }
+                    }
+                    .disabled(isPulling || push.isPushing)
+                    .accessibilityLabel("Pull \(push.remote)/\(project.baseBranch)")
                     Button { Task { await model.push(projectID: projectID) } } label: {
                         HStack(spacing: 4) {
                             if push.isPushing { ProgressView() } else { Image(systemName: "arrow.up") }
@@ -143,6 +154,14 @@ struct TaskListView: View {
             }
             ToolbarSpacer(.fixed)
             ToolbarItem { Button("New Task", systemImage: "plus") { isCreating = true } }
+        }
+        .confirmationDialog("Pulling \(project?.baseBranch ?? "") conflicts",
+                            isPresented: Binding(get: { !pullConflicts.isEmpty }, set: { if !$0 { pullConflicts = [] } }),
+                            titleVisibility: .visible) {
+            Button("Fix with Agent") { Task { await model.fixPullConflict(projectID: projectID) } }
+            Button("Leave As It Was", role: .cancel) {}
+        } message: {
+            Text("Conflicting files:\n\(pullConflicts.joined(separator: "\n"))\n\nNothing was changed. A new task's agent can merge the remote's \(project?.baseBranch ?? "") and resolve it, then you merge that task.")
         }
         .sheet(isPresented: Binding(get: { site != nil }, set: { if !$0 { site = nil } })) {
             if let site { SafariView(url: site).ignoresSafeArea() }
@@ -1190,6 +1209,7 @@ private struct TaskActions: View {
     @State private var isBusy = false
     @State private var branches: [String] = []
     @State private var newBase: String?
+    @State private var syncConflicts: [String] = []
 
     private var actions: [TaskAction] { model.actions(for: task, in: project, openURL: openURL) }
 
@@ -1206,6 +1226,10 @@ private struct TaskActions: View {
                         Button(action.title, systemImage: action.systemImage) { perform(action) }
                     }
                     Divider()
+                    Button("Update from \(base)", systemImage: "arrow.down") {
+                        isBusy = true
+                        Task { syncConflicts = await model.syncBase(taskID: task.id); isBusy = false }
+                    }
                     // The current base is always offered, so the picker is valid before branches load.
                     Picker("Base Branch", selection: Binding(get: { base }, set: { if $0 != base { newBase = $0 } })) {
                         ForEach(branches.contains(base) ? branches : [base] + branches, id: \.self) { Text($0) }
@@ -1230,6 +1254,14 @@ private struct TaskActions: View {
                 }
             } message: {
                 Text("Its own commits move onto \(newBase ?? ""), without what \(base) has, and Merge puts them there. If they conflict, the agent resolves it.")
+            }
+            .confirmationDialog("Updating from \(base) conflicts",
+                                isPresented: Binding(get: { !syncConflicts.isEmpty }, set: { if !$0 { syncConflicts = [] } }),
+                                titleVisibility: .visible) {
+                Button("Fix with Agent") { Task { await model.fixSyncConflict(taskID: task.id) } }
+                Button("Leave As It Was", role: .cancel) {}
+            } message: {
+                Text("Conflicting files:\n\(syncConflicts.joined(separator: "\n"))\n\nNothing was changed. The agent can merge and resolve it.")
             }
         }
     }

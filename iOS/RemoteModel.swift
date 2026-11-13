@@ -317,6 +317,24 @@ final class RemoteModel {
     func push(projectID: UUID) async { await perform(.push(projectID: projectID)) }
     func resolveConflict(taskID: Int) async { await perform(.resolveConflict(taskID: taskID)) }
     func changeBase(taskID: Int, to base: String) async { await perform(.changeBase(taskID: taskID, to: base)) }
+    func fixSyncConflict(taskID: Int) async { await perform(.fixSyncConflict(taskID: taskID)) }
+
+    /// The files it conflicts in; empty if it worked or failed (that says why).
+    func syncBase(taskID: Int) async -> [String] {
+        guard case .files(let files)? = await perform(.syncBase(taskID: taskID)) else { return [] }
+        return files
+    }
+
+    /// The files it conflicts in; empty if it worked or failed (that says why).
+    func pull(projectID: UUID) async -> [String] {
+        guard case .files(let files)? = await perform(.pull(projectID: projectID)) else { return [] }
+        return files
+    }
+
+    func fixPullConflict(projectID: UUID) async -> Int? {
+        guard case .taskID(let id)? = await perform(.fixPullConflict(projectID: projectID)) else { return nil }
+        return id
+    }
 
     /// The page to open it on, with the branch pushed.
     func pullRequestURL(taskID: Int) async -> URL? {
