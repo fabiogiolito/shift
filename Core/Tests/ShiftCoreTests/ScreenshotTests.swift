@@ -119,10 +119,19 @@ final class ScreenshotTests: XCTestCase {
     func testDisabledAsksNothingAndTakesNothing() async {
         project.takesScreenshots = false
         await startModel()
-        let id = await firstTurn(page: "/", changes: change)
+        let id = await firstTurn(page: nil, changes: change)
         XCTAssertNil(agent.requests[0].screenshots)
         XCTAssertNil(model.task(id)?.screenshots)
         XCTAssertTrue(shots.captured.isEmpty)
+    }
+
+    func testDisabledStillShowsAnImageTheUserAskedFor() async {
+        project.takesScreenshots = false
+        await startModel()
+        let id = await firstTurn(page: "/tmp/settings.png", changes: nil)
+        XCTAssertEqual(shots.captured.map(\.path), ["/tmp/settings.png"])
+        XCTAssertEqual(model.task(id)?.screenshots?.map(\.page), ["settings"])
+        XCTAssertEqual(model.task(id)?.screenshots?.map(\.isBefore), [false])
     }
 
     func testAFailedCaptureDoesNotAffectTheTask() async {
@@ -169,7 +178,8 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertEqual(OutcomeProtocol.parse(finalMessage: "SHIFT_SCREENSHOT: /a\nSHIFT_STATUS: completed\nDone.", exitCode: 0),
                        .completed(summary: "Done."))
         XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, screenshots: .page).contains("SHIFT_SCREENSHOT: <path>"))
-        XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false).contains("SHIFT_SCREENSHOT"))
+        XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false).contains("SHIFT_SCREENSHOT: <absolute path of the image>"))
+        XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false, screenshots: .page).contains("absolute path"))
         XCTAssertTrue(OutcomeProtocol.instructions(firstTurn: false, server: true).contains("shiftctl server"))
         XCTAssertFalse(OutcomeProtocol.instructions(firstTurn: false).contains("shiftctl server"))
     }

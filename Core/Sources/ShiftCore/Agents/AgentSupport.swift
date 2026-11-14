@@ -27,7 +27,7 @@ extension OutcomeProtocol {
         switch screenshots {
         case .page: text += "\n\n" + namePage
         case .app(let wantsBefore): text += "\n\n" + shootApp(wantsBefore: wantsBefore)
-        case nil: break
+        case nil: text += "\n\n" + showOnRequest
         }
         return text
     }
@@ -210,6 +210,18 @@ extension OutcomeProtocol {
     runs once the page has loaded. The screenshot comes 0.2 seconds after the script ends, so wait in the script for \
     animations and data, but not past what is to be shown if it doesn't last. If the script throws, there is no \
     screenshot, so make sure what it selects exists. It can't move to another page: name that page as the path.
+    """
+
+    /// When Shift takes no screenshots of its own: the agent can still show one the user asks for.
+    static let showOnRequest = """
+    Shift shows screenshots on the task. If the user asks for a screenshot or to see how something looks, capture \
+    it as a PNG in a temporary folder outside the repository, named after what it shows, such as `settings.png`, \
+    and write this line, on a line of its own, at the start of your final message, one line per image, at most 4:
+
+    SHIFT_SCREENSHOT: <absolute path of the image>
+
+    Shift then shows it to the user on the task, so don't save it anywhere else, such as the Desktop, or open it. \
+    Don't take screenshots nobody asked for.
     """
 
     static func shootApp(wantsBefore: Bool) -> String {

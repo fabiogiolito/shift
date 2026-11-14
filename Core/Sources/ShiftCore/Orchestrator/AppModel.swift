@@ -2191,6 +2191,8 @@ public final class AppModel {
         var prompt = prompt, promptIDs = promptIDs, blips = 0
         while true {
             var shots = await screenshotTurn(id)
+            // Without screenshots of its own, the images the user asked the agent for.
+            var requested: [ScreenshotTarget] = []
             let screenshots = shots.map { $0.isApp ? ScreenshotRequest.app(wantsBefore: $0.wantsBefore) : .page }
             try check(id, token)
             let adapter = try adapter(for: id)
@@ -2245,6 +2247,7 @@ public final class AppModel {
                     let known = project(for: task)
                     if self.task(id)?.tags == nil { addTags(taskID: id, tags.map { known?.tagKey($0) ?? $0 }.joined(separator: ",")) }
                 case .screenshots(let targets):
+                    if shots == nil { requested = targets }
                     shots?.pagesNamed += 1
                     shots?.targets = targets
                     // Not awaited: the agent may be waiting for an answer to an approval meanwhile.
@@ -2285,6 +2288,8 @@ public final class AppModel {
                 await takeAfterScreenshot(id, shots)
                 try check(id, token)
             }
+            for target in requested { await takeScreenshot(id, target, isBefore: false, isImage: true) }
+            try check(id, token)
 
             // From here to the end of the iteration there is no await: a prompt sent now either
             // is pending already, or finds the task settled and starts a run of its own.
@@ -2354,13 +2359,14 @@ public final class AppModel {
     }
 
     @discardableResult
-    private func takeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, isBefore: Bool) async -> Bool {
+    /// `isImage`: the target is an image the agent took, as an app's always is.
+    private func takeScreenshot(_ id: TaskItem.ID, _ target: ScreenshotTarget, isBefore: Bool, isImage: Bool = false) async -> Bool {
         guard let services, let screenshots = services.screenshots, let task = task(id),
               let project = project(for: task) else { return false }
         let file = ShiftPaths.screenshots.appendingPathComponent("\(id)-\(UUID().uuidString).png")
         let source: URL, captured: Bool
         var shown = target.page
-        if project.isApp {
+        if project.isApp || isImage {
             // The line is a path, and any space in it looks like the start of a script.
             let path = [target.page, target.script].compactMap { $0 }.joined(separator: " ")
             source = URL(fileURLWithPath: path, relativeTo: task.worktreeURL).absoluteURL
