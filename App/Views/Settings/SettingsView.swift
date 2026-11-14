@@ -25,7 +25,6 @@ private struct GeneralSettingsView: View {
     @AppStorage(OpenInMenu.editorKey) private var editorPath: String?
     @AppStorage(OpenInMenu.terminalKey) private var terminalPath: String?
     @AppStorage(Analytics.enabledKey) private var shareUsage = true
-    @AppStorage(ProjectsSidebar.sortByRecentKey) private var sortProjectsByRecent = false
     private let apps = ExternalApps()
 
     var body: some View {
@@ -44,7 +43,7 @@ private struct GeneralSettingsView: View {
             }
 
             Section("Preferences") {
-                Picker("Sort projects", selection: $sortProjectsByRecent) {
+                Picker("Sort projects", selection: $model.sortProjectsByRecent) {
                     Text("Manually").tag(false)
                     Text("Recently updated").tag(true)
                 }
