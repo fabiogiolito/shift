@@ -341,18 +341,17 @@ h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(-
 .card h3 { margin-top: auto; padding-top: 1.5rem; font-size: 1.0625rem; font-weight: 500; letter-spacing: -.01em; }
 .card p { margin-top: .25rem; font-size: .9375rem; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
 .ui { display: flex; flex-direction: column; justify-content: center; min-height: 140px; font-size: 13px; }
-.plan { align-items: center; gap: 14px; flex: 1; }
-.doc { align-self: stretch; max-width: 24rem; margin: 0 auto; padding: 14px 16px; border-radius: 12px; background: #1c1c1e; }
-.dh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.dh b { font-weight: 600; }
-.dh small, .doc li { color: var(--muted); font-size: 12px; }
-.doc ul { margin: 8px 0 0; padding-left: 16px; }
-.doc li { padding: 2px 0; }
-.doc li.hl { color: var(--fg); background: linear-gradient(rgba(255, 214, 10, .16), rgba(255, 214, 10, .16)) no-repeat 0 0 / 100% 100%; border-radius: 3px; }
-.note { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 7px 9px; border-radius: 9px; background: #2c2c2e; font-size: 12px; }
-.av { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; background: #ff9f0a; color: #000; font-size: 10px; font-weight: 600; }
-.conv { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; background: var(--blue); color: #fff; font-weight: 500; }
-.conv svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.plan { position: relative; flex: 1; justify-content: flex-start; max-height: 300px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.doc { align-self: center; width: min(100%, 24rem); margin-top: 26px; padding: 34px 22px 0; border-radius: 12px 12px 0 0; background: #1c1c1e; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.dt { display: block; color: var(--fg); font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.conv { display: inline-block; margin: 10px 0 4px; padding: 5px 11px; border-radius: 7px; background: var(--blue); color: #fff; font-weight: 500; }
+.doc h4 { margin-top: 14px; color: var(--fg); font-size: 13px; font-weight: 600; }
+.card .doc p { margin-top: 2px; color: inherit; font-size: inherit; line-height: inherit; }
+.doc ul { margin: 2px 0 0; padding-left: 16px; list-style: disc; }
+/* The prompt that made the plan, floating over the document's corner */
+.prm { position: absolute; z-index: 1; top: 0; left: max(0px, calc(50% - 15rem)); display: flex; align-items: center; gap: 22px; padding: 7px 7px 7px 13px; border: 1px solid #3a3a3c; border-radius: 13px; background: #232325; color: #e8e8e8; font-family: var(--mono); font-size: 12px; box-shadow: 0 14px 34px rgba(0, 0, 0, .55); }
+.prm .go { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--blue); color: #fff; }
+.prm .go svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .ui.menu { flex: none; justify-content: flex-start; min-height: 0; margin-top: .5rem; }
 .menu { align-self: center; width: min(100%, 15rem); padding: 5px; border-radius: 10px; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 12px 30px rgba(0,0,0,.5); }
 .mi { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; }
@@ -457,7 +456,7 @@ body > footer a:hover { color: var(--fg); }
 
 <main>
   <section class="story" id="story" style="--n:11">
-    <div class="pin">
+    <div class="prm">
       <div class="gitcmds" aria-hidden="true">
         <span class="gitcmd" style="--dx:-220px;--dy:-160px;--r:-6deg;top:38%;left:2%"><b>$</b> git worktree add ../wt-101</span>
         <span class="gitcmd" style="--dx:240px;--dy:-170px;--r:5deg;top:34%;right:2%"><b>$</b> git checkout -b shift/101</span>
@@ -546,19 +545,24 @@ body > footer a:hover { color: var(--fg); }
     <div class="bento">
       <article class="card wide">
         <div class="ui plan" aria-hidden="true">
+          <div class="prm"><span>/plan dark mode</span><span class="go" data-ic="up"></span></div>
           <div class="doc">
-            <div class="dh"><b>Dark mode</b><small>Plan · Storefront</small></div>
+            <b class="dt">Dark mode plan</b>
+            <span class="conv">Start Task</span>
+            <h4>Goal</h4>
+            <p>Give the storefront a dark theme that follows the system setting, with a toggle in the header to override it.</p>
+            <h4>Approach</h4>
             <ul>
-              <li>Follow the system setting, with a toggle in the header</li>
-              <li class="hl">Keep product photos untouched in both themes</li>
+              <li>Move colors to CSS variables with a dark set</li>
+              <li>Keep product photos untouched in both themes</li>
               <li>Remember the choice per device</li>
             </ul>
-            <div class="note"><span class="av">F</span>Should the toggle live in settings too?</div>
+            <h4>Out of scope</h4>
+            <p>Emails and the admin dashboard keep the light theme for now.</p>
           </div>
-          <span class="conv">Convert to task<svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
         </div>
         <h3>Plan first</h3>
-        <p>Collaborate on the spec, then convert it to a task.</p>
+        <p>Write the spec with the agent, then start it as a task.</p>
       </article>
       <article class="card">
         <div class="ui menu" aria-hidden="true">
