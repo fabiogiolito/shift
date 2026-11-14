@@ -240,6 +240,25 @@ public final class AppModel {
         return usage[task.agent]?.limitResetsAt
     }
 
+    /// The sidebar sorts projects by their latest task activity instead of the saved order.
+    public var sortProjectsByRecent = UserDefaults.standard.bool(forKey: "sortProjectsByRecent") {
+        didSet { UserDefaults.standard.set(sortProjectsByRecent, forKey: "sortProjectsByRecent") }
+    }
+
+    /// Projects in the order the sidebar shows them, which the phone mirrors.
+    public var sortedProjects: [Project] {
+        guard sortProjectsByRecent else { return projects }
+        // Stable sort: projects without tasks keep their manual order, at the bottom.
+        return projects.sorted { lastUpdate(of: $0) > lastUpdate(of: $1) }
+    }
+
+    /// When any of the project's tasks was last created, prompted, started working or closed.
+    private func lastUpdate(of project: Project) -> Date {
+        tasks(in: project.id).flatMap { task in
+            [task.createdAt, task.workingSince, task.mergedAt, task.prompts.last?.date].compactMap { $0 }
+        }.max() ?? .distantPast
+    }
+
     /// Usage-limited tasks carry on by themselves once their limit resets.
     public var continuesAfterLimit = UserDefaults.standard.bool(forKey: "continuesAfterLimit") {
         didSet { UserDefaults.standard.set(continuesAfterLimit, forKey: "continuesAfterLimit") }

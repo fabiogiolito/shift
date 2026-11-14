@@ -124,7 +124,7 @@ public final class RemoteServer {
 
     static func snapshot(of model: AppModel) -> RemoteSnapshot {
         var snapshot = RemoteSnapshot()
-        snapshot.projects = model.projects
+        snapshot.projects = model.sortedProjects
         snapshot.tasks = model.tasks
         snapshot.chats = model.chats
         snapshot.pullRequests = model.pullRequests
