@@ -1,0 +1,1190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shift — Parallel AI coding for your Mac</title>
+<meta name="description" content="Hand tasks to Claude Code or Codex. Each gets its own branch, worktree and dev server. You test and merge, from your Mac or your iPhone.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap">
+<style>
+:root {
+  --bg: #000;
+  --fg: #f5f5f7;
+  --muted: #86868b;
+  --line: #2a2a2c;
+  --green: #30d158;
+  --blue: #0a84ff;
+  --sans: "Geist", sans-serif;
+  --mono: "Geist Mono", monospace;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+  color-scheme: dark;
+}
+
+*, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-family: var(--sans); line-height: 1.5; -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { background: var(--bg); color: var(--fg); overflow-x: clip; }
+a { color: inherit; text-decoration: none; }
+img, svg { display: block; max-width: 100%; }
+img { height: auto; }
+ul { list-style: none; }
+.i { width: 1rem; height: 1rem; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mono { font-family: var(--mono); font-size: .8125rem; color: var(--muted); }
+
+h1, h2 { font-weight: 600; letter-spacing: -.045em; line-height: 1; text-wrap: balance; }
+h1 { font-size: clamp(2.25rem, min(5vw, 7vh), 4rem); }
+h2 { font-size: clamp(2rem, min(5vw, 7vh), 4rem); }
+.story h3 { font-size: clamp(1.25rem, 2vw, 1.625rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.2; }
+.head h3, .head p { max-width: 28rem; margin-inline: auto; text-wrap: balance; }
+.head p { margin-top: .5rem; font-size: clamp(.9375rem, 1.3vw, 1.0625rem); line-height: 1.4; color: var(--muted); }
+h2 span, h1 span { color: var(--muted); }
+.sub { max-width: 30rem; margin: 1.25rem auto 0; font-size: clamp(1.0625rem, 1.5vw, 1.25rem); line-height: 1.4; color: var(--muted); text-wrap: balance; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; height: 3rem; padding: 0 1.5rem; border: 1px solid var(--line); border-radius: 99px; font-size: 15px; font-weight: 500; white-space: nowrap; transition: background .2s, border-color .2s, transform .2s var(--ease); }
+.btn:active { transform: scale(.97); }
+.btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.btn.primary { border-color: var(--fg); background: var(--fg); color: var(--bg); }
+.btn.primary:hover { background: #fff; }
+.btn.sm { height: 2.25rem; padding: 0 1rem; font-size: 14px; }
+.btn .i { width: 18px; height: 18px; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; margin-top: 1.75rem; }
+
+header { position: fixed; inset: 0 0 auto; z-index: 50; background: rgba(0, 0, 0, .6); -webkit-backdrop-filter: saturate(1.8) blur(20px); backdrop-filter: saturate(1.8) blur(20px); }
+nav { display: flex; align-items: center; justify-content: space-between; max-width: 72rem; height: 3.5rem; margin-inline: auto; padding-inline: 1.5rem; }
+.brand { display: flex; align-items: center; gap: .625rem; font-weight: 600; letter-spacing: -.02em; }
+.brand img { width: 32px; height: 32px; }
+nav div { display: flex; align-items: center; gap: .25rem; }
+nav .gh { display: none; color: var(--muted); border-color: transparent; }
+nav .gh:hover { color: var(--fg); }
+
+/* The story: the Mac app, rebuilt in HTML, pinned while each screen of scrolling plays one beat */
+.story { position: relative; height: calc(var(--n) * 100vh); }
+.pin { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; height: 100svh; padding-top: 6.5rem; overflow: hidden; text-align: center; }
+.heads { position: relative; z-index: 2; display: grid; padding-inline: max(1.5rem, 8vw); translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px) + var(--t, 0) * var(--bal, 0px)); }
+.head { grid-area: 1 / 1; opacity: 0; translate: 0 16px; filter: blur(6px); pointer-events: none; transition: opacity .4s, translate .7s var(--ease), filter .4s; }
+.head:not([data-i="0"]) { align-self: start; margin-top: -32px; }
+.head.on { opacity: 1; translate: 0 0; filter: none; pointer-events: auto; }
+/* The opening headline slides up and fades as the window rises, gone before they would meet */
+.head[data-i="0"] { opacity: max(0, 1 - var(--t, 0) * 2.5); translate: 0 calc(var(--t, 0) * -160px); filter: none; transition: none; }
+.head[data-i="0"] .actions { margin-top: 2.75rem; animation: rise .8s var(--ease) .9s both; }
+h1 .w { display: inline-block; white-space: nowrap; }
+h1 .w:first-child, h1 .w:first-child .l { color: var(--fg); }
+h1 .l { display: inline-block; animation: letter-rise .7s var(--ease) calc(var(--i) * 25ms + 100ms) both; }
+.scene { position: relative; flex: 1; margin-top: clamp(1.5rem, 4.5vh, 3rem); perspective: 1800px; animation: rise 1.4s var(--ease) .3s both; }
+/* --t: 0 tilted away and half below the fold, 1 upright. --fit: the scale that fits the window in the scene.
+   --z, --zx: on phones, a zoom and pan onto the part of the window where the step happens; --out (0 → 1, on scroll, not eased) undoes them as the story scrolls away */
+@property --z { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --zx { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.mac { position: absolute; top: 0; left: 50%; width: var(--w); height: var(--h); transform-origin: 50% 0; transition: --z .9s var(--ease), --zx .9s var(--ease);
+  transform: translateX(calc(-50% + var(--zx) * (1 - var(--out, 0)))) translateY(calc((1 - var(--t)) * var(--drop) - var(--t) * var(--lift, 0px))) rotateX(calc((1 - var(--t)) * 26deg)) scale(calc(var(--fit) * (var(--z) + (1 - var(--z)) * var(--out, 0)) * (.84 + .16 * var(--t)))); }
+.phone { width: var(--pw); padding: calc(var(--pw) * .025); border-radius: calc(var(--pw) * .17); background: #1c1c1e; box-shadow: inset 0 0 0 1px #48484a, 0 0 0 1px #000, 0 30px 70px -10px #000; }
+.phone img { border-radius: calc(var(--pw) * .145); }
+.iphone { position: absolute; z-index: 3; left: calc(50% + var(--mw) * .5 - var(--pw) * .7); top: calc(var(--drop) * 1.1); width: var(--pw);
+  opacity: calc(1 - var(--t) * 1.8); transform: translateY(calc(var(--t) * 240px)) rotate(calc(var(--t) * 8deg)); }
+.gitcmds { position: absolute; inset: 0; z-index: 0; pointer-events: none; animation: cmds-burst 1.2s cubic-bezier(.16, .84, .24, 1) .1s both; }
+.gitcmd { position: absolute; display: inline-flex; gap: .5rem; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #0d0d0e; font-family: var(--mono); font-size: 13px; line-height: 1; white-space: nowrap; color: #c7c7cc; transform: rotate(var(--r)); animation: cmd-float 7s ease-in-out infinite; }
+.gitcmd:nth-child(2n) { animation-duration: 9s; animation-delay: -3s; }
+.gitcmd:nth-child(3n) { animation-duration: 8s; animation-delay: -5s; }
+.gitcmd b { font-weight: 400; color: #555; }
+@supports (animation-timeline: scroll()) {
+  .gitcmd { animation: cmd-float 7s ease-in-out infinite, cmd-scatter linear both; animation-timeline: auto, scroll(root); animation-range: normal, 0 420px; }
+}
+
+/* ---- The Mac app, dark appearance, drawn at 1120 × 700 (640 wide on phones, without the sidebar) ---- */
+.win { position: absolute; inset: 0; display: grid; grid-template-columns: 220px 310px 1fr; grid-template-rows: 1fr 38px; overflow: hidden; border-radius: 14px; background: #1e1e1e; color: #e8e8e8; text-align: left;
+  font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em;
+  box-shadow: 0 0 0 1px #000, 0 50px 120px -20px rgba(0, 0, 0, .9); }
+/* The light edge sits above the columns, so every column gets it */
+.win::after { content: ""; position: absolute; inset: 0; z-index: 10; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); pointer-events: none; }
+.win svg.g { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sec { color: #9a9a9e; }
+.sb { grid-row: 1 / 3; display: flex; flex-direction: column; padding: 12px 10px; background: #2a2a2c; border-right: 1px solid #111; }
+.sb-top { display: flex; align-items: center; gap: 8px; height: 30px; padding-left: 6px; }
+.tl { width: 12px; height: 12px; border-radius: 50%; }
+.sb-top .tog { display: grid; place-items: center; width: 30px; height: 30px; margin-left: auto; border-radius: 50%; background: #3a3a3c; color: #c7c7cc; }
+.search { display: flex; align-items: center; gap: 6px; height: 28px; margin: 12px 0 10px; padding: 0 8px; border-radius: 8px; background: #3a3a3c; color: #8e8e93; }
+.projects li { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 8px; }
+.projects li.sel { background: #3d3d40; }
+.projects li svg.g { width: 18px; height: 18px; }
+.projects li b { display: block; font-weight: 500; }
+.projects li.sel b { font-weight: 600; }
+.projects li small { display: block; font-size: 11.5px; color: #8e8e93; }
+.projects li .n { margin-left: auto; font-size: 11px; color: #8e8e93; }
+.projects li.enter { animation: slide-in .5s var(--ease) both; }
+.newproj { display: flex; align-items: center; gap: 6px; margin-top: auto; padding: 6px 8px; border-radius: 6px; color: #9a9a9e; transition: background .15s; }
+.newproj.press { background: #3a3a3c; }
+.list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #111; background: #1f1f20; }
+.hbar { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 14px 0 16px; border-bottom: 1px solid #2c2c2e; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.caps { display: flex; align-items: center; gap: 12px; margin-left: auto; height: 30px; padding: 0 12px; border-radius: 99px; background: #3a3a3c; font-size: 12px; font-weight: 400; color: #d1d1d6; }
+.rows { flex: 1; min-height: 0; overflow: hidden; padding: 8px; }
+.rows h6 { padding: 12px 8px 4px; font-size: 11px; font-weight: 600; color: #6e6e73; }
+.rows .chat { display: flex; align-items: center; gap: 8px; padding: 6px 8px; color: #d1d1d6; }
+.row { position: relative; display: grid; grid-template-columns: 16px 1fr auto; column-gap: 8px; padding: 6px 8px 7px; border-radius: 8px; transition: background .2s; }
+.row.sel { background: #2f2f32; }
+.row .st { margin-top: 1px; }
+.row b { font-weight: 500; font-size: 13.5px; }
+.row .id { font-size: 11px; color: #6e6e73; }
+.row p { grid-column: 2 / 4; font-size: 11.5px; color: #8e8e93; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row.merged b { color: #8e8e93; }
+.row.enter { animation: slide-in .55s var(--ease) both; }
+/* Inputs: text on top; plus, branch (new task only) and send along the bottom */
+.field { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; min-height: 84px; margin: 0 10px 10px; padding: 11px 10px 9px 14px; border: 1px solid #3a3a3c; border-radius: 13px; background: #232325; color: #e8e8e8; transition: border-color .2s; }
+.field .txt:empty::before { content: attr(data-ph); color: #6e6e73; }
+.field.typing { border-color: #545458; }
+.field.typing .txt::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; margin-left: 1px; vertical-align: -2px; background: var(--blue); animation: blink 1s steps(1) infinite; }
+.tools { display: flex; align-items: center; gap: 10px; margin-left: -2px; color: #9a9a9e; }
+.tools > :nth-child(2) { margin-left: auto; }
+.tools .plus-b svg.g { width: 17px; height: 17px; stroke-width: 1.6; }
+.tools .br { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: #c7c7cc; }
+.tools .br svg.g { width: 13px; height: 13px; }
+.tools .br > span:last-child svg.g { width: 10px; color: #8e8e93; }
+.field .send { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #2c2c2e; box-shadow: inset 0 0 0 1px #3a3a3c; color: #8e8e93; transition: background .2s, color .2s; }
+.field .send svg.g { width: 13px; height: 13px; }
+.field .send.go { background: var(--blue); box-shadow: none; color: #fff; }
+.detail { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.hbar .right { display: flex; align-items: center; gap: 14px; margin-left: auto; font-size: 12px; font-weight: 400; color: #9a9a9e; }
+.hbar .right > span { display: flex; align-items: center; gap: 6px; }
+.more { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #3a3a3c; color: #c7c7cc; }
+.dbody { flex: 1; min-height: 0; overflow: hidden; padding: 16px 18px; }
+.dbody > * + * { margin-top: 14px; }
+.dbody.fade { animation: fade .35s ease both; }
+.summary { font-size: 14.5px; line-height: 1.45; color: #ececec; }
+.btns { display: flex; gap: 8px; }
+.ub { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 7px; background: #3a3a3c; color: #f2f2f7; font-size: 13px; white-space: nowrap; transition: transform .12s, filter .12s, background .2s; }
+.ub.blue { background: var(--blue); color: #fff; }
+.ub .split { display: flex; align-items: center; height: 100%; margin-right: -11px; padding: 0 8px; border-left: 1px solid rgba(255, 255, 255, .18); }
+.ub .split svg.g { width: 12px; height: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.press { transform: scale(.95); filter: brightness(1.3); }
+.label { font-size: 12px; font-weight: 600; color: #8e8e93; }
+.box { border-radius: 9px; background: #2a2a2c; }
+.box li { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 6px 14px; }
+.box li + li { border-top: 1px solid #3a3a3c; }
+.box li .r { margin-left: auto; font-size: 11.5px; }
+.files { background: none; border: 1px solid #3a3a3c; }
+.plus { color: var(--green); }
+.minus { color: #ff453a; }
+.prompts li.enter { animation: drop-in .5s var(--ease) both; }
+.acts li { display: flex; align-items: center; gap: 8px; min-height: 26px; color: #8e8e93; }
+.acts li:last-child { color: #e8e8e8; animation: drop-in .4s var(--ease) both; }
+.ask { position: absolute; z-index: 2; inset: auto 10px 10px; padding: 14px 16px; border: 1.5px solid var(--blue); border-radius: 14px; background: #2a2a2c; box-shadow: 0 -20px 40px #1e1e1e; transform: translateY(130%); transition: transform .5s var(--ease); }
+.ask.on { transform: none; }
+.ask .q { margin-top: 4px; font-size: 14px; font-weight: 500; }
+.ask ul { margin-top: 10px; }
+.ask li { transform-origin: left center; display: flex; align-items: center; gap: 9px; height: 28px; }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #636366; transition: border .2s, background .2s; }
+.ask li.pick .radio { border: 5px solid var(--blue); background: #fff; }
+.ask .ub { position: absolute; right: 14px; bottom: 14px; color: #8e8e93; }
+.ask .ub.go { background: var(--blue); color: #fff; }
+.bar { grid-column: 2 / 4; display: flex; align-items: center; gap: 22px; padding: 0 16px 0 0; border-top: 1px solid #2c2c2e; font-size: 12px; color: #c7c7cc; white-space: nowrap; }
+.bar > span { display: flex; align-items: center; gap: 6px; }
+.bar svg.g { width: 13px; height: 13px; }
+.bar > .path { align-self: stretch; width: 310px; padding-left: 16px; border-right: 1px solid #2c2c2e; }
+.bar > .lim { margin-left: auto; color: #8e8e93; }
+.bar span { flex-shrink: 0; }
+.bar > span > span:last-child svg.g { width: 10px; color: #8e8e93; }
+/* Status marks, as in the app */
+.st { display: grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0; }
+.st svg { width: 100%; height: 100%; }
+.rays { animation: spin .9s steps(8) infinite; }
+/* Overlays: notification, browser, cursor */
+/* Sits outside the window, just above its top-right corner */
+.notif { position: absolute; z-index: 5; bottom: calc(100% + 14px); right: 0; text-align: left; color: #e8e8e8; font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em; display: flex; gap: 10px; width: 330px; padding: 12px 14px; border-radius: 18px; background: rgba(58, 58, 60, .85); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 12px 40px rgba(0, 0, 0, .5); transform: translateY(16px) scale(.96); opacity: 0; transition: transform .6s var(--ease), opacity .3s; }
+.notif.on { transform: none; opacity: 1; }
+.notif img { width: 34px; height: 34px; }
+.notif b { display: block; font-size: 13px; }
+.notif p { font-size: 13px; color: #d1d1d6; }
+.notif small { position: absolute; top: 12px; right: 14px; font-size: 11px; color: #9a9a9e; }
+.browser { position: absolute; z-index: 4; left: 300px; top: 70px; width: 700px; height: 470px; overflow: hidden; border-radius: 12px; background: #111; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 40px 90px rgba(0, 0, 0, .7);
+  transform: scale(.6); opacity: 0; transition: transform .5s var(--ease), opacity .3s; pointer-events: none; }
+.browser.on { transform: none; opacity: 1; }
+/* The app behind the preview goes out of focus while it's open */
+.win > :not(.browser) { transition: filter .4s var(--ease); }
+.win:has(.browser.on) > :not(.browser) { filter: blur(6px) brightness(.7); }
+.browser .chrome { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; background: #2c2c2e; }
+.browser .url { display: flex; align-items: center; gap: 6px; margin: 0 auto; padding: 4px 60px; border-radius: 7px; background: #1c1c1e; font-size: 12px; color: #c7c7cc; }
+.browser .url svg.g { width: 11px; height: 11px; }
+.page { position: relative; height: calc(100% - 40px); display: grid; place-items: center; background: #0b0b0c; }
+.page .photo { width: 62%; aspect-ratio: 4 / 3; border-radius: 4px; transition: background .5s; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+.page .cap { position: absolute; bottom: 22px; font-size: 13px; color: #c7c7cc; }
+.page .arrow { position: absolute; top: 50%; display: grid; place-items: center; width: 34px; height: 34px; margin-top: -17px; border-radius: 50%; background: rgba(255, 255, 255, .1); color: #fff; }
+.cursor { position: absolute; z-index: 6; left: 0; top: 0; width: 22px; height: 30px; pointer-events: none; opacity: 0; transition: transform .75s cubic-bezier(.65, 0, .35, 1), opacity .3s; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.cursor.on { opacity: 1; }
+.cursor .stack { position: absolute; left: 10px; top: 16px; width: 64px; height: 64px; opacity: 0; scale: .6; transition: opacity .25s, scale .3s var(--ease); }
+.cursor.dragging .stack { opacity: 1; scale: 1; }
+.stack .th { position: absolute; inset: 0; width: 64px; height: 64px; border-radius: 8px; box-shadow: 0 0 0 2px #fff, 0 8px 20px rgba(0, 0, 0, .5); }
+.stack .th:nth-child(1) { rotate: 10deg; }
+.stack .th:nth-child(2) { rotate: -6deg; }
+.stack b { position: absolute; top: -8px; right: -10px; display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 99px; background: #ff453a; color: #fff; font-size: 12px; font-weight: 600; }
+.th { display: block; flex-shrink: 0; width: 40px; height: 40px; border-radius: 7px; background: #3a3a3c; }
+.th0 { background: radial-gradient(120% 90% at 30% 20%, #f6c177, #e07a5f 40%, #3d405b); }
+.th1 { background: linear-gradient(160deg, #a8d8ea, #3d5a80 60%, #1b263b); }
+.th2 { background: radial-gradient(100% 100% at 70% 30%, #e9edc9, #84a98c 50%, #2f3e46); }
+.th3 { background: linear-gradient(200deg, #ffcad4, #b5838d 50%, #4a4e69); }
+.th.more { display: grid; place-items: center; font-size: 12px; font-style: normal; color: #c7c7cc; }
+.thumbs { display: flex; gap: 6px; }
+.thumbs.enter .th { animation: drop-in .4s var(--ease) both; }
+.thumbs.enter .th:nth-child(2) { animation-delay: 50ms; } .thumbs.enter .th:nth-child(3) { animation-delay: 100ms; }
+.thumbs.enter .th:nth-child(4) { animation-delay: 150ms; } .thumbs.enter .th:nth-child(5) { animation-delay: 200ms; }
+.cursor svg { width: 100%; height: 100%; transition: transform .12s; transform-origin: 20% 15%; }
+.cursor.down svg { transform: scale(.82); }
+
+/* The iPhone app, in code: slides up over the Mac in the last step */
+.rphone { position: absolute; z-index: 3; left: calc(50% + var(--mw1) * .5 - var(--pw) * 1.05); top: calc(4% - var(--lift, 0px)); width: var(--pw);
+  translate: 0 115%; opacity: 0; transition: translate .9s var(--ease), opacity .5s; }
+.rphone.on { translate: 0 0; opacity: 1; }
+.ps { position: relative; display: flex; flex-direction: column; aspect-ratio: 603 / 1311; overflow: hidden; padding: 6% 7% 7%; border-radius: calc(var(--pw) * .145); background: #000; color: #f2f2f7; text-align: left;
+  font: calc(var(--pw) * .05) / 1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", sans-serif; letter-spacing: -.01em; }
+.pbar { display: flex; justify-content: space-between; align-items: center; padding: 0 5%; font-size: .95em; }
+.pbar span { display: flex; align-items: flex-end; gap: 1.5px; }
+.pbar i { width: 3px; background: #fff; border-radius: 1px; }
+.pbar i:nth-child(1) { height: 4px; } .pbar i:nth-child(2) { height: 6px; } .pbar i:nth-child(3) { height: 8px; } .pbar i:nth-child(4) { height: 10px; }
+.pbar em { width: 20px; height: 10px; margin-left: 5px; border-radius: 3px; background: #30d158; }
+.pnav { display: flex; justify-content: space-between; margin-top: 8%; }
+.pc { display: grid; place-items: center; width: 2.4em; height: 2.4em; border-radius: 50%; background: #1c1c1e; }
+.pc svg.g, .pprompt svg.g { width: 1.1em; height: 1.1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pc .st { width: 1.25em; height: 1.25em; }
+.pnav { align-items: center; }
+.pnav b { font-size: 1em; font-weight: 600; }
+.pchat { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: .45em; min-height: 0; margin-top: 6%; overflow: hidden; font-size: .86em; }
+.pmsg { max-width: 82%; padding: .55em .8em; border-radius: 1.1em; background: #1c1c1e; line-height: 1.3; }
+.pmsg.me { align-self: flex-end; background: var(--blue); color: #fff; }
+.pmsg.enter { animation: slide-in .5s var(--ease) both; }
+.pmsg.pcard { display: flex; gap: .6em; align-items: center; border: 1px solid #2c2c2e; background: #111; }
+.pmsg.pcard svg.g { flex-shrink: 0; width: 1.9em; height: 1.9em; padding: .3em; border-radius: .5em; background: rgba(10, 132, 255, .18); color: var(--blue); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pmsg.pcard b, .pmsg.pcard small { display: block; }
+.pmsg.pcard small { color: #8e8e93; font-size: .88em; }
+.pcomp { display: flex; align-items: flex-end; gap: .5em; margin-top: .7em; padding: .45em .45em .45em .9em; border: 1px solid #2c2c2e; border-radius: 1.3em; font-size: .86em; }
+.ptxt { flex: 1; min-height: 1.6em; padding: .15em 0; line-height: 1.3; }
+.ptxt:empty::before { content: "Message"; color: #636366; }
+.psnd { display: grid; place-items: center; flex-shrink: 0; width: 1.9em; height: 1.9em; border-radius: 50%; background: #2c2c2e; color: #636366; transition: background .2s, color .2s; }
+.psnd.go { background: var(--blue); color: #fff; }
+.psnd svg.g { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+/* 11:00 PM: the schedule comes due */
+.clockpop { position: absolute; z-index: 6; left: 50%; top: 42%; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 30px 46px 26px; border-radius: 26px; translate: -50% -50%; scale: .9; opacity: 0;
+  background: rgba(44, 44, 46, .82); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 30px 80px rgba(0, 0, 0, .6);
+  color: #fff; font: 600 52px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Geist", sans-serif; letter-spacing: -.02em; pointer-events: none; transition: opacity .35s, scale .6s var(--ease); }
+.clockpop.on { opacity: 1; scale: 1; }
+.clockpop svg { width: 46px; height: 46px; fill: none; stroke: #ff9f0a; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.clockpop small { font-size: 14px; font-weight: 500; letter-spacing: 0; color: #aeaeb2; }
+.rows .row.schedrow .st svg.g { width: 15px; height: 15px; color: var(--blue); }
+.tap { position: absolute; left: 0; top: 0; width: 2.6em; height: 2.6em; margin: -1.3em 0 0 -1.3em; border-radius: 50%; background: rgba(255, 255, 255, .35); box-shadow: 0 0 0 1px rgba(255, 255, 255, .5); opacity: 0; transition: left .6s cubic-bezier(.65, 0, .35, 1), top .6s cubic-bezier(.65, 0, .35, 1), opacity .25s, scale .15s; pointer-events: none; }
+.tap.on { opacity: 1; }
+.tap.down { scale: .8; }
+
+/* Step controls: replay this step, previous, next */
+.ctrl { position: absolute; z-index: 4; right: max(1.5rem, 4vw); bottom: 14vh; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  opacity: 0; translate: 12px 0; pointer-events: none; transition: opacity .4s, translate .6s var(--ease); }
+.ctrl.on { opacity: 1; translate: 0 0; pointer-events: auto; }
+.ctrl .grp { display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; }
+.ctrl button { display: grid; place-items: center; width: 48px; height: 48px; border: 0; border-radius: 16px; background: rgba(44, 44, 46, .72); color: var(--fg); cursor: pointer;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .4); transition: background .2s, transform .2s var(--ease); }
+.ctrl .grp button { border-radius: 0; box-shadow: none; }
+.ctrl .grp { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .4); }
+.ctrl .grp button + button { border-top: 1px solid rgba(255, 255, 255, .08); }
+.ctrl button:hover { background: rgba(72, 72, 74, .85); }
+.ctrl button:active { transform: scale(.94); }
+.ctrl button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.ctrl button:disabled { color: #48484a; cursor: default; }
+.ctrl button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Replay is secondary: dimmer than the arrows */
+.ctrl #replay { background: rgba(28, 28, 30, .6); color: #6e6e73; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.ctrl #replay:hover { background: rgba(44, 44, 46, .8); color: #aeaeb2; }
+.ctrl #next.flash { background: rgba(120, 120, 125, .9); transition: background .3s; }
+.ctrl #replay.spin svg { animation: spin-back .6s var(--ease); }
+@keyframes spin-back { to { rotate: -360deg; } }
+.dots { display: none; }
+@media (max-width: 639px) {
+  .scene { margin-bottom: 60px; }
+  /* The phone step: a larger phone, centered, over the window blurred and dimmed */
+  .rphone { --pw: var(--rpw); left: calc(50% - var(--pw) / 2); }
+  .mac { transition: --z .9s var(--ease), --zx .9s var(--ease), filter .5s; }
+  .scene:has(.rphone.on) .mac { filter: blur(5px) brightness(.55); }
+  /* The checkmark step looks at the task list, so the notification drops in above it */
+  .notif { right: auto; left: 230px; }
+  .ctrl { right: 12px; bottom: 12px; flex-direction: row; gap: 8px; }
+  .ctrl .grp { flex-direction: row; }
+  .ctrl .grp button + button { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .08); }
+  .ctrl button { width: 40px; height: 40px; border-radius: 13px; }
+  .ctrl .grp { border-radius: 13px; }
+  /* Captions sit left-aligned in the bottom-left corner, below the window, over the step dots */
+  .heads { display: contents; }
+  .head { z-index: 2; padding-inline: 1.5rem; }
+  .head[data-i="0"] { translate: 0 calc((1 - var(--t, 0)) * var(--hy, 0px) - var(--t, 0) * 160px); }
+  .head:not([data-i="0"]) { position: absolute; inset: auto 0 76px; margin-top: 0; text-align: left; }
+  .head:not([data-i="0"]) h3, .head:not([data-i="0"]) p { max-width: 22rem; margin-inline: 0; text-wrap: pretty; }
+  .scene { margin-bottom: 0; }
+  .ctrl { left: 1.5rem; }
+  /* One dot per step; the current one is a bar that fills as its animation plays */
+  .dots { display: flex; gap: 6px; margin-right: auto; }
+  .dots i { position: relative; width: 6px; height: 6px; overflow: hidden; border-radius: 3px; background: #48484a; transition: width .5s var(--ease); }
+  .dots i.on { width: 28px; }
+  .dots i::after { content: ""; position: absolute; inset: 0; background: var(--fg); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); transition: transform var(--d, 0s) linear; }
+}
+
+/* Full-screen sections */
+.screen { display: flex; flex-direction: column; justify-content: center; min-height: 100vh; min-height: 100svh; padding: 6rem 1.5rem; text-align: center; }
+@supports (animation-timeline: view()) {
+  .screen h2, .screen .sub, .screen .visual { animation: rise linear both; animation-timeline: view(); animation-range: entry 10% cover 35%; }
+}
+/* And much more */
+.extras { max-width: 72rem; margin: 0 auto; padding: 8rem 1.5rem 4rem; text-align: center; }
+.bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 3.5rem; text-align: left; }
+.card { display: flex; flex-direction: column; padding: 1.5rem; border: 1px solid var(--line); border-radius: 24px; background: #0c0c0d; }
+.card.wide { grid-column: span 2; }
+.span2 .mem { width: min(100%, 26rem); }
+.card h3 { margin-top: auto; padding-top: 1.5rem; font-size: 1.0625rem; font-weight: 500; letter-spacing: -.01em; }
+.card p { margin-top: .25rem; font-size: .9375rem; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
+.ui { display: flex; flex-direction: column; justify-content: center; min-height: 140px; font-size: 13px; }
+.plan { align-items: center; gap: 14px; flex: 1; }
+.doc { align-self: stretch; max-width: 24rem; margin: 0 auto; padding: 14px 16px; border-radius: 12px; background: #1c1c1e; }
+.dh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dh b { font-weight: 600; }
+.dh small, .doc li { color: var(--muted); font-size: 12px; }
+.doc ul { margin: 8px 0 0; padding-left: 16px; }
+.doc li { padding: 2px 0; }
+.doc li.hl { color: var(--fg); background: linear-gradient(rgba(255, 214, 10, .16), rgba(255, 214, 10, .16)) no-repeat 0 0 / 100% 100%; border-radius: 3px; }
+.note { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 7px 9px; border-radius: 9px; background: #2c2c2e; font-size: 12px; }
+.av { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; background: #ff9f0a; color: #000; font-size: 10px; font-weight: 600; }
+.conv { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; background: var(--blue); color: #fff; font-weight: 500; }
+.conv svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ui.menu { flex: none; justify-content: flex-start; min-height: 0; margin-top: .5rem; }
+.menu { align-self: center; width: min(100%, 15rem); padding: 5px; border-radius: 10px; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 12px 30px rgba(0,0,0,.5); }
+.mi { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; }
+.mi img { width: 16px; height: 16px; filter: invert(1); }
+.mi span { margin-left: auto; color: var(--muted); font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 12px; letter-spacing: .08em; }
+.mi.on { background: var(--blue); }
+.mi.on span { color: #fff; }
+.mi.dim { color: var(--muted); }
+.menu .sep { height: 1px; margin: 4px 9px; background: rgba(255,255,255,.1); }
+.lims { gap: 12px; }
+.lim { display: grid; grid-template-columns: 4.5rem 1fr 2.5rem; align-items: center; gap: 10px; }
+.lim span { color: var(--muted); }
+.lim b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.lim i { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--fg) calc(var(--v) * 100%), #2c2c2e 0); }
+.lims small { color: #555; font-size: 12px; }
+.chat { gap: 8px; }
+.msg { max-width: 85%; padding: 8px 12px; border-radius: 14px; background: #1c1c1e; line-height: 1.35; }
+.msg.me { align-self: flex-end; background: var(--blue); }
+.split { flex-direction: row; align-items: center; justify-content: center; }
+.split .b { padding: 7px 14px; background: #2c2c2e; font-weight: 500; }
+.split .b:first-child { border-radius: 8px 0 0 8px; background: var(--fg); color: var(--bg); }
+.split .b:last-child { border-radius: 0 8px 8px 0; margin-left: 1px; }
+.url { flex-direction: row; align-items: center; justify-content: center; gap: 8px; font-family: var(--mono); font-size: 12px; }
+.url .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
+.mem { gap: 2px; }
+.mrow { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.mrow:first-child { background: #1c1c1e; font-weight: 500; }
+.mrow.kid { padding-left: 22px; color: var(--muted); }
+.mrow b { font-weight: 400; }
+.card.full { grid-column: 1 / -1; }
+/* Inline pills; balanced wrapping evens out the rows so none is left with one pill */
+.tags { margin: 0; padding: 0; list-style: none; text-align: center; text-wrap: balance; line-height: 2.6; }
+.tags li { display: inline-block; margin: 0 2px; padding: 0 .9rem; border-radius: 99px; background: #1c1c1e; color: #c7c7cc; font-size: 14px; line-height: 2.2; white-space: nowrap; }
+@media (max-width: 900px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .card.span2 { grid-column: span 2; } }
+@media (max-width: 600px) { .bento { grid-template-columns: minmax(0, 1fr); } .card.wide, .card.span2 { grid-column: auto; grid-row: auto; } .extras { padding-top: 5rem; }
+  /* As tall as the other cards; the pills pan through it as the page scrolls, faded in and out at the edges */
+  .card.full { height: 286px; padding-block: 0; }
+  .tagview { height: 100%; overflow: hidden; -webkit-mask-image: linear-gradient(transparent, #000 25%, #000 75%, transparent); mask-image: linear-gradient(transparent, #000 25%, #000 75%, transparent); }
+  .tags { translate: 0 var(--ty, 0); } }
+@supports (animation-timeline: view()) {
+  .extras h2, .card { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
+}
+/* Closing call to action */
+.actions:has(.soon) { align-items: flex-start; gap: 12px; }
+.soon { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.actions .soon small { margin: 0; font-size: 12px; }
+.btn.dashed { border: 1.5px dashed #48484a; color: var(--muted); cursor: default; }
+.btn.dashed:active { transform: none; }
+.cta .actions { margin-top: 2.75rem; }
+.cta > .mono { margin-top: 2rem; }
+.cta-icon { width: clamp(88px, 12vw, 128px); height: auto; margin: 0 auto 2.5rem; filter: drop-shadow(0 20px 40px rgba(0,0,0,.6)); }
+/* One after another as the section scrolls in: the icon slides in and settles, then the title, then the rest */
+@supports (animation-timeline: view()) {
+  .cta { view-timeline: --cta; overflow: clip; }
+  .cta.screen > * { --dy: 120px; animation: cta-in both cubic-bezier(.2, .7, .3, 1); animation-timeline: --cta; }
+  .cta.screen > .cta-icon { --dy: 360px; animation-name: cta-icon-in; animation-range: entry 10% entry 75%; }
+  .cta.screen > h2 { animation-range: entry 68% entry 92%; }
+  .cta.screen > .actions { animation-range: entry 80% cover 50%; }
+  .cta.screen > .mono { animation-range: entry 86% cover 50%; }
+}
+@keyframes cta-in { from { opacity: 0; translate: 0 var(--dy); } 60% { opacity: 1; } }
+@keyframes cta-icon-in { from { opacity: 0; translate: 0 var(--dy); rotate: -40deg; scale: .3; } 25% { opacity: 1; } }
+body > footer { display: flex; justify-content: space-between; max-width: 72rem; margin-inline: auto; padding: 2rem 1.5rem; border-top: 1px solid var(--line); }
+body > footer a:hover { color: var(--fg); }
+
+@media (min-width: 640px) { nav .gh { display: inline-flex; } }
+@media (max-width: 1279px) { .gitcmd:nth-child(n+3) { display: none; } }
+@media (max-width: 959px) { .gitcmds { display: none; } }
+
+@keyframes spin { to { rotate: 360deg; } }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes slide-in { from { opacity: 0; translate: 40px 0; } }
+@keyframes drop-in { from { opacity: 0; translate: 0 -8px; } }
+@keyframes letter-rise { from { opacity: 0; transform: translateY(.4em); filter: blur(10px); } }
+@keyframes rise { from { opacity: 0; translate: 0 40px; } }
+@keyframes cmds-burst { 0% { scale: .12; opacity: 0; } 25% { opacity: 1; } }
+@keyframes cmd-float { 50% { translate: 0 -8px; } }
+@keyframes cmd-scatter { to { transform: translate(var(--dx), var(--dy)) rotate(calc(var(--r) * 3)) scale(.8); opacity: 0; filter: blur(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition-duration: .01s !important; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol>
+</svg>
+
+<header>
+  <nav>
+    <a href="#" class="brand"><img src="icon.png" alt="">Shift</a>
+    <div>
+      <a class="btn sm gh" href="https://github.com/fabiogiolito/shift">GitHub</a>
+      <a class="btn sm primary" href="https://github.com/fabiogiolito/shift/releases/latest">Download</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <section class="story" id="story" style="--n:11">
+    <div class="pin">
+      <div class="gitcmds" aria-hidden="true">
+        <span class="gitcmd" style="--dx:-220px;--dy:-160px;--r:-6deg;top:38%;left:2%"><b>$</b> git worktree add ../wt-101</span>
+        <span class="gitcmd" style="--dx:240px;--dy:-170px;--r:5deg;top:34%;right:2%"><b>$</b> git checkout -b shift/101</span>
+        <span class="gitcmd" style="--dx:-280px;--dy:-20px;--r:4deg;top:56%;left:4%"><b>$</b> npm run dev -- --port 3001</span>
+        <span class="gitcmd" style="--dx:280px;--dy:10px;--r:-4deg;top:54%;right:3%"><b>$</b> git commit -am &quot;spacing&quot;</span>
+        <span class="gitcmd" style="--dx:-240px;--dy:160px;--r:-3deg;top:74%;left:2.5%"><b>$</b> git merge shift/101</span>
+        <span class="gitcmd" style="--dx:240px;--dy:170px;--r:7deg;top:72%;right:2%"><b>$</b> git branch -D shift/101</span>
+      </div>
+      <div class="heads">
+        <div class="head on" data-i="0">
+          <h1 aria-label="Agents as easy as a to-do list."><span class="w" aria-hidden="true"><span class="l" style="--i:0">A</span><span class="l" style="--i:1">g</span><span class="l" style="--i:2">e</span><span class="l" style="--i:3">n</span><span class="l" style="--i:4">t</span><span class="l" style="--i:5">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:6">a</span><span class="l" style="--i:7">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:8">e</span><span class="l" style="--i:9">a</span><span class="l" style="--i:10">s</span><span class="l" style="--i:11">y</span></span><br><span class="w" aria-hidden="true"><span class="l" style="--i:12">a</span><span class="l" style="--i:13">s</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:14">a</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:15">t</span><span class="l" style="--i:16">o</span><span class="l" style="--i:17">-</span><span class="l" style="--i:18">d</span><span class="l" style="--i:19">o</span></span> <span class="w" aria-hidden="true"><span class="l" style="--i:20">l</span><span class="l" style="--i:21">i</span><span class="l" style="--i:22">s</span><span class="l" style="--i:23">t</span><span class="l" style="--i:24">.</span></span></h1>
+          <div class="actions">
+            <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
+            <div class="soon"><span class="btn dashed" aria-disabled="true"><svg class="i"><use href="#i-phone"/></svg>Download for iPhone</span><small class="mono">Coming soon</small></div>
+          </div>
+        </div>
+        <div class="head" data-i="1"><h3>Work on your local environment</h3><p>Add a project folder and tell it what you need, files and all.</p></div>
+        <div class="head" data-i="2"><h3>Every task runs on its own</h3><p>Each one gets its own branch, worktree and dev server.</p></div>
+        <div class="head" data-i="3"><h3>Add to it anytime</h3><p>Send more instructions while it works.</p></div>
+        <div class="head" data-i="4"><h3>It asks only when it must</h3><p>Answer with a click and it carries on.</p></div>
+        <div class="head" data-i="5"><h3>Come back to a checkmark</h3><p>You get a notification when it’s ready to review.</p></div>
+        <div class="head" data-i="6"><h3>Test it in one click</h3><p>Open the task’s own preview in your browser.</p></div>
+        <div class="head" data-i="7"><h3>Then merge it</h3><p>One click merges into main and cleans up.</p></div>
+        <div class="head" data-i="8"><h3>Work remotely from your phone</h3><p>Answer questions, check in and plan from your iPhone.</p></div>
+        <div class="head" data-i="9"><h3>Schedule recurring tasks</h3><p>Each run starts on time as its own task, even while you sleep.</p></div>
+      </div>
+      <div class="ctrl" id="ctrl">
+        <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <button id="replay" type="button" aria-label="Replay this step" title="Replay"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+        <div class="grp">
+          <button id="prev" type="button" aria-label="Previous step" title="Previous"><svg viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
+          <button id="next" type="button" aria-label="Next step" title="Next"><svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></button>
+        </div>
+      </div>
+      <div class="scene" id="scene" aria-hidden="true">
+        <div class="mac" id="mac">
+          <div class="notif" id="notif"><img src="icon.png" alt=""><div><b>Portfolio</b><p>Add my latest work is ready for review.</p></div><small>now</small></div>
+          <div class="win" id="win">
+            <aside class="sb">
+              <div class="sb-top"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="tog" data-ic="sidebar"></span></div>
+              <div class="search"><span data-ic="search"></span>Search</div>
+              <ul class="projects" id="projects"></ul>
+              <div class="newproj" id="newproj"><span data-ic="plus"></span>New Project</div>
+            </aside>
+            <section class="list">
+              <div class="hbar"><span id="pname"></span><span class="caps"><span data-ic="list"></span><span data-ic="globe"></span><span style="display:flex;align-items:center;gap:3px"><span data-ic="up"></span>2</span></span></div>
+              <div class="rows" id="rows"></div>
+              <div class="field" id="nfield"><div class="txt" data-ph="New task or ‘/’ for commands"></div><div class="tools"><span class="plus-b" data-ic="plus"></span><span class="br"><span data-ic="branch"></span>main<span data-ic="chev"></span></span><span class="send" data-ic="up"></span></div></div>
+            </section>
+            <section class="detail">
+              <div class="hbar"><span id="dtitle"></span><span class="right" id="dstatus"></span><span class="more" data-ic="dots"></span></div>
+              <div class="dbody" id="dbody"></div>
+              <div class="field" id="dfield"><div class="txt" data-ph="Ask or tell the agent anything…"></div><div class="tools"><span class="plus-b" data-ic="plus"></span><span class="send" data-ic="up"></span></div></div>
+              <div class="ask" id="ask">
+                <span class="sec" style="font-size:11.5px">The agent needs a decision</span>
+                <div class="q">Should each photo show its caption?</div>
+                <ul><li id="opt"><i class="radio"></i>Show captions</li><li><i class="radio"></i>No captions</li><li><i class="radio"></i>Something else</li></ul>
+                <span class="ub" id="asksend">Send</span>
+              </div>
+            </section>
+            <div class="bar"><span class="path"><span data-ic="folder"></span><span id="path"></span><span data-ic="chev"></span></span><span><span data-ic="claude"></span>Claude Code<span data-ic="chev"></span></span><span><span data-ic="shield"></span>Bypass permissions<span data-ic="chev"></span></span><span class="lim">5-hour limit 53% left · resets 14:29</span></div>
+            <div class="browser" id="browser">
+              <div class="chrome"><i class="tl" style="background:#ff5f57"></i><i class="tl" style="background:#febc2e"></i><i class="tl" style="background:#28c840"></i><span class="url"><span data-ic="lock"></span>localhost:3201</span></div>
+              <div class="page"><span class="arrow" id="bprev" style="left:22px" data-ic="left"></span><div class="photo" id="photo"></div><span class="arrow" id="bnext" style="right:22px" data-ic="right"></span><span class="cap" id="cap"></span></div>
+            </div>
+          </div>
+          <div class="clockpop" id="clockpop"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>11:00 PM<small>Dribbble sync starts</small></div>
+          <div class="cursor" id="cursor"><div class="stack"><i class="th th2"></i><i class="th th1"></i><i class="th th0"></i><b>6</b></div><svg viewBox="0 0 22 30"><path d="M2 2v22l5.5-5.2 3.6 8.4 3.6-1.6-3.5-8.2H18Z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+        </div>
+        <div class="iphone phone"><img src="screens/iphone-ready.webp" alt="" width="603" height="1311"></div>
+        <div class="rphone phone" id="rphone">
+          <div class="ps">
+            <div class="pbar"><b>9:41</b><span><i></i><i></i><i></i><i></i><em></em></span></div>
+            <div class="pnav"><span class="pc" data-ic="left"></span><b>Portfolio</b><span class="pc" data-ic="clock"></span></div>
+            <div class="pchat" id="pchat"></div>
+            <div class="pcomp"><span class="ptxt" id="ptxt"></span><span class="psnd" id="psnd" data-ic="up"></span></div>
+            <i class="tap" id="tap"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="extras">
+    <h2>And much <span>more.</span></h2>
+    <div class="bento">
+      <article class="card wide">
+        <div class="ui plan" aria-hidden="true">
+          <div class="doc">
+            <div class="dh"><b>Dark mode</b><small>Plan · Storefront</small></div>
+            <ul>
+              <li>Follow the system setting, with a toggle in the header</li>
+              <li class="hl">Keep product photos untouched in both themes</li>
+              <li>Remember the choice per device</li>
+            </ul>
+            <div class="note"><span class="av">F</span>Should the toggle live in settings too?</div>
+          </div>
+          <span class="conv">Convert to task<svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
+        </div>
+        <h3>Plan first</h3>
+        <p>Collaborate on the spec, then convert it to a task.</p>
+      </article>
+      <article class="card">
+        <div class="ui menu" aria-hidden="true">
+          <div class="mi on"><img src="screens/agent-claude.png" alt="">Claude Code<span>✓</span></div>
+          <div class="mi"><img src="screens/agent-codex.png" alt="">Codex</div>
+          <div class="sep"></div>
+          <div class="mi dim">Default model<span>›</span></div>
+        </div>
+        <h3>Claude Code or Codex</h3>
+        <p>Uses the agents you already have, per task.</p>
+      </article>
+      <article class="card">
+        <div class="ui lims" aria-hidden="true">
+          <div class="lim"><span>Session</span><i style="--v:.4"></i><b>40%</b></div>
+          <div class="lim"><span>Weekly</span><i style="--v:.32"></i><b>32%</b></div>
+          <small>Resets Thursday 9:00</small>
+        </div>
+        <h3>Know your limits</h3>
+        <p>See how much of your plan is left before you start.</p>
+      </article>
+      <article class="card">
+        <div class="ui chat" aria-hidden="true">
+          <div class="msg me">Run the tests every night and fix what breaks</div>
+          <div class="msg">Scheduled “Nightly tests”, daily at 2:00.</div>
+        </div>
+        <h3>A chat for every project</h3>
+        <p>Ask about the code, or have it plan and schedule tasks.</p>
+      </article>
+      <article class="card">
+        <div class="ui split" aria-hidden="true">
+          <span class="b">Merge</span><span class="b">Open pull request</span>
+        </div>
+        <h3>Merge or open a PR</h3>
+        <p>Merge locally, or push and review on GitHub.</p>
+      </article>
+      <article class="card">
+        <div class="ui menu" aria-hidden="true">
+          <div class="mi">Cursor<span>⇧⌘E</span></div>
+          <div class="mi">Ghostty<span>⇧⌘T</span></div>
+          <div class="mi">Finder<span>⇧⌘O</span></div>
+        </div>
+        <h3>Open in your tools</h3>
+        <p>Jump into any task’s folder in your editor or terminal.</p>
+      </article>
+      <article class="card">
+        <div class="ui url" aria-hidden="true"><span class="dot"></span>https://studio.tail.ts.net:5173</div>
+        <h3>Share on your tailnet</h3>
+        <p>Open a task’s preview from any of your devices.</p>
+      </article>
+      <article class="card span2">
+        <div class="ui mem" aria-hidden="true">
+          <div class="mrow"><span>Storefront</span><b>1.2 GB</b></div>
+          <div class="mrow kid"><span>Checkout redesign</span><b>640 MB</b></div>
+          <div class="mrow kid"><span>Faster page loads</span><b>410 MB</b></div>
+        </div>
+        <h3>See what uses memory</h3>
+        <p>Every agent and dev server, heaviest first, ready to stop.</p>
+      </article>
+      <article class="card full">
+        <div class="tagview"><ul class="tags" id="tags" aria-label="Also">
+          <li>Branch per task</li><li>Dev server per task</li><li>Slash commands</li><li>Keyboard first</li>
+          <li>Installs dependencies</li><li>Runs iOS apps in Simulator</li><li>Server logs per task</li><li>Diffs</li>
+          <li>Finds project icons</li><li>Keeps the Mac awake</li><li>Auto updates</li><li>Free &amp; open source</li>
+        </ul></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="screen cta">
+    <img class="cta-icon" src="icon.png" alt="">
+    <h2>Shift <span>how you work</span></h2>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/fabiogiolito/shift/releases/latest"><svg class="i"><use href="#i-download"/></svg>Download for Mac</a>
+      <div class="soon"><span class="btn dashed" aria-disabled="true"><svg class="i"><use href="#i-phone"/></svg>Download for iPhone</span><small class="mono">Coming soon</small></div>
+    </div>
+    <p class="mono">Free &amp; open source · macOS 26+</p>
+  </section>
+</main>
+
+<footer class="mono">
+  <span>Shift</span>
+  <a href="https://github.com/fabiogiolito/shift">github.com/fabiogiolito/shift</a>
+</footer>
+
+<script>
+// ---------- Icons (Lucide paths) and status marks ----------
+const ICONS = {
+  sidebar: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  up: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  list: '<circle cx="12" cy="12" r="10"/><path d="M8 10h8"/><path d="M8 14h5"/>',
+  dots: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  branch: '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  claude: '<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  chat: '<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>',
+  ext: '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
+  code: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  img: '<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+  doc: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  stop: '<rect width="12" height="12" x="6" y="6" rx="1" fill="currentColor"/>',
+  lock: '<rect width="16" height="10" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+  merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+}
+const svg = (paths, style = "") => `<svg class="g" viewBox="0 0 24 24"${style && ` style="${style}"`}>${paths}</svg>`
+const ic = (name, style) => svg(ICONS[name], style)
+document.querySelectorAll("[data-ic]").forEach((el) => (el.innerHTML = ic(el.dataset.ic)))
+
+const rays = (c = "#c7c7cc") => `<svg class="rays" viewBox="0 0 16 16">${[...Array(8)].map((_, i) =>
+  `<path d="M8 1.6v3.1" stroke="${c}" stroke-width="1.6" stroke-linecap="round" opacity="${(0.25 + i * 0.1).toFixed(2)}" transform="rotate(${i * 45} 8 8)"/>`).join("")}</svg>`
+const check = (bg, fg) => `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="${bg}"/><path d="m4.6 8.3 2.2 2.2 4.6-4.9" stroke="${fg}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+const MARK = {
+  working: rays(),
+  input: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#0a84ff"/><text x="8" y="12" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="-apple-system,sans-serif">?</text></svg>',
+  ready: check("#30d158", "#fff"),
+  merged: check("#8e8e93", "#1f1f20"),
+}
+const mark = (s) => `<span class="st">${MARK[s]}</span>`
+
+// ---------- Data (Storefront matches the app's demo data, so the iPhone shows the same task) ----------
+const PROJECTS = {
+  storefront: { name: "Storefront", sub: "5 of 9 tasks running", n: 4, color: "#30d158", path: "~/Sites/storefront",
+    icon: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>' },
+  api: { name: "Checkout API", sub: "2 of 3 tasks running", n: 1, color: "#0a84ff", icon: '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>' },
+  admin: { name: "Admin", sub: "2 of 3 tasks running", n: 1, color: "#ff9f0a", icon: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>' },
+  docs: { name: "Docs", sub: "2 of 2 tasks running", n: 0, color: "#ff375f", icon: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>' },
+  portfolio: { name: "Portfolio", sub: "4 tasks running", n: 0, color: "#64d2ff", path: "~/Sites/portfolio",
+    icon: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>' },
+}
+const TASKS = {
+  101: { title: "Tighter board spacing", desc: "Tightens the space between board items and makes the gap one variable.",
+    summary: "Board items now sit 8px apart (12px on phones), set by a single --board-gap variable that is documented in docs/spacing.md.",
+    files: [["code", "src/styles/board.css", "+4", "−1"], ["code", "src/components/BoardItem.tsx", "+2", "−2"], ["doc", "docs/spacing.md", "Added"]], total: ["+9", "−3"],
+    prompts: ["Add a short note to the docs explaining the variable.", "8px is right on desktop, but keep 12px on phones.", "Board items feel too far apart. Tighten the gap and make it a single variable."] },
+  102: { title: "Dark mode for product pages", desc: "Product pages now follow the system's light or dark appearance." },
+  108: { title: "Gift card balance", desc: "Shows a gift card's remaining balance at checkout." },
+  103: { title: "Wishlist button", desc: "Lets shoppers save any product to their wishlist from the grid." },
+  107: { title: "Empty cart illustration", desc: "Replaces the plain empty cart message with an illustration and suggestions." },
+  104: { title: "Faster hero images", desc: "Serves smaller, responsive hero images with a blurred placeholder." },
+  105: { title: "Saved addresses at checkout", desc: "Lets returning customers pick a saved address at checkout." },
+  201: { title: "Add my latest work", desc: "Adds six new photos to the gallery, each opening full screen.",
+    summary: "Six new photos are in the gallery. Each opens full screen with its caption, arrow keys move between them and Esc closes.",
+    files: [["img", "public/work/", "6 added"], ["code", "src/components/Gallery.tsx", "+14", "−3"], ["code", "src/components/Lightbox.tsx", "Added"]], total: ["+92", "−3"],
+    prompts: ["Add my latest work"] },
+  202: { title: "Contact form", desc: "Lets visitors send a message without leaving the site." },
+  203: { title: "Case study pages", desc: "Gives each project its own page with the full story." },
+  204: { title: "Faster page loads", desc: "Serves smaller images and preloads the fonts." },
+  205: { title: "Dribbble sync", desc: "Adds 2 new Dribbble posts to the gallery." },
+}
+// The project chat on the phone: some history, then a recurring task is asked for
+const CHAT = [["me", "Which photos got the most views this month?"], ["", "Harbor at dusk, then Moss garden. Want them first in the gallery?"], ["me", "Yes, put them first."], ["", "Done. They lead the gallery now."]]
+const ASK = "Every day at 11pm check my Dribbble account for new posts and add them to my portfolio."
+const SCHED = ["Dribbble sync", "Every day at 11:00 PM"]
+const DRAFT = "Add my latest work"
+// After the first task finishes: Faster page loads and Contact form finish, Case study pages asks a question
+const AFTER = [[3, "ready"], [1, "ready"], [2, "input"]]
+const SECOND = "Let arrow keys move between photos."
+const ACTIONS = ["Reading Gallery.tsx", "Optimizing 6 photos", "Adding them to the gallery", "Writing tests for Lightbox", "Adding keyboard navigation", "Adding captions", "Running the tests"]
+
+// The state after each beat. Beats only animate one step forward; anything else jumps straight to the state.
+function stateAfter(beat) {
+  if (beat === 0) return {
+    projects: ["storefront", "api", "admin", "docs"], project: "storefront", sel: 101, prompts: TASKS[101].prompts,
+    tasks: [[101, "ready"], [102, "ready"], [108, "ready"], [103, "working"], [107, "input"], [104, "working"], [105, "working"]],
+  }
+  const s = {
+    projects: ["storefront", "api", "admin", "docs", "portfolio"], project: "portfolio", sel: 201, prompts: TASKS[201].prompts,
+    tasks: [[201, "working"], [202, "working"], [203, "working"], [204, "working"]], acts: 4,
+  }
+  // After step 1 the project is empty and the first task is drafted, images attached, not yet sent
+  if (beat === 1) return { ...s, tasks: [], sel: null, draft: true }
+  if (beat >= 3) { s.acts = 5; s.prompts = [SECOND, ...s.prompts] }
+  if (beat >= 4) s.acts = 6
+  if (beat >= 5) { s.tasks[0][1] = "ready"; s.notif = true; for (const [i, st] of AFTER) s.tasks[i][1] = st }
+  if (beat >= 6) { s.notif = false; s.preview = true; s.photo = 1 }
+  if (beat >= 7) { s.tasks[0][1] = "merged"; s.preview = false }
+  // Last, a recurring task is set up from the phone's chat; at 11 PM it runs and merges by itself
+  if (beat >= 8) { s.sched = true; s.phone = true }
+  if (beat >= 9) { s.phone = false; s.tasks.unshift([205, "merged"]) }
+  return s
+}
+
+// ---------- Rendering ----------
+const $ = (id) => document.getElementById(id)
+const win = $("win"), rowsEl = $("rows"), dbody = $("dbody")
+const W = 1120, H = 700
+let S, rowEls = new Map()
+const status = (id) => S.tasks.find(([t]) => t === id)?.[1]
+const scale = () => win.getBoundingClientRect().width / W || 1
+const SECTIONS = [["Review", ["ready"]], ["Tasks", ["working", "input"]], ["Recently Merged", ["merged"]]]
+
+function renderProjects(enter) {
+  $("projects").innerHTML = S.projects.map((k) => {
+    const p = PROJECTS[k]
+    // The new project's subtitle follows its tasks
+    if (k === "portfolio") {
+      // Same wording as the app: "No tasks", "2 tasks", "1 of 2 tasks running"
+      const open = S.tasks.filter(([, st]) => st !== "merged").length, run = S.tasks.filter(([, st]) => st === "working").length, noun = open === 1 ? "task" : "tasks"
+      p.sub = !open ? "No tasks" : run ? `${run} of ${open} ${noun} running` : `${open} ${noun}`
+    }
+    return `<li class="${k === S.project ? "sel" : ""}${k === enter ? " enter" : ""}">${svg(p.icon, `color:${p.color}`)}<span><b>${p.name}</b><small>${p.sub}</small></span><span class="n">${p.n || ""}</span></li>`
+  }).join("")
+  $("pname").textContent = PROJECTS[S.project].name
+  $("path").textContent = PROJECTS[S.project].path
+}
+
+// Rows keep their element across renders, so a task moving between sections can glide there (FLIP)
+function renderRows(enter = []) {
+  const before = new Map([...rowEls].map(([id, el]) => [id, el.getBoundingClientRect().top]))
+  const out = [Object.assign(document.createElement("div"), { className: "chat", innerHTML: `${ic("chat", "color:#0a84ff")}Chat` })]
+  const next = new Map()
+  for (const [name, kinds] of SECTIONS) {
+    const ids = S.tasks.filter(([, st]) => kinds.includes(st)).map(([id]) => id)
+    if (!ids.length) continue
+    out.push(Object.assign(document.createElement("h6"), { textContent: name }))
+    for (const id of ids) {
+      const el = rowEls.get(id) || document.createElement("div"), st = status(id), i = enter.indexOf(id)
+      el.className = `row ${st}${id === S.sel ? " sel" : ""}${i >= 0 ? " enter" : ""}`
+      el.style.animationDelay = i >= 0 ? `${i * 170}ms` : ""
+      el.innerHTML = `${mark(st)}<b>${TASKS[id].title}</b><span class="id">${id}</span><p>${TASKS[id].desc}</p>`
+      next.set(id, el); out.push(el)
+    }
+  }
+  // Schedules sit after the running tasks, as in the app
+  if (S.sched) {
+    const old = rowEls.get("sched"), el = old || document.createElement("div")
+    el.className = `row schedrow${old ? "" : " enter"}`
+    el.innerHTML = `<span class="st">${ic("clock")}</span><b>${SCHED[0]}</b><span class="id"></span><p>${SCHED[1]}</p>`
+    const at = out.findIndex((x) => x.tagName === "H6" && x.textContent === "Recently Merged")
+    const h = Object.assign(document.createElement("h6"), { textContent: "Schedules" })
+    out.splice(at < 0 ? out.length : at, 0, h, el); next.set("sched", el)
+  }
+  rowEls = next
+  rowsEl.replaceChildren(...out)
+  const k = scale()
+  for (const [id, top] of before) {
+    const el = rowEls.get(id), dy = el && (top - el.getBoundingClientRect().top) / k
+    if (Math.abs(dy) > 1) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 700, easing: "cubic-bezier(.65,0,.35,1)" })
+  }
+}
+
+const HEAD = {
+  working: () => "Working · 2m",
+  input: () => `${mark("input")}Needs Input`,
+  ready: () => `${mark("ready")}Ready to Test`,
+  merged: () => `${mark("merged")}Merged`,
+}
+const files = (t) => `<div style="display:flex;align-items:center"><span class="label">${t.files.length} files changed · <span class="plus">${t.total[0]}</span> <span class="minus">${t.total[1]}</span></span><span class="ub" style="margin-left:auto;height:26px">View diff</span></div>
+  <ul class="box files">${t.files.map(([k, f, a, d]) => `<li>${ic(k, "color:#9a9a9e")}${f}<span class="r">${d ? `<span class="plus">${a}</span> <span class="minus">${d}</span>` : `<span class="plus">${a}</span>`}</span></li>`).join("")}</ul>`
+const promptsBox = (list) => `<div class="label">Prompt history</div><ul class="box prompts" id="prompts">${list.map((p) => `<li>${p}</li>`).join("")}</ul>`
+// One working line at a time; each new action replaces the last
+const actsList = (n) => `<ul class="acts" id="acts"><li><span class="st">${rays()}</span>${ACTIONS[n - 1]}…</li></ul>`
+const server = (id) => `<span class="ub" id="server"><i class="dot"></i>localhost:${3000 + id}${ic("ext", "width:12px;height:12px")}<span class="split">${ic("chev")}</span></span>`
+
+function detailHTML() {
+  const id = S.sel, t = TASKS[id], st = status(id)
+  if (st === "ready") return `<p class="summary">${t.summary}</p>
+    <div class="btns"><span class="ub blue" id="merge">Merge into main<span class="split">${ic("chev")}</span></span>${server(id)}</div>
+    ${files(t)}${promptsBox(S.prompts)}`
+  if (st === "merged") return `<p class="summary">${t.summary}</p><p class="sec" style="display:flex;align-items:center;gap:6px">${ic("merge")}Merged into main. Its branch, worktree and server are cleaned up.</p>${files(t)}${promptsBox(S.prompts)}`
+  return `<p class="summary">${t.desc}</p>
+    <div class="btns"><span class="ub">${ic("stop", "width:11px;height:11px")}Stop Task</span>${server(id)}</div>
+    ${actsList(S.acts)}${promptsBox(S.prompts)}`
+}
+function renderDetail(fade = true) {
+  if (!S.sel) { $("dtitle").textContent = ""; $("dstatus").innerHTML = ""; dbody.innerHTML = ""; $("ask").classList.remove("on"); return }
+  const st = status(S.sel)
+  $("dtitle").textContent = TASKS[S.sel].title
+  $("dstatus").innerHTML = `<span>${HEAD[st]()}</span><span>main ← shift/${S.sel}</span>`
+  dbody.innerHTML = detailHTML()
+  dbody.classList.remove("fade"); void dbody.offsetWidth; dbody.classList.toggle("fade", fade)
+  $("ask").classList.toggle("on", st === "input")
+}
+
+// The new task input with its attached photos and text
+const THUMBS = [0, 1, 2, 3].map((i) => `<i class="th th${i}"></i>`).join("") + `<i class="th more">+2</i>`
+function renderDraft(enter) {
+  const f = $("nfield")
+  f.querySelector(".thumbs")?.remove()
+  f.querySelector(".txt").textContent = S.draft ? DRAFT : ""
+  f.querySelector(".send").classList.toggle("go", !!S.draft)
+  if (S.draft || enter) f.insertAdjacentHTML("afterbegin", `<div class="thumbs${enter ? " enter" : ""}">${THUMBS}</div>`)
+}
+
+// The six new photos, as the preview's lightbox shows them
+const PHOTOS = [
+  ["Morning light, Lisbon", "radial-gradient(120% 90% at 30% 20%, #f6c177, #e07a5f 30%, #3d405b 70%, #1b1b2f)"],
+  ["Harbor at dusk, Porto", "linear-gradient(160deg, #a8d8ea, #3d5a80 55%, #1b263b)"],
+  ["Moss garden, Kyoto", "radial-gradient(100% 100% at 70% 30%, #e9edc9, #84a98c 45%, #2f3e46)"],
+  ["Pink hour, Marfa", "linear-gradient(200deg, #ffcad4, #b5838d 50%, #4a4e69)"],
+]
+function setPhoto(i) {
+  S.photo = i
+  $("photo").style.background = PHOTOS[i][1]
+  $("cap").textContent = `${PHOTOS[i][0]} · ${i + 1} of 6`
+}
+
+// The phone shows the project chat; once asked, with the new schedule in it
+const bubble = (who, text, enter) => `<div class="pmsg${who ? " me" : ""}${enter ? " enter" : ""}">${text}</div>`
+const schedCard = (enter) => `<div class="pmsg pcard${enter ? " enter" : ""}">${ic("clock")}<span><b>${SCHED[0]}</b><small>${SCHED[1]}</small></span></div>`
+function renderPhone(on, done) {
+  $("rphone").classList.toggle("on", !!on)
+  $("pchat").innerHTML = CHAT.map(([w, x]) => bubble(w, x)).join("") + (done ? bubble("me", ASK) + schedCard() : "")
+  $("ptxt").textContent = ""; $("psnd").classList.remove("go")
+  $("tap").className = "tap"
+}
+async function tap(el) {
+  const ps = $("rphone").querySelector(".ps"), r = el.getBoundingClientRect(), b = ps.getBoundingClientRect(), k = b.width / ps.offsetWidth
+  const tp = $("tap"); tp.classList.add("on")
+  tp.style.left = `${(r.left - b.left + r.width * .3) / k}px`; tp.style.top = `${(r.top - b.top + r.height / 2) / k}px`
+  await wait(700)
+  tp.classList.add("down"); await wait(160); tp.classList.remove("down"); await wait(140)
+}
+
+function renderAll() {
+  renderProjects()
+  rowEls = new Map()
+  renderRows()
+  renderDetail(false)
+  $("notif").classList.toggle("on", !!S.notif)
+  $("browser").classList.toggle("on", !!S.preview)
+  renderPhone(S.phone, S.phone)
+  $("clockpop").classList.remove("on")
+  setPhoto(S.photo || 0)
+  renderDraft()
+  $("cursor").classList.remove("on", "down", "dragging")
+  $("dfield").querySelector(".txt").textContent = ""
+  $("dfield").querySelector(".send").classList.remove("go")
+  $("dfield").className = "field"
+  $("opt").classList.remove("pick")
+  $("asksend").classList.remove("go")
+}
+
+// ---------- Choreography ----------
+let shown = 0, target = 0, running = false, speed = 1, cancel = false
+const ABORT = Symbol()
+const wait = (ms) => new Promise((r) => setTimeout(r, ms / speed)).then(() => { if (cancel || target <= shown) throw ABORT })
+const cursor = $("cursor")
+// Moves the pointer over an element of the window, in the window's own coordinates
+async function point(el, fx = .5, fy = .55) {
+  const w = win.getBoundingClientRect(), r = el.getBoundingClientRect(), k = scale()
+  cursor.style.transitionDuration = `${.75 / speed}s`
+  cursor.classList.add("on")
+  cursor.style.transform = `translate(${(r.left - w.left + r.width * fx) / k}px, ${(r.top - w.top + r.height * fy) / k}px)`
+  await wait(850)
+}
+async function click(el) {
+  cursor.classList.add("down"); el.classList.add("press")
+  await wait(150)
+  cursor.classList.remove("down"); el.classList.remove("press")
+  await wait(150)
+}
+async function type(field, text) {
+  const txt = field.querySelector(".txt")
+  field.classList.add("typing")
+  for (const ch of text) { txt.textContent += ch; await wait(36) }
+  field.classList.remove("typing")
+  field.querySelector(".send").classList.add("go")
+}
+function addAct() { S.acts++; $("acts").outerHTML = actsList(S.acts) }
+
+// On phones the window is zoomed in, panned so window x `f` sits mid-screen (its edges stop 16px inside the screen); "phone" shows it whole, fit to the screen, behind the iPhone
+// Where each step's activity is, in window x: sidebar and list, list, detail, the preview (step 5 watches the list fill with checkmarks)
+const FOCUS = [null, 0, 560, W, W, 560, 650, W, "phone", 560]
+let fit = 1, fx = null
+function aim(f) {
+  fx = f
+  let z = 1, zx = 0
+  if (innerWidth < 640 && f != null) {
+    z = f === "phone" ? 1 : 1.5
+    const k = fit * z, half = Math.min(W / 2, (scene.clientWidth / 2 - 16) / k)
+    if (f !== "phone") zx = -(Math.min(W - half, Math.max(half, f)) - W / 2) * k
+  }
+  mac.style.setProperty("--z", z); mac.style.setProperty("--zx", `${zx}px`)
+}
+
+const BEATS = [
+  null,
+  // 1. A new project; a stack of photos is dragged onto the new task input and the task is written, not sent
+  async () => {
+    const add = $("newproj")
+    cursor.style.transform = `translate(${W / 2}px, 560px)`; await point(add, .3); await click(add)
+    S.projects = [...new Set([...S.projects, "portfolio"])]; S.project = "portfolio"; S.tasks = []; S.sel = null
+    renderProjects("portfolio"); renderRows(); renderDetail()
+    await wait(600)
+    // The photos come up from below the bottom of the screen, as if dragged from Finder
+    const mr = mac.getBoundingClientRect(), k = mr.width / W
+    cursor.style.transition = "none"; cursor.style.transform = `translate(${W * .62}px, ${(innerHeight - mr.top) / k + 60}px)`; void cursor.offsetWidth; cursor.style.transition = ""
+    cursor.classList.add("on", "dragging")
+    await wait(150)
+    const f = $("nfield")
+    await point(f, .45, .5)
+    cursor.classList.remove("dragging")
+    renderDraft(true)
+    await wait(500)
+    await type(f, DRAFT)
+    S.draft = true
+    cursor.classList.remove("on")
+  },
+  // 2. The task is sent and starts working; more tasks follow it, each running on its own
+  async () => {
+    const send = $("nfield").querySelector(".send")
+    await point(send); await click(send)
+    S.draft = false; renderDraft()
+    S.tasks = [[201, "working"]]; S.sel = 201; S.prompts = TASKS[201].prompts; S.acts = 1
+    renderRows([201]); renderDetail(); renderProjects()
+    cursor.classList.remove("on")
+    await wait(1000)
+    S.tasks = stateAfter(2).tasks
+    renderRows([202, 203, 204]); renderProjects()
+    for (let i = 0; i < 3; i++) { await wait(850); addAct() }
+  },
+  // 3. A second prompt is typed and sent while it works
+  async () => {
+    const f = $("dfield")
+    await point(f.querySelector(".txt"), .3, .5); await click(f)
+    await type(f, SECOND)
+    const send = f.querySelector(".send")
+    await point(send); await click(send)
+    f.querySelector(".txt").textContent = ""; send.classList.remove("go")
+    S.prompts = [SECOND, ...TASKS[201].prompts]
+    $("prompts").insertAdjacentHTML("afterbegin", `<li class="enter">${SECOND}</li>`)
+    cursor.classList.remove("on")
+    await wait(500); addAct()
+  },
+  // 4. It asks; the cursor picks an answer and sends it; work goes on
+  async () => {
+    await wait(300)
+    S.tasks[0][1] = "input"
+    renderRows(); renderDetail(false)
+    await wait(1000)
+    await point($("opt"), .25); await click($("opt"))
+    $("opt").classList.add("pick"); $("asksend").classList.add("go")
+    await point($("asksend")); await click($("asksend"))
+    S.tasks[0][1] = "working"
+    renderRows(); renderDetail(false)
+    $("opt").classList.remove("pick"); $("asksend").classList.remove("go")
+    cursor.classList.remove("on")
+    await wait(500); addAct()
+  },
+  // 5. Done: it moves to Review and a notification says so
+  async () => {
+    await wait(500)
+    S.tasks[0][1] = "ready"; renderProjects()
+    renderRows(); renderDetail()
+    await wait(800)
+    S.notif = true; $("notif").classList.add("on")
+    // The others land too: two finish, one stops to ask
+    for (const [i, st] of AFTER) { await wait(900); S.tasks[i][1] = st; renderRows(); renderProjects() }
+  },
+  // 6. Open the preview and stay there until the next scroll
+  async () => {
+    S.notif = false; $("notif").classList.remove("on")
+    await point($("server"), .45); await click($("server"))
+    setPhoto(0); S.preview = true; $("browser").classList.add("on")
+    await wait(800)
+    // Try it: next, next, back
+    const next = $("bnext"), prev = $("bprev")
+    await point(next); await click(next); setPhoto(1)
+    await wait(700)
+    await click(next); setPhoto(2)
+    await wait(800)
+    await point(prev); await click(prev); setPhoto(1)
+    await wait(600)
+    cursor.classList.remove("on")
+  },
+  // 7. Close the preview, merge
+  async () => {
+    S.preview = false; $("browser").classList.remove("on")
+    await wait(500)
+    await point($("merge"), .4); await click($("merge"))
+    $("merge").innerHTML = `<span class="st" style="width:13px;height:13px">${rays("#fff")}</span>Merging…`
+    await wait(900)
+    S.tasks[0][1] = "merged"; renderProjects()
+    renderRows(); renderDetail()
+    cursor.classList.remove("on")
+  },
+  // 8. On the phone, the project chat is asked for a recurring task; it shows up on the Mac too
+  async () => {
+    renderPhone(true)
+    await wait(1100)
+    await tap($("ptxt"))
+    $("tap").classList.remove("on")
+    for (const c of ASK) { $("ptxt").textContent += c; await wait(22) }
+    $("psnd").classList.add("go")
+    await wait(300)
+    await tap($("psnd"))
+    $("tap").classList.remove("on")
+    $("ptxt").textContent = ""; $("psnd").classList.remove("go")
+    $("pchat").insertAdjacentHTML("beforeend", bubble("me", ASK, true))
+    await wait(900)
+    $("pchat").insertAdjacentHTML("beforeend", schedCard(true))
+    S.sched = true; S.phone = true; renderRows()
+  },
+  // 9. At 11 PM the schedule comes due: a task starts on its own, finishes and merges
+  async () => {
+    S.phone = false; $("rphone").classList.remove("on")
+    await wait(900)
+    $("clockpop").classList.add("on")
+    await wait(1600)
+    $("clockpop").classList.remove("on")
+    await wait(300)
+    S.tasks.unshift([205, "working"]); renderRows([205]); renderProjects()
+    await wait(2000)
+    S.tasks[0][1] = "ready"; renderRows(); renderProjects()
+    await wait(1200)
+    S.tasks[0][1] = "merged"; renderRows(); renderProjects()
+  },
+]
+
+async function run() {
+  if (running) return
+  running = true
+  while (shown !== target) {
+    const next = shown + 1
+    if (reduced || target < shown || target - shown > 2) { S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]); fill(300, true); break }
+    speed = target > next ? 2.5 : 1
+    aim(FOCUS[next])
+    if (next === target) fill(DUR[next])
+    try { await BEATS[next](); shown = next }
+    catch (e) { if (e !== ABORT) throw e; S = stateAfter(target); renderAll(); shown = target; aim(FOCUS[target]) }
+    if (shown === target) fill(300, true)
+  }
+  speed = 1
+  running = false
+  if (shown === target && target > 0) idle()
+}
+// Step dots: the current step's bar fills over its animation's length, measured at normal speed
+// ponytail: hand-measured; re-measure if a beat's waits change much
+const DUR = [0, 3940, 4730, 4120, 4120, 4040, 6670, 2560, 6340, 6030], dots = [...$("dots").children]
+// done: finish from wherever the bar is, instead of starting over
+function fill(ms, done) {
+  const d = dots[target - 1]
+  if (!d) return
+  if (done) { d.style.setProperty("--p", getComputedStyle(d, "::after").transform.split(/[(,]/)[1] ?? 1); void d.offsetWidth }
+  else { d.style.setProperty("--d", "0s"); d.style.setProperty("--p", 0); void d.offsetWidth }
+  d.style.setProperty("--d", `${ms}ms`); d.style.setProperty("--p", 1)
+}
+// When a step's animation ends, highlight the down arrow; with no click or scroll for 5s, go on by itself
+let idleTimer = 0
+function idle() {
+  clearTimeout(idleTimer)
+  $("next").classList.add("flash")
+  idleTimer = setTimeout(() => go(1), 5000)
+}
+function stopIdle() { clearTimeout(idleTimer); $("next").classList.remove("flash") }
+for (const e of ["wheel", "touchstart", "keydown", "pointerdown"]) addEventListener(e, stopIdle, { passive: true })
+
+// ---------- Scroll: tilt in, then one beat per screen ----------
+const story = $("story"), scene = $("scene"), mac = $("mac"), tags = $("tags"), heads = [...document.querySelectorAll(".head")]
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
+function layout() {
+  const w = scene.clientWidth, h = scene.clientHeight
+  // Steps have a shorter heading than the opening, so once upright the window moves up by the difference
+  // Phones: the captions sit below the window, so the window gets all the room between the nav and the captions
+  const phone = innerWidth < 640, capH = Math.max(...heads.slice(1).map((e) => e.offsetHeight))
+  const lift = phone ? scene.offsetTop - 72 : Math.max(0, heads[0].offsetHeight - capH)
+  const room = phone ? scene.parentElement.clientHeight - 76 - capH - 24 - 72 : h + lift - 56
+  fit = Math.min((w - 40) / W, room / H / (phone ? 1.5 : 1), .8)
+  // Whatever room is left below the window is split, so title and window sit centered together (zoomed in, on phones)
+  const bal = Math.max(0, (room - H * fit * (phone ? 1.5 : 1)) / 2)
+  scene.style.setProperty("--lift", `${lift - bal}px`)
+  scene.parentElement.style.setProperty("--bal", `${bal}px`)
+  mac.style.setProperty("--w", `${W}px`); mac.style.setProperty("--h", `${H}px`)
+  scene.style.setProperty("--fit", fit)
+  scene.style.setProperty("--drop", `${h * .4}px`)
+  scene.style.setProperty("--mw", `${W * fit * .84}px`)
+  scene.style.setProperty("--mw1", `${W * fit}px`)
+  // In the opening, center the headline between the nav and the tilted window's top edge
+  const hs = phone ? heads[0] : document.querySelector(".heads"), hh = heads[0].offsetHeight
+  scene.parentElement.style.setProperty("--hy", `${Math.max(0, (56 + scene.offsetTop + h * .4) / 2 - (hs.offsetTop + hh / 2))}px`)
+  scene.style.setProperty("--pw", `${Math.round(Math.max(130, Math.min(260, W * fit * .28, h * .5)))}px`)
+  // On phones the iPhone is as large as fits between its top and the step controls (it is about 2.12 widths tall)
+  const phoneTop = scene.offsetTop + h * .04 - (lift - bal)
+  scene.style.setProperty("--rpw", `${Math.round(Math.min(w * .7, (scene.parentElement.clientHeight - (phone ? 100 + capH : 72) - phoneTop) / 2.12))}px`)
+  aim(fx)
+  onScroll()
+}
+function onScroll() {
+  const p = -story.getBoundingClientRect().top / innerHeight
+  scene.parentElement.style.setProperty("--t", reduced ? 1 : Math.min(1, Math.max(0, p)).toFixed(3))
+  const beat = Math.min(9, Math.max(0, Math.floor(p + .1)))
+  heads.forEach((h, i) => h.classList.toggle("on", i === beat))
+  // Leaving the last step, the window eases back to the screen's width as the story scrolls away
+  mac.style.setProperty("--out", Math.min(1, Math.max(0, (p - 9.3) / .7)).toFixed(3))
+  // Phones: the tag pills pan up through their card as it crosses the screen
+  const tv = tags.parentElement, r = tv.getBoundingClientRect(), over = tags.offsetHeight - tv.clientHeight
+  if (over > 0) tags.style.setProperty("--ty", `${(tv.clientHeight / 3 - Math.min(1, Math.max(0, (innerHeight - r.top) / (innerHeight + r.height))) * (over + tv.clientHeight * 2 / 3)).toFixed(1)}px`)
+  // Gone just before the story lets go and the next section scrolls in
+  $("ctrl").classList.toggle("on", beat > 0 && p < 9.75)
+  if (beat !== target) {
+    stopIdle(); target = beat
+    dots.forEach((d, i) => { d.classList.toggle("on", i === beat - 1); d.style.setProperty("--d", "0s"); d.style.setProperty("--p", 0) })
+    run()
+  }
+}
+
+// Step controls
+async function replay() {
+  if (target < 1) return
+  const r = $("replay"); r.classList.remove("spin"); void r.offsetWidth; r.classList.add("spin")
+  cancel = true
+  while (running) await new Promise((res) => setTimeout(res, 30))
+  cancel = false
+  S = stateAfter(target - 1); renderAll(); shown = target - 1; run()
+}
+// Each step starts just after its own screen of scrolling begins; past the last one is the next section
+function go(d) {
+  const top = story.getBoundingClientRect().top + scrollY, k = target + d
+  scrollTo({ top: k > 9 ? top + story.offsetHeight - innerHeight + innerHeight : top + Math.max(0, k) * innerHeight + (k > 0 ? innerHeight * .05 : 0), behavior: reduced ? "auto" : "smooth" })
+}
+$("replay").addEventListener("click", replay)
+$("prev").addEventListener("click", () => go(-1))
+$("next").addEventListener("click", () => go(1))
+S = stateAfter(0)
+addEventListener("scroll", onScroll, { passive: true })
+addEventListener("resize", layout)
+layout()
+renderAll()
+</script>
+</body>
+</html>
