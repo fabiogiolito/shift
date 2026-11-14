@@ -106,8 +106,10 @@ struct TaskListView: View {
         }
         // Room between the large title and the first group.
         .contentMargins(.top, 16, for: .scrollContent)
-        // In the bottom bar, with the tag filter beside it, as in Mail.
-        .searchable(text: $search)
+        // Hidden under the title until the list is pulled down: it starts scrolled just past the search field.
+        // The tag filter sits at the end of the field: SwiftUI has no place beside it.
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic))
+        .background(HideSearchOnAppear(accessory: project.map { AnyView(filterMenu($0).labelStyle(.iconOnly)) }))
         .task(id: search) { await searchMac() }
         .onChange(of: tagNames) { _, names in tagFilter.formIntersection(names.map { $0.lowercased() }) }
         .overlay {
@@ -152,8 +154,6 @@ struct TaskListView: View {
             }
             ToolbarSpacer(.fixed)
             ToolbarItem { Button("New Task", systemImage: "plus") { isCreating = true } }
-            if let project { ToolbarItem(placement: .bottomBar) { filterMenu(project) } }
-            DefaultToolbarItem(kind: .search, placement: .bottomBar)
         }
         .alert("Pulling \(project?.baseBranch ?? "") conflicts",
                isPresented: Binding(get: { !pullConflicts.isEmpty }, set: { if !$0 { pullConflicts = [] } })) {
@@ -1696,4 +1696,87 @@ extension VerticalAlignment {
         static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
     }
     static let firstLineCenter = VerticalAlignment(FirstLineCenter.self)
+}
+/// Scrolls the list just past the navigation bar's search field, as Mail does, so a small pull shows it.
+/// SwiftUI's own scroll position doesn't move a list shorter than the screen; the scroll view underneath does.
+/// iOS 26 folds the large title away with the search field. Also puts `accessory` at the end of the field.
+private struct HideSearchOnAppear: UIViewRepresentable {
+    var accessory: AnyView?
+
+    func makeUIView(context: Context) -> UIView { Probe() }
+    func updateUIView(_ view: UIView, context: Context) { (view as? Probe)?.accessory = accessory }
+
+    private final class Probe: UIView {
+        private var found = false
+        private var host: UIHostingController<AnyView>?
+        var accessory: AnyView? { didSet { place() } }
+        private weak var field: UISearchTextField?
+
+        /// Hosts the accessory as the search field's right view, once the field is found.
+        private func place() {
+            guard let field else { return }
+            guard let accessory else { field.rightView = nil; host = nil; return }
+            if let host { host.rootView = accessory; host.view.sizeToFit(); return }
+            let host = UIHostingController(rootView: accessory)
+            host.sizingOptions = .intrinsicContentSize
+            host.view.backgroundColor = .clear
+            host.view.sizeToFit()
+            self.host = host
+            field.rightView = host.view
+            field.rightViewMode = .always
+        }
+        private var observation: NSKeyValueObservation?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil, !found else { return }
+            find(tries: 20)
+        }
+
+        /// Tries again until the search field is laid out in the navigation bar.
+        private func find(tries: Int) {
+            guard tries > 0, !found else { return }
+            guard let bar = Self.searchBar(from: self), bar.frame.height > 0, let list = window.flatMap(Self.list) else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.find(tries: tries - 1) }
+                return
+            }
+            found = true
+            field = bar.searchTextField
+            place()
+            list.alwaysBounceVertical = true
+            // The insets grow once the search field joins the navigation bar, so from what they are a moment later.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                let hidden = -list.adjustedContentInset.top + bar.frame.height
+                list.setContentOffset(CGPoint(x: 0, y: hidden), animated: false)
+                // The tasks arriving from the Mac reload the list, which goes back to the top: hide it again,
+                // until the list is touched or a few seconds have passed.
+                self?.observation = list.observe(\.contentSize) { list, _ in
+                    DispatchQueue.main.async {
+                        guard !list.isTracking, list.contentOffset.y < hidden else { return }
+                        list.setContentOffset(CGPoint(x: 0, y: hidden), animated: false)
+                    }
+                }
+                list.panGestureRecognizer.addTarget(self as Any, action: #selector(Probe.stop))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.stop() }
+            }
+        }
+
+        @objc private func stop() { observation = nil }
+
+        private static func searchBar(from view: UIView) -> UISearchBar? {
+            var responder: UIResponder? = view
+            while let current = responder {
+                if let bar = (current as? UIViewController)?.navigationItem.searchController?.searchBar { return bar }
+                responder = current.next
+            }
+            return nil
+        }
+
+        /// The list: the one under the navigation bar, which insets it.
+        private static func list(in view: UIView) -> UIScrollView? {
+            if let list = view as? UICollectionView, list.adjustedContentInset.top > 0, !list.isHidden { return list }
+            for sub in view.subviews { if let found = list(in: sub) { return found } }
+            return nil
+        }
+    }
 }
