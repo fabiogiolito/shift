@@ -436,5 +436,21 @@
 - If a project is missing its dependencies, Shift now installs them before starting the project's main server, so projects cloned without `node_modules` run on main.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.16/Shift-0.2.16.zip" sparkle:edSignature="4X38QEzhjQjRpGGD7tbl7Wv/M2KlUuFHFsRi8mjql1s8Poj2guRQqUWBrBxzbxMErQb6tIWrCP3ySG/GWWOsDg==" length="6164418" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.17</title>
+      <pubDate>Sat, 14 Nov 2026 14:42:34 +0000</pubDate>
+      <sparkle:version>34</sparkle:version>
+      <sparkle:shortVersionString>0.2.17</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Build and open your project's Mac app, or run its iOS target in the simulator, with the new hammer button in the task list toolbar
+- Pull the base branch from the remote with the new button beside push. If there's a conflict, nothing changes and you choose what to do, like handing it to a new task's agent
+- Re-sync Base Branch is now Update from <base>
+- Each reply now shows under the prompt it answers, even when you send a prompt while the agent is still working
+- Agents can show screenshots on the task, even when the project doesn't take any of its own
+- Native app projects without a build command now detect a root build.sh or a Swift package app, and save the detected build target to their settings
+- The plan card shows the plan as a document
+- General settings are regrouped into Preferred apps, Preferences and usage sharing]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.17/Shift-0.2.17.zip" sparkle:edSignature="Cy6n4MaDtcExjqKZhos4rz86iQsNGIIUVS7KN9xBcFWOjy5F76I0iPPmY+ivMuxDrdh7wu2w+7a+jLfz++gYAg==" length="6196773" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
