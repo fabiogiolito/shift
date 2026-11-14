@@ -155,11 +155,10 @@ struct TaskListView: View {
             ToolbarSpacer(.fixed)
             ToolbarItem { Button("New Task", systemImage: "plus") { isCreating = true } }
         }
-        .confirmationDialog("Pulling \(project?.baseBranch ?? "") conflicts",
-                            isPresented: Binding(get: { !pullConflicts.isEmpty }, set: { if !$0 { pullConflicts = [] } }),
-                            titleVisibility: .visible) {
+        .alert("Pulling \(project?.baseBranch ?? "") conflicts",
+               isPresented: Binding(get: { !pullConflicts.isEmpty }, set: { if !$0 { pullConflicts = [] } })) {
             Button("Fix with Agent") { Task { await model.fixPullConflict(projectID: projectID) } }
-            Button("Leave As It Was", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("Conflicting files:\n\(pullConflicts.joined(separator: "\n"))\n\nNothing was changed. A new task's agent can merge the remote's \(project?.baseBranch ?? "") and resolve it, then you merge that task.")
         }
@@ -1255,11 +1254,10 @@ private struct TaskActions: View {
             } message: {
                 Text("Its own commits move onto \(newBase ?? ""), without what \(base) has, and Merge puts them there. If they conflict, the agent resolves it.")
             }
-            .confirmationDialog("Updating from \(base) conflicts",
-                                isPresented: Binding(get: { !syncConflicts.isEmpty }, set: { if !$0 { syncConflicts = [] } }),
-                                titleVisibility: .visible) {
+            .alert("Updating from \(base) conflicts",
+                   isPresented: Binding(get: { !syncConflicts.isEmpty }, set: { if !$0 { syncConflicts = [] } })) {
                 Button("Fix with Agent") { Task { await model.fixSyncConflict(taskID: task.id) } }
-                Button("Leave As It Was", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Conflicting files:\n\(syncConflicts.joined(separator: "\n"))\n\nNothing was changed. The agent can merge and resolve it.")
             }
