@@ -464,30 +464,48 @@ public struct GitService: GitServicing {
         if let failure = try await gitOverNetwork(["fetch", remote, "+refs/heads/\(branch):\(tracking)"], repo: repo, remote: remote) {
             throw GitError(message: failure)
         }
-        guard try await isAncestor(repo: repo, branch: branch, of: tracking) else { return }
-        if let checkout = try await worktree(of: branch, repo: repo) {
-            try await git(["merge", "--ff-only", "--no-stat", tracking], in: checkout)
-        } else {
-            try await git(["update-ref", "refs/heads/\(branch)", tracking], in: repo)
+        _ = try await moveForward(repo: repo, branch: branch, to: tracking, retrying: "pull")
+    }
+
+    public func pull(repo: URL, branch: String, remote: String) async throws -> MergeResult {
+        try await pull(repo: repo, branch: branch, remote: remote, retrying: "pull")
+    }
+
+    /// `retrying`: the action the user is told to repeat if uncommitted changes are in the way.
+    private func pull(repo: URL, branch: String, remote: String, retrying: String) async throws -> MergeResult {
+        let tracking = "refs/remotes/\(remote)/\(branch)"
+        if let failure = try await gitOverNetwork(["fetch", remote, "+refs/heads/\(branch):\(tracking)"], repo: repo, remote: remote) {
+            throw await pushError(failure, repo: repo, remote: remote, branch: branch, verb: "pull from")
         }
+        if try await moveForward(repo: repo, branch: branch, to: tracking, retrying: retrying) { return .merged }
+        return try await integrate(repo: repo, branch: tracking, into: branch,
+                                   message: "Merge \(remote)/\(branch) into \(branch)", retrying: retrying)
+    }
+
+    /// Fast-forwards `branch` to `target` if it can; false if `branch` has commits of its own.
+    private func moveForward(repo: URL, branch: String, to target: String, retrying: String) async throws -> Bool {
+        guard try await isAncestor(repo: repo, branch: "refs/heads/\(branch)", of: target) else { return false }
+        if let checkout = try await worktree(of: branch, repo: repo) {
+            let out = try await run(["merge", "--ff-only", "--no-stat", target], in: checkout)
+            guard out.status == 0 else {
+                throw GitError(message: Self.mergeFailure(out.stderr, checkout: checkout, base: branch, retrying: retrying))
+            }
+        } else {
+            try await git(["update-ref", "refs/heads/\(branch)", target], in: repo)
+        }
+        return true
     }
 
     /// Fetches `branch` and merges it in, never rewriting local commits. Throws if they conflict.
     private func bringInRemoteChanges(repo: URL, branch: String, remote: String) async throws {
-        let tracking = "refs/remotes/\(remote)/\(branch)"
-        if let failure = try await gitOverNetwork(["fetch", remote, "+refs/heads/\(branch):\(tracking)"], repo: repo, remote: remote) {
-            throw await pushError(failure, repo: repo, remote: remote, branch: branch)
-        }
-        let result = try await integrate(repo: repo, branch: tracking, into: branch,
-                                         message: "Merge \(remote)/\(branch) into \(branch)", retrying: "push")
-        if case .conflict = result {
+        if try await pull(repo: repo, branch: branch, remote: remote, retrying: "push") == .conflict {
             throw GitError(message: "\(remote) has changes that conflict with your \(branch). Merge them in your usual Git tool, then push again.")
         }
     }
 
-    private func pushError(_ output: String, repo: URL, remote: String, branch: String) async -> GitError {
+    private func pushError(_ output: String, repo: URL, remote: String, branch: String, verb: String = "push to") async -> GitError {
         let url = (try? await git(["remote", "get-url", remote], in: repo)) ?? remote
-        return GitError(message: Self.pushFailure(output, remote: remote, url: url, branch: branch))
+        return GitError(message: Self.pushFailure(output, remote: remote, url: url, branch: branch, verb: verb))
     }
 
     /// Runs a git command that talks to `remote`. Returns its output if it failed, nil if it worked.
@@ -501,7 +519,7 @@ public struct GitService: GitServicing {
                    "LC_ALL": "C"]
         let (result, timedOut) = try await shell(command, repo: repo, env: env)
         guard result.exitCode != 0 else { return nil }
-        if timedOut { throw GitError(message: "Pushing to \(remote) took too long and was stopped. Try again.") }
+        if timedOut { throw GitError(message: "\(remote) took too long to answer and was stopped. Try again.") }
         return result.output
     }
 
@@ -531,7 +549,7 @@ public struct GitService: GitServicing {
     }
 
     /// Plain language for the usual ways a push fails; anything else: git's first line.
-    static func pushFailure(_ output: String, remote: String, url: String, branch: String) -> String {
+    static func pushFailure(_ output: String, remote: String, url: String, branch: String, verb: String = "push to") -> String {
         func has(_ needles: String...) -> Bool { needles.contains { output.localizedCaseInsensitiveContains($0) } }
         if isBehindRemote(output) {
             // `push` already brought the remote's changes in once: it moved again in the meantime.
@@ -552,7 +570,7 @@ public struct GitService: GitServicing {
         // The login shell's own output may come first: git's error line, if there is one, says the most.
         let lines = output.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         let line = lines.first { $0.hasPrefix("fatal: ") || $0.hasPrefix("error: ") } ?? lines.first ?? "git push failed"
-        return "Could not push to \(remote): "
+        return "Could not \(verb) \(remote): "
             + line.trimmingCharacters(in: .whitespaces)
                 .replacingOccurrences(of: #"^(error|fatal): "#, with: "", options: .regularExpression)
     }

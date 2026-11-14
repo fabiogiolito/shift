@@ -717,6 +717,50 @@ final class GitServiceTests: XCTestCase {
         XCTAssertEqual(try sh("rev-parse", "main"), mine)
     }
 
+    func testPullFastForwardsMergesOrReportsAConflict() async throws {
+        let bare = root.appendingPathComponent("remote.git")
+        try sh("init", "--bare", bare.path)
+        try sh("remote", "add", "origin", bare.path)
+        try sh("push", "origin", "main")
+        let other = root.appendingPathComponent("other")
+        try sh("clone", bare.path, other.path)
+        try sh("config", "user.name", "Test", in: other)
+        try sh("config", "user.email", "test@example.com", in: other)
+        func commitOnRemote(_ file: String, _ text: String) throws {
+            try text.write(to: other.appendingPathComponent(file), atomically: true, encoding: .utf8)
+            try sh("add", "-A", in: other)
+            try sh("commit", "-m", file, in: other)
+            try sh("push", "origin", "main", in: other)
+        }
+
+        // Behind: a fast-forward, no merge commit.
+        try commitOnRemote("a.txt", "a\n")
+        let result = try await service.pull(repo: repo, branch: "main", remote: "origin")
+        XCTAssertEqual(result, .merged)
+        XCTAssertEqual(try sh("rev-parse", "main"), try sh("rev-parse", "HEAD", in: other))
+
+        // Diverged: a merge keeping both.
+        try write("mine.txt", "mine\n")
+        try sh("add", "-A")
+        try sh("commit", "-m", "mine")
+        try commitOnRemote("b.txt", "b\n")
+        let merged = try await service.pull(repo: repo, branch: "main", remote: "origin")
+        XCTAssertEqual(merged, .merged)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repo.appendingPathComponent("b.txt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repo.appendingPathComponent("mine.txt").path))
+
+        // Conflicting: nothing changes.
+        try write("b.txt", "local\n")
+        try sh("commit", "-am", "local b")
+        try commitOnRemote("b.txt", "remote\n")
+        let before = try sh("rev-parse", "main")
+        let conflict = try await service.pull(repo: repo, branch: "main", remote: "origin")
+        XCTAssertEqual(conflict, .conflict)
+        XCTAssertEqual(try sh("rev-parse", "main"), before)
+        let files = try await service.conflictedFiles(repo: repo, branch: "origin/main", base: "main")
+        XCTAssertEqual(files, ["b.txt"])
+    }
+
     func testFetchPullRequestBringsItsHeadCommit() async throws {
         let bare = root.appendingPathComponent("remote.git")
         try sh("init", "--bare", bare.path)
@@ -799,7 +843,7 @@ final class GitServiceTests: XCTestCase {
             try await service.push(repo: repo, branch: "main", remote: "origin")
             XCTFail("push should fail")
         } catch {
-            XCTAssertEqual((error as? GitError)?.message, "Pushing to origin took too long and was stopped. Try again.")
+            XCTAssertEqual((error as? GitError)?.message, "origin took too long to answer and was stopped. Try again.")
         }
         XCTAssertLessThan(Date().timeIntervalSince(start), 10)
     }

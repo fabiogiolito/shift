@@ -89,6 +89,9 @@ public protocol GitServicing: Sendable {
     /// Moves `branch` up to what the remote has, if that is a fast-forward; otherwise leaves it alone.
     /// Where it is checked out, keeps uncommitted changes or leaves it alone.
     func fastForward(repo: URL, branch: String, remote: String) async throws
+    /// Fetches `branch` from `remote` and brings it in: a fast-forward if it can, else a merge commit. On a
+    /// conflict nothing changes and `.conflict` is returned. Throws a plain-language message.
+    func pull(repo: URL, branch: String, remote: String) async throws -> MergeResult
 }
 
 // MARK: - Agents

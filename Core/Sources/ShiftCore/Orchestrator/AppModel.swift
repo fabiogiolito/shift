@@ -911,6 +911,41 @@ public final class AppModel {
         await refreshMergeability()
     }
 
+    /// Brings in what the remote's copy of the project's base has: a fast-forward, or a merge with the local
+    /// commits. On a conflict nothing changes and the conflicting files are returned, for the user to leave
+    /// or hand to `fixPullConflict`.
+    @discardableResult
+    public func pull(projectID: Project.ID) async -> [String] {
+        guard let services, let project = project(projectID), let remote = pushStates[projectID]?.remote else { return [] }
+        let base = project.baseBranch
+        do {
+            if try await services.git.pull(repo: project.repoURL, branch: base, remote: remote) == .conflict {
+                let files = (try? await services.git.conflictedFiles(repo: project.repoURL, branch: "\(remote)/\(base)", base: base)) ?? []
+                return files.isEmpty ? ["(files unknown)"] : files
+            }
+        } catch {
+            lastError = "Could not pull \(base): \(Self.firstLine(Self.describe(error)))"
+            return []
+        }
+        await refreshPushState(projectID: projectID)
+        // The base moved: tasks may not merge cleanly any more.
+        await refreshMergeability()
+        return []
+    }
+
+    /// A pull that conflicted, as a new task: its agent merges the remote's base into its branch and resolves
+    /// it, and merging the task brings both sides into the base.
+    @discardableResult
+    public func fixPullConflict(projectID: Project.ID) -> TaskItem.ID? {
+        guard let project = project(projectID), let remote = pushStates[projectID]?.remote else { return nil }
+        let base = project.baseBranch
+        return createTask(projectID: projectID, prompt: """
+            Pulling `\(remote)/\(base)` into the local `\(base)` conflicts. Run `git fetch \(remote) \(base)`, then merge \
+            `\(remote)/\(base)` into this branch. Resolve the conflicts keeping the intent of both sides, verify that the \
+            project still builds and its tests pass, and commit the result.
+            """)
+    }
+
     /// Commits what the task has and pushes its branch to the project's remote, which updates its open
     /// pull request. Never forced.
     public func pushBranch(taskID: TaskItem.ID) async {
@@ -1300,20 +1335,20 @@ public final class AppModel {
               !settingUp.contains(taskID), runs[taskID]?.active != true, let project = project(for: task) else { return [] }
         let base = task.base(in: project)
         if let missing = await missingBase(task, project) {
-            lastError = "Could not re-sync \(task.title): \(missing)"
+            lastError = "Could not update \(task.title): \(missing)"
             return []
         }
         busy.insert(taskID)
         let clean: Bool
         do {
             guard FileManager.default.fileExists(atPath: task.worktreePath) else {
-                throw Failure("The task's folder is missing. Restart its server to recreate it, then re-sync.")
+                throw Failure("The task's folder is missing. Restart its server to recreate it, then update it.")
             }
             try await services.git.commitAll(worktree: task.worktreeURL, message: task.title)
             clean = try await services.git.mergeBase(worktree: task.worktreeURL, base: base)
         } catch {
             busy.remove(taskID)
-            lastError = "Could not re-sync \(task.title): \(Self.firstLine(Self.describe(error)))"
+            lastError = "Could not update \(task.title): \(Self.firstLine(Self.describe(error)))"
             return []
         }
         busy.remove(taskID)
@@ -1326,7 +1361,7 @@ public final class AppModel {
         return files.isEmpty ? ["(files unknown)"] : files
     }
 
-    /// Hands a re-sync that conflicted to the agent, which merges the base in and resolves it.
+    /// Hands an update from the base that conflicted to the agent, which merges the base in and resolves it.
     public func fixSyncConflict(taskID: TaskItem.ID) {
         guard services != nil, let task = task(taskID), !task.status.isClosed, !busy.contains(taskID),
               runs[taskID]?.active != true, let project = project(for: task) else { return }

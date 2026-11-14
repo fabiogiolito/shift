@@ -198,6 +198,12 @@ final class MockGit: GitServicing {
     func fastForward(repo: URL, branch: String, remote: String) async throws {
         calls.append("fast-forward \(branch)")
     }
+
+    var pullResult: MergeResult = .merged
+    func pull(repo: URL, branch: String, remote: String) async throws -> MergeResult {
+        calls.append("pull \(branch)")
+        return pullResult
+    }
 }
 
 /// Scriptable agent: each run plays the next script. With no script left it completes at once.

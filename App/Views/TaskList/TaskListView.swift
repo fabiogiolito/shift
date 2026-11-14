@@ -7,6 +7,9 @@ struct TaskListView: View {
     let project: Project
     @Binding var selection: TaskItem.ID?
     @State private var activations = 0
+    @State private var isPulling = false
+    /// Files a pull of the base conflicted in, while the user picks what to do.
+    @State private var pullConflicts: [String] = []
     /// Lowercased tag names to show tasks with; empty shows every task.
     @State private var tagFilter: Set<String> = []
     @State private var showingFilter = false
@@ -110,8 +113,16 @@ struct TaskListView: View {
                 ToolbarItem { baseBuildButton(buildable) }
             }
             if let pushState {
+                ToolbarItem { pullButton(pushState) }
                 ToolbarItem { pushButton(pushState) }
             }
+        }
+        .confirmationDialog("Pulling \(project.baseBranch) conflicts",
+                            isPresented: Binding(get: { !pullConflicts.isEmpty }, set: { if !$0 { pullConflicts = [] } })) {
+            Button("Fix with Agent") { if let id = model.fixPullConflict(projectID: project.id) { selection = id } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Conflicting files:\n\(pullConflicts.joined(separator: "\n"))\n\nNothing was changed. A new task's agent can merge \(model.pushStates[project.id]?.remote ?? "the remote")/\(project.baseBranch) and resolve it, then you merge that task.")
         }
         // A tag that leaves the project leaves the filter too, or the list would stay filtered by a tag it no longer offers.
         .onChange(of: project.tagNames) { tagFilter.formIntersection(project.tagNames.map { $0.lowercased() }) }
@@ -244,6 +255,26 @@ struct TaskListView: View {
             guard let app = await model.buildBase(projectID: project.id, target: target.id) else { return }
             await ExternalApps().relaunch(app, environment: ["SHIFT_HOME": model.baseBuildHome(projectID: project.id).path])
         }
+    }
+
+    private func pullButton(_ state: AppModel.PushState) -> some View {
+        let title = "Pull \(state.remote)/\(project.baseBranch)"
+        return Button {
+            isPulling = true
+            Task {
+                pullConflicts = await model.pull(projectID: project.id)
+                isPulling = false
+            }
+        } label: {
+            if isPulling {
+                ProgressView().controlSize(.mini)
+            } else {
+                Image(systemName: "arrow.down").imageScale(.small).fontWeight(.medium)
+            }
+        }
+        .disabled(isPulling || state.isPushing)
+        .help(title)
+        .accessibilityLabel(title)
     }
 
     private func pushButton(_ state: AppModel.PushState) -> some View {
