@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Shift is a native macOS app (SwiftUI) that runs coding tasks in parallel using installed coding agents (Claude Code, Codex). One task = one Git worktree + branch + agent session + dev server. An iOS companion app follows and steers tasks from a phone; all the work stays on the Mac. Product brief: `docs/BRIEF.md`. Architecture and rules: `docs/ARCHITECTURE.md`. Per-feature specs: `docs/specs/`. `docs/` is local only (gitignored, not in the public repo); it may be missing in a fresh clone.
+Shift is a native macOS app (SwiftUI) that runs coding tasks in parallel using installed coding agents (Claude Code, Codex). One task = one Git worktree + branch + agent session + dev server. An iOS companion app follows and steers tasks from a phone; all the work stays on the Mac. Product brief: `docs/BRIEF.md`. Architecture and rules: `docs/ARCHITECTURE.md`. Per-feature specs: `docs/specs/`. `docs/` also holds the website (published to GitHub Pages); everything else in it is local only (gitignored, not in the public repo) and may be missing in a fresh clone.
 
 ## Commands
 

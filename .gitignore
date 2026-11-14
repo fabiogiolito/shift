@@ -8,4 +8,9 @@ xcuserdata/
 dist/
 App/Info.plist
 iOS/Info.plist
-docs/
+# docs/ is the website; everything else in it is local only
+docs/*
+!docs/README.md
+!docs/index.html
+!docs/icon.png
+!docs/screens/
