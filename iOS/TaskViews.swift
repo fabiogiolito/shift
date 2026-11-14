@@ -103,9 +103,8 @@ struct TaskListView: View {
         }
         // Room between the large title and the first group.
         .contentMargins(.top, 16, for: .scrollContent)
-        // Hidden under the title until the list is pulled down: it starts scrolled just past the search field.
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic))
-        .background(HideSearchOnAppear())
+        // In the bottom bar, with the tag filter beside it, as in Mail.
+        .searchable(text: $search)
         .task(id: search) { await searchMac() }
         .onChange(of: tagNames) { _, names in tagFilter.formIntersection(names.map { $0.lowercased() }) }
         .overlay {
@@ -120,7 +119,7 @@ struct TaskListView: View {
         }
         .navigationTitle(project?.name ?? "Tasks")
         .toolbar {
-            // Push, preview and the tag filter act on the project, so they share a capsule; a new task is its own thing.
+            // Push and preview act on the project, so they share a capsule; a new task is its own thing.
             ToolbarItemGroup {
                 // As on the Mac: there whenever the project has a remote, the count of commits its merged tasks left to push.
                 if let push = model.state.pushStates?[projectID] {
@@ -139,10 +138,11 @@ struct TaskListView: View {
                     }
                     .disabled(isOpeningSite)
                 }
-                if let project { filterMenu(project) }
             }
             ToolbarSpacer(.fixed)
             ToolbarItem { Button("New Task", systemImage: "plus") { isCreating = true } }
+            if let project { ToolbarItem(placement: .bottomBar) { filterMenu(project) } }
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
         }
         .sheet(isPresented: Binding(get: { site != nil }, set: { if !$0 { site = nil } })) {
             if let site { SafariView(url: site).ignoresSafeArea() }
@@ -1666,67 +1666,4 @@ extension VerticalAlignment {
         static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
     }
     static let firstLineCenter = VerticalAlignment(FirstLineCenter.self)
-}
-
-/// Scrolls the list just past the navigation bar's search field, as Mail does, so a small pull shows it.
-/// SwiftUI's own scroll position doesn't move a list shorter than the screen; the scroll view underneath does.
-/// iOS 26 folds the large title away with the search field.
-private struct HideSearchOnAppear: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView { Probe() }
-    func updateUIView(_ view: UIView, context: Context) {}
-
-    private final class Probe: UIView {
-        private var found = false
-        private var observation: NSKeyValueObservation?
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            guard window != nil, !found else { return }
-            find(tries: 20)
-        }
-
-        /// Tries again until the search field is laid out in the navigation bar.
-        private func find(tries: Int) {
-            guard tries > 0, !found else { return }
-            guard let bar = Self.searchBar(from: self), bar.frame.height > 0, let list = window.flatMap(Self.list) else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.find(tries: tries - 1) }
-                return
-            }
-            found = true
-            list.alwaysBounceVertical = true
-            // The insets grow once the search field joins the navigation bar, so from what they are a moment later.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                let hidden = -list.adjustedContentInset.top + bar.frame.height
-                list.setContentOffset(CGPoint(x: 0, y: hidden), animated: false)
-                // The tasks arriving from the Mac reload the list, which goes back to the top: hide it again,
-                // until the list is touched or a few seconds have passed.
-                self?.observation = list.observe(\.contentSize) { list, _ in
-                    DispatchQueue.main.async {
-                        guard !list.isTracking, list.contentOffset.y < hidden else { return }
-                        list.setContentOffset(CGPoint(x: 0, y: hidden), animated: false)
-                    }
-                }
-                list.panGestureRecognizer.addTarget(self as Any, action: #selector(Probe.stop))
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.stop() }
-            }
-        }
-
-        @objc private func stop() { observation = nil }
-
-        private static func searchBar(from view: UIView) -> UISearchBar? {
-            var responder: UIResponder? = view
-            while let current = responder {
-                if let bar = (current as? UIViewController)?.navigationItem.searchController?.searchBar { return bar }
-                responder = current.next
-            }
-            return nil
-        }
-
-        /// The list: the one under the navigation bar, which insets it.
-        private static func list(in view: UIView) -> UIScrollView? {
-            if let list = view as? UICollectionView, list.adjustedContentInset.top > 0, !list.isHidden { return list }
-            for sub in view.subviews { if let found = list(in: sub) { return found } }
-            return nil
-        }
-    }
 }
