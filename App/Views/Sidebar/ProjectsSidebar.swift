@@ -12,7 +12,8 @@ struct ProjectsSidebar: View {
     @State private var settingsAfterSetup: Project?
     @State private var removingProject: Project?
     @State private var scrolledUnderBar = false
-    @State private var sortingDisabledAlert = false
+    /// A drag made while sorted by most recent, held until the user agrees to turn sorting off.
+    @State private var pendingMove: (source: IndexSet, destination: Int)?
 
     var body: some View {
         List(selection: $selection) {
@@ -56,9 +57,9 @@ struct ProjectsSidebar: View {
                 }
             }
             .onMove { source, destination in
-                // Dragging keeps the order on screen as the manual one, so recent sorting is turned off.
-                model.moveProjects(from: source, to: destination, shown: model.sortedProjects)
-                if model.sortProjectsByRecent { model.sortProjectsByRecent = false; sortingDisabledAlert = true }
+                // Dragging keeps the order on screen as the manual one, so recent sorting has to go: ask first.
+                if model.sortProjectsByRecent { pendingMove = (source, destination) }
+                else { model.moveProjects(from: source, to: destination) }
             }
         }
         .listStyle(.sidebar)
@@ -80,9 +81,16 @@ struct ProjectsSidebar: View {
             if !shown, let project = settingsAfterSetup { settingsAfterSetup = nil; settingsProject = project }
         }
         .onReceive(NotificationCenter.default.publisher(for: .addProject)) { _ in addProject() }
-        .alert("Sorting by most recent was disabled", isPresented: $sortingDisabledAlert) {
+        .alert("Turn off sorting by most recent?",
+               isPresented: Binding(get: { pendingMove != nil }, set: { if !$0 { pendingMove = nil } })) {
+            Button("Turn Off") {
+                guard let move = pendingMove else { return }
+                model.moveProjects(from: move.source, to: move.destination, shown: model.sortedProjects)
+                model.sortProjectsByRecent = false
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Projects now keep the order you drag them into. Turn it back on in Settings.")
+            Text("Projects will keep the order you drag them into. You can turn it back on in Settings.")
         }
         .confirmationDialog("Remove “\(removingProject?.name ?? "")”?",
                             isPresented: Binding(get: { removingProject != nil }, set: { if !$0 { removingProject = nil } }),
