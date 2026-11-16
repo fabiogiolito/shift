@@ -387,7 +387,8 @@ struct TaskRow: View {
                          onRemove: { model.removeTag(taskID: task.id, $0) },
                          onDelete: { model.deleteTag(projectID: task.projectID, $0) },
                          isShared: { model.tagIsShared(taskID: task.id, $0) },
-                         onColor: { model.setTagColor(projectID: task.projectID, $0, $1) }).padding(.top, 2) }
+                         onColor: { model.setTagColor(projectID: task.projectID, $0, $1) },
+                         onRename: { model.renameTag(projectID: task.projectID, $0, to: $1) }).padding(.top, 2) }
         }
         .padding(.vertical, 2)
         .contextMenu {

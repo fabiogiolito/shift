@@ -87,9 +87,13 @@ struct TaskTags: View {
     var isShared: (String) -> Bool = { _ in false }
     /// Given, right-clicking a tag offers to change its color, for every task in the project.
     var onColor: ((String, TagColor) -> Void)?
+    /// Given, right-clicking a tag offers to rename it, on every task in the project.
+    var onRename: ((String, String) -> Void)?
     /// Bigger capsules, for a task's own page rather than a list row.
     var large = false
     @State private var deleting: String?
+    @State private var renaming: String?
+    @State private var newName = ""
 
     var body: some View {
         HStack(spacing: large ? 6 : 4) {
@@ -103,6 +107,7 @@ struct TaskTags: View {
                             }
                             .pickerStyle(.menu)
                         }
+                        if onRename != nil { Button("Rename Tag…") { newName = tag; renaming = tag } }
                         if let onRemove { Button("Remove Tag") { onRemove(tag) } }
                         if onDelete != nil, isShared(tag) { Button("Delete Tag…", role: .destructive) { deleting = tag } }
                     }
@@ -112,6 +117,13 @@ struct TaskTags: View {
             Button("Delete Tag", role: .destructive) { if let deleting { onDelete?(deleting) } }
         } message: {
             Text("It is removed from every task in the project.")
+        }
+        .alert("Rename “\(renaming ?? "")”", isPresented: Binding { renaming != nil } set: { if !$0 { renaming = nil } }) {
+            TextField("Name", text: $newName)
+            Button("Rename") { if let renaming { onRename?(renaming, newName) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("It is renamed on every task in the project.")
         }
     }
 
