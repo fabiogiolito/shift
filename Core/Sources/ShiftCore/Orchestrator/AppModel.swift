@@ -775,6 +775,31 @@ public final class AppModel {
         changed()
     }
 
+    /// Renames `tag` on every task in the project that has it, keeping its color. Renaming it to a tag
+    /// the project already has merges the two, in that tag's spelling and color.
+    public func renameTag(projectID: Project.ID, _ tag: String, to name: String) {
+        let name = name.replacingOccurrences(of: ",", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != tag, let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let oldKey = projects[index].tagKey(tag)
+        let merging = name.caseInsensitiveCompare(tag) != .orderedSame ? projects[index].tagKey(name) : nil
+        let newName = merging ?? name
+        for task in tasks(in: projectID) where task.tags?.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) == true {
+            update(task.id) { task in
+                var tags: [String] = []
+                for t in task.tags ?? [] {
+                    let t = t.caseInsensitiveCompare(tag) == .orderedSame ? newName : t
+                    if !tags.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) { tags.append(t) }
+                }
+                task.tags = tags
+            }
+        }
+        if let oldKey {
+            let color = projects[index].tagColors.removeValue(forKey: oldKey)
+            if merging == nil { projects[index].tagColors[newName] = color }
+        }
+        changed()
+    }
+
     /// Changes the color of `tag` on every task in the project that has it.
     public func setTagColor(projectID: Project.ID, _ tag: String, _ color: TagColor) {
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }

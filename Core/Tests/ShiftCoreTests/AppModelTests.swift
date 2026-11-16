@@ -139,6 +139,18 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.task(other)?.tags)
         XCTAssertEqual(model.project(project.id)?.tagNames, [])
         XCTAssertNil(AppModel.command("tag", "/tags x"))
+
+        model.addTags(taskID: id, "ui, old")
+        model.addTags(taskID: other, "Old")
+        model.setTagColor(projectID: project.id, "old", .blue)
+        model.renameTag(projectID: project.id, "old", to: "New")
+        XCTAssertEqual(model.task(id)?.tags, ["ui", "New"])
+        XCTAssertEqual(model.task(other)?.tags, ["New"])
+        XCTAssertEqual(model.project(project.id)?.color(ofTag: "new"), .blue)
+        model.renameTag(projectID: project.id, "new", to: "UI")
+        XCTAssertEqual(model.task(id)?.tags, ["ui"], "merged into the existing tag")
+        XCTAssertEqual(model.task(other)?.tags, ["ui"])
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["ui"])
     }
 
     func testCreateRunsToCompleted() async {
