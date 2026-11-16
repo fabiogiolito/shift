@@ -2946,6 +2946,26 @@ final class ChatControlTests: XCTestCase {
         XCTAssertTrue(reply.text.contains("\"serverCommand\" : \"pnpm dev\""), reply.text)
     }
 
+    func testTheChatQueuesAPlanAndStartsItLater() async throws {
+        await startChat()
+        var reply = await run("plan", "Add the settings page\n\nAfter the login task is merged.")
+        XCTAssertTrue(reply.ok, reply.text)
+        let plan = try XCTUnwrap(model.plans(in: project.id).first)
+        await waitFor("its draft") { !self.model.isWriting(planID: plan.id) }
+        let prefix = String(plan.id.uuidString.prefix(8))
+
+        reply = await run("plans")
+        XCTAssertTrue(reply.ok && reply.text.contains(plan.id.uuidString), reply.text)
+        reply = await run("plan", prefix)
+        XCTAssertTrue(reply.ok && reply.text.contains("# "), reply.text)
+
+        reply = await run("plan", "start", prefix)
+        XCTAssertTrue(reply.ok, reply.text)
+        XCTAssertTrue(model.plans(in: project.id).isEmpty)
+        let task = try XCTUnwrap(model.tasks(in: project.id).first)
+        XCTAssertEqual(task.chatID, model.chat(projectID: project.id)?.id, "the chat hears how it goes")
+    }
+
     // MARK: A task's own shiftctl
 
     private func taskRun(_ id: TaskItem.ID, _ arguments: String...) async -> ControlReply {

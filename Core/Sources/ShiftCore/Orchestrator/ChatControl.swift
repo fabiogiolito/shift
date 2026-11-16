@@ -35,6 +35,14 @@ extension AppModel {
                                opensPullRequests, autoTags. buildTargets is a JSON list of {"name", "command", "kind", "paths"};
                                kind is macApp, iOSSimulator, run or script. buildCommand is for a single target.
 
+    Plans are later work, waiting: a document its own agent drafts from the idea alone, which the user sees, reads and
+    edits in Shift. Starting one makes it a task with the document attached. <id> can be its first characters.
+      plans                    the project's plans, as JSON
+      plan "<idea>"            a new plan: put everything its agent needs in the idea
+      plan <id>                one plan's document
+      plan start <id>          start a task from it, and hear how it goes; the plan leaves the list
+      plan delete <id>         drop it
+
     Schedules start a task by themselves each time they come due (a "run"), from their own prompt, base branch,
     agent, model and permissions, and apply their finish action when it's done. <id> can be its first characters.
       schedules                the project's schedules, as JSON, with when each runs next
@@ -223,6 +231,10 @@ extension AppModel {
             case .browser(let url)?: return [note, "Open it here: \(url.absoluteString)"].compactMap { $0 }.joined(separator: " ")
             case nil: throw Refusal(note ?? "Could not open a pull request.")
             }
+        case "plans":
+            return json(plans(in: projectID).map { ControlPlan(id: $0.id, title: $0.title, path: $0.path, drafting: isWriting(planID: $0.id), error: $0.error) })
+        case "plan":
+            return try await planControl(projectID, &rest)
         case "schedules":
             return try controlJSON(schedules(in: projectID).map { schedule -> [String: Any] in
                 var object = try scheduleObject(schedule)
@@ -240,6 +252,37 @@ extension AppModel {
         default:
             throw Refusal("Unknown command \(command).\n\n\(Self.controlUsage)")
         }
+    }
+
+    private func planControl(_ projectID: Project.ID, _ rest: inout ArraySlice<String>) async throws -> String {
+        func planArgument(_ word: String?) -> Plan? {
+            let word = word?.lowercased() ?? ""
+            let found = plans(in: projectID).filter { $0.id.uuidString.lowercased().hasPrefix(word) }
+            return !word.isEmpty && found.count == 1 ? found[0] : nil
+        }
+        // `start` and `delete` take one plan; anything else is an idea, or a plan to read.
+        if rest.count == 2, ["start", "delete"].contains(rest.first), let plan = planArgument(rest.last) {
+            if rest.first == "delete" {
+                deletePlan(plan.id)
+                return "Deleted plan “\(plan.title)”."
+            }
+            guard !isWriting(planID: plan.id) else { throw Refusal("Its agent is still drafting “\(plan.title)”. Try again once it's done.") }
+            var taskID: TaskItem.ID?
+            let note = await collectingError { taskID = await approvePlan(plan.id) }
+            guard let taskID else { throw Refusal(note ?? "Could not start the plan.") }
+            follow(taskID: taskID)
+            return "Started task \(taskID) from plan “\(plan.title)”. Shift will tell you how it goes."
+        }
+        if rest.count == 1, let plan = planArgument(rest.first) {
+            let text = planText(plan.id)
+            return (isWriting(planID: plan.id) ? "(Its agent is still drafting it.)\n\n" : "") + (text.isEmpty ? "Empty." : text)
+        }
+        let idea = rest.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !idea.isEmpty else { throw Refusal("Missing the idea.\n\n\(Self.controlUsage)") }
+        var planID: Plan.ID?
+        let note = await collectingError { planID = createPlan(projectID: projectID, idea: idea) }
+        guard let planID, let plan = plan(planID) else { throw Refusal(note ?? "Could not create the plan.") }
+        return "Created plan \(plan.id.uuidString) “\(plan.title)”. Its agent is drafting it; the user sees it in Shift's plans."
     }
 
     private func scheduleControl(_ projectID: Project.ID, _ rest: inout ArraySlice<String>) async throws -> String {
@@ -575,6 +618,15 @@ extension AppModel {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return (try? encoder.encode(value)).map { String(decoding: $0, as: UTF8.self) } ?? "null"
     }
+}
+
+/// A plan as the chat's agent reads it.
+private struct ControlPlan: Encodable {
+    var id: UUID
+    var title: String
+    var path: String
+    var drafting: Bool
+    var error: String?
 }
 
 /// A task as the chat's agent reads it.

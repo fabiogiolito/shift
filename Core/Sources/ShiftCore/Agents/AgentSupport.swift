@@ -57,6 +57,9 @@ extension OutcomeProtocol {
     - Plan with the user first. Start tasks only once they approved the plan or asked for them, and only the current \
     phase. Split work into tasks that won't edit the same code, so that they merge cleanly; what depends on other \
     work starts after that work is merged, so it builds on it.
+    - When you start a phase, add what has to wait for it as plans with `plan`, one per later task, so the user sees \
+    what's coming. Its idea must say everything, as for a task, and what it waits for. Once that work is merged, \
+    start the plan with `plan start`, as part of the plan the user approved, and tell them.
     - A task's agent knows nothing of this conversation: its prompt must say everything it needs, including the plan's \
     relevant decisions and what done means.
     - After starting tasks, tell the user what you started and end your turn. Never sleep or poll: Shift sends you a \
@@ -94,7 +97,7 @@ extension OutcomeProtocol {
     static let chatMergedLimit = 50
 
     /// What the chat knows about the project's tasks. Passed with each run, as the tasks keep changing.
-    static func chatContext(tasks: [TaskItem], project: Project, schedules: [Schedule] = [], now: Date = Date()) -> String {
+    static func chatContext(tasks: [TaskItem], project: Project, schedules: [Schedule] = [], plans: [Plan] = [], now: Date = Date()) -> String {
         func oneLine(_ text: String) -> String { text.split(whereSeparator: \.isNewline).joined(separator: " ") }
         func day(_ date: Date) -> String { date.formatted(.iso8601.year().month().day()) }
         func entry(_ task: TaskItem) -> String {
@@ -129,6 +132,9 @@ extension OutcomeProtocol {
         parts.append("Schedules:\n" + (schedules.isEmpty ? "None" : schedules.map { schedule in
             let next = schedule.paused ? "paused" : schedule.nextRun(after: now).map { "next run \(local.string(from: $0))" } ?? "no more runs"
             return "- \(schedule.id.uuidString.prefix(8)) \(oneLine(schedule.title)): \(next), \(schedule.runs.count) runs so far"
+        }.joined(separator: "\n")))
+        parts.append("Plans, waiting to start:\n" + (plans.isEmpty ? "None" : plans.map {
+            "- \($0.id.uuidString.prefix(8)) \(oneLine($0.title))"
         }.joined(separator: "\n")))
         return parts.joined(separator: "\n\n")
     }

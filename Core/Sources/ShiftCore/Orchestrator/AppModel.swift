@@ -1970,7 +1970,7 @@ public final class AppModel {
                                        permissions: project.permissions, model: project.models[kind], needsDescription: false,
                                        approvals: channel, chat: true,
                                        chatContext: OutcomeProtocol.chatContext(tasks: tasks(in: projectID), project: project,
-                                                                                schedules: schedules(in: projectID)))
+                                                                                schedules: schedules(in: projectID), plans: plans(in: projectID)))
             var failure: String?
             events: for await event in adapter.run(request) {
                 guard isChatCurrent(projectID, token) else { return }
