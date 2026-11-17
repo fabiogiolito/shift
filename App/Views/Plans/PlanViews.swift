@@ -191,14 +191,16 @@ struct PlanDetailView: View {
                 Text(count == 0 ? "No results" : "\(findIndex + 1) of \(count)")
                     .foregroundStyle(.secondary).monospacedDigit()
             }
-            Button("Previous", systemImage: "chevron.left") { step(-1) }
-                .help("Previous match (⇧Return)")
-            Button("Next", systemImage: "chevron.right") { step(1) }
-                .help("Next match (Return)")
+            Group {
+                Button("Previous", systemImage: "chevron.left") { step(-1) }
+                    .help("Previous match (⇧Return)")
+                Button("Next", systemImage: "chevron.right") { step(1) }
+                    .help("Next match (Return)")
+            }
+            .disabled(count == 0)
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.glass)
-        .disabled(count == 0)
     }
 
     private func header(_ plan: Plan, writing: Bool) -> some View {
