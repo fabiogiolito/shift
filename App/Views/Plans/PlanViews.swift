@@ -57,6 +57,9 @@ struct PlanDetailView: View {
     /// The editor is made with the document already in it: text set after it's made counts as an edit, and it
     /// scrolls to the end.
     @State private var loaded = false
+    /// Find on page: what's searched for and which match is current.
+    @State private var find = ""
+    @State private var findIndex = 0
 
     var body: some View {
         if let plan = model.plan(planID) {
@@ -111,7 +114,12 @@ struct PlanDetailView: View {
                 text = model.planText(planID)
                 loaded = true
             }
-            .onChange(of: text) { model.savePlanText(planID, text) }
+            .onChange(of: text) {
+                model.savePlanText(planID, text)
+                let count = findMatches.count
+                if findIndex >= count { findIndex = max(count - 1, 0) }
+            }
+            .onChange(of: find) { findIndex = 0; showFind() }
             // What the agent has written so far, while it writes, then all of it.
             .task(id: writing) {
                 repeat {
@@ -132,6 +140,10 @@ struct PlanDetailView: View {
 
     private static let editorConfiguration: MarkdownEditorConfiguration = {
         var theme = MarkdownEditorTheme.default
+        // Every match light, the current one vibrant.
+        theme.findCurrentMatchHighlight = .findHighlightColor
+        var services = MarkdownEditorServices.default
+        services.bus.findQuery = findQuery
         // `---` is drawn in this with its opacity set to 40%, so it must be opaque: a quarter of the way from the background
         // to the text, which at 40% is as light as the system's separator lines, in light and dark. Also strikes done
         // checklist items.
@@ -142,8 +154,62 @@ struct PlanDetailView: View {
             }
             return color
         }
-        return MarkdownEditorConfiguration(theme: theme, textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12))
+        return MarkdownEditorConfiguration(theme: theme, services: services,
+                                           markers: MarkerStyle(findMatchHighlightAlpha: 0.3), textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12))
     }()
+
+    /// Where `find` is in the document, ignoring case and accents.
+    private var findMatches: [NSRange] {
+        guard !find.isEmpty else { return [] }
+        let string = text as NSString
+        var matches: [NSRange] = []
+        var rest = NSRange(location: 0, length: string.length)
+        while true {
+            let match = string.range(of: find, options: [.caseInsensitive, .diacriticInsensitive], range: rest)
+            if match.location == NSNotFound { return matches }
+            matches.append(match)
+            rest = NSRange(location: NSMaxRange(match), length: string.length - NSMaxRange(match))
+        }
+    }
+
+    /// Through the editor's own find: it highlights every match, the current one stronger, and scrolls to it when it's
+    /// out of view. An empty search clears them.
+    private func showFind() {
+        NotificationCenter.default.post(name: Self.findQuery, object: nil,
+                                        userInfo: ["query": find, "currentIndex": findIndex])
+    }
+
+    private static let findQuery = Notification.Name("PlanFindQuery")
+
+    /// Moves to the next match, or the previous one, wrapping around.
+    private func step(_ by: Int) {
+        let count = findMatches.count
+        guard count > 0 else { return }
+        findIndex = (findIndex + by + count) % count
+        showFind()
+    }
+
+    private var findControls: some View {
+        let count = findMatches.count
+        // The count and arrows only once something's typed, on the field's left so it stays put at the right edge.
+        return HStack(spacing: 8) {
+            if !find.isEmpty {
+                Text(count == 0 ? "No results" : "\(findIndex + 1) of \(count)")
+                    .foregroundStyle(.secondary).monospacedDigit()
+                Group {
+                    Button("Previous", systemImage: "chevron.left") { step(-1) }
+                        .help("Previous match (⇧Return)")
+                    Button("Next", systemImage: "chevron.right") { step(1) }
+                        .help("Next match (Return)")
+                }
+                .disabled(count == 0)
+            }
+            SearchField(text: $find, placeholder: "Find in Plan") { step($0 ? -1 : 1) }
+                .frame(width: 180)
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.glass)
+    }
 
     private func header(_ plan: Plan, writing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -167,6 +233,7 @@ struct PlanDetailView: View {
                         .help("Ask the agent to change the plan")
                 }
                 Spacer()
+                findControls
             }
             .buttonBorderShape(.roundedRectangle)
             if writing {
@@ -285,3 +352,4 @@ private struct EditorScrollProbe: NSViewRepresentable {
         deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
     }
 }
+
