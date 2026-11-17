@@ -463,13 +463,16 @@ private struct SectionHeader: View {
 }
 
 /// AppKit's own search field: SwiftUI has one only as `.searchable`, which goes in a toolbar or sidebar, not in a list.
-private struct SearchField: NSViewRepresentable {
+/// `onSubmit` gets Return, with whether ⇧ was held.
+struct SearchField: NSViewRepresentable {
     @Binding var text: String
-    var focusRequests: Int
+    var focusRequests = 0
+    var placeholder = "Search"
+    var onSubmit: ((_ backward: Bool) -> Void)?
 
     func makeNSView(context: Context) -> NSSearchField {
         let field = NSSearchField()
-        field.placeholderString = "Search"
+        field.placeholderString = placeholder
         field.delegate = context.coordinator
         field.sendsSearchStringImmediately = true
         // The clear button reports through its action, not as a text change.
@@ -497,5 +500,10 @@ private struct SearchField: NSViewRepresentable {
             parent.text = (note.object as? NSSearchField)?.stringValue ?? ""
         }
         @objc func changed(_ field: NSSearchField) { parent.text = field.stringValue }
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard selector == #selector(NSResponder.insertNewline(_:)), let onSubmit = parent.onSubmit else { return false }
+            onSubmit(NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
+            return true
+        }
     }
 }

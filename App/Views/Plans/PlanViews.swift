@@ -57,6 +57,10 @@ struct PlanDetailView: View {
     /// The editor is made with the document already in it: text set after it's made counts as an edit, and it
     /// scrolls to the end.
     @State private var loaded = false
+    /// Find on page: what's searched for, which match is current, and the editor it highlights in.
+    @State private var find = ""
+    @State private var findIndex = 0
+    @State private var finder = EditorFinder()
 
     var body: some View {
         if let plan = model.plan(planID) {
@@ -78,7 +82,7 @@ struct PlanDetailView: View {
                                           fontSize: (NSFont.preferredFont(forTextStyle: .body).pointSize + 2) * textScale,
                                           documentId: plan.id.uuidString,
                                           isEditable: !writing)
-                        .background { EditorScrollProbe(scrolled: $scrolled) }
+                        .background { EditorScrollProbe(scrolled: $scrolled, finder: finder) }
                 } else {
                     Spacer()
                 }
@@ -111,7 +115,13 @@ struct PlanDetailView: View {
                 text = model.planText(planID)
                 loaded = true
             }
-            .onChange(of: text) { model.savePlanText(planID, text) }
+            .onChange(of: text) {
+                model.savePlanText(planID, text)
+                let count = findMatches.count
+                if findIndex >= count { findIndex = max(count - 1, 0) }
+                showFind(scroll: false)
+            }
+            .onChange(of: find) { findIndex = 0; showFind(scroll: true) }
             // What the agent has written so far, while it writes, then all of it.
             .task(id: writing) {
                 repeat {
@@ -145,6 +155,52 @@ struct PlanDetailView: View {
         return MarkdownEditorConfiguration(theme: theme, textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12))
     }()
 
+    /// Where `find` is in the document, ignoring case and accents.
+    private var findMatches: [NSRange] {
+        guard !find.isEmpty else { return [] }
+        let string = text as NSString
+        var matches: [NSRange] = []
+        var rest = NSRange(location: 0, length: string.length)
+        while true {
+            let match = string.range(of: find, options: [.caseInsensitive, .diacriticInsensitive], range: rest)
+            if match.location == NSNotFound { return matches }
+            matches.append(match)
+            rest = NSRange(location: NSMaxRange(match), length: string.length - NSMaxRange(match))
+        }
+    }
+
+    private func showFind(scroll: Bool) {
+        let matches = findMatches
+        finder.show(matches, current: matches.isEmpty ? nil : findIndex, scroll: scroll)
+    }
+
+    /// Moves to the next match, or the previous one, wrapping around.
+    private func step(_ by: Int) {
+        let count = findMatches.count
+        guard count > 0 else { return }
+        findIndex = (findIndex + by + count) % count
+        showFind(scroll: true)
+    }
+
+    private var findControls: some View {
+        let count = findMatches.count
+        return HStack(spacing: 8) {
+            SearchField(text: $find, placeholder: "Find in Plan") { step($0 ? -1 : 1) }
+                .frame(width: 180)
+            if !find.isEmpty {
+                Text(count == 0 ? "No results" : "\(findIndex + 1) of \(count)")
+                    .foregroundStyle(.secondary).monospacedDigit()
+            }
+            Button("Previous", systemImage: "chevron.left") { step(-1) }
+                .help("Previous match (⇧Return)")
+            Button("Next", systemImage: "chevron.right") { step(1) }
+                .help("Next match (Return)")
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.glass)
+        .disabled(count == 0)
+    }
+
     private func header(_ plan: Plan, writing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -167,6 +223,7 @@ struct PlanDetailView: View {
                         .help("Ask the agent to change the plan")
                 }
                 Spacer()
+                findControls
             }
             .buttonBorderShape(.roundedRectangle)
             if writing {
@@ -243,15 +300,18 @@ private struct FormattingShortcuts: ViewModifier {
 /// clip view watched.
 private struct EditorScrollProbe: NSViewRepresentable {
     @Binding var scrolled: Bool
+    let finder: EditorFinder
 
     func makeNSView(context: Context) -> Probe { Probe() }
 
     func updateNSView(_ probe: Probe, context: Context) {
         probe.onChange = { value in if scrolled != value { scrolled = value } }
+        probe.finder = finder
     }
 
     final class Probe: NSView {
         var onChange: (Bool) -> Void = { _ in }
+        var finder: EditorFinder?
         private var observer: NSObjectProtocol?
 
         override func viewDidMoveToWindow() {
@@ -264,6 +324,7 @@ private struct EditorScrollProbe: NSViewRepresentable {
             if let observer { NotificationCenter.default.removeObserver(observer) }
             observer = nil
             guard let root = window?.contentView, let scroll = Self.editorScrollView(in: root) else { return }
+            finder?.textView = scroll.documentView.flatMap(Self.textView)
             let clip = scroll.contentView
             clip.postsBoundsChangedNotifications = true
             observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip,
@@ -277,11 +338,39 @@ private struct EditorScrollProbe: NSViewRepresentable {
             return view.subviews.lazy.compactMap(editorScrollView).first
         }
 
+        private static func textView(in view: NSView) -> NSTextView? {
+            if let text = view as? NSTextView, String(describing: type(of: view)) == "NativeTextView" { return text }
+            return view.subviews.lazy.compactMap(textView).first
+        }
+
         /// The engine's text view, `NativeTextView`, is internal to it: known by name.
         private static func isEditor(_ view: NSView) -> Bool {
             String(describing: type(of: view)) == "NativeTextView" || view.subviews.contains(where: isEditor)
         }
 
         deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+    }
+}
+
+/// Find on page in the plan's editor: every match is highlighted, the current one in the system's find color, and
+/// scrolled to. Rendering attributes, so the document's text isn't touched.
+@MainActor final class EditorFinder {
+    weak var textView: NSTextView?
+
+    func show(_ matches: [NSRange], current: Int?, scroll: Bool) {
+        guard let view = textView, let layout = view.textLayoutManager, let content = layout.textContentManager else { return }
+        layout.removeRenderingAttribute(.backgroundColor, for: layout.documentRange)
+        let start = content.documentRange.location
+        for (index, range) in matches.enumerated() {
+            guard let from = content.location(start, offsetBy: range.location),
+                  let to = content.location(from, offsetBy: range.length),
+                  let textRange = NSTextRange(location: from, end: to) else { continue }
+            let color = index == current ? NSColor.findHighlightColor : NSColor.findHighlightColor.withAlphaComponent(0.3)
+            layout.addRenderingAttribute(.backgroundColor, value: color, for: textRange)
+        }
+        if scroll, let current, matches.indices.contains(current) {
+            view.scrollRangeToVisible(matches[current])
+            view.showFindIndicator(for: matches[current])
+        }
     }
 }
