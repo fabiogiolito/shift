@@ -57,10 +57,9 @@ struct PlanDetailView: View {
     /// The editor is made with the document already in it: text set after it's made counts as an edit, and it
     /// scrolls to the end.
     @State private var loaded = false
-    /// Find on page: what's searched for, which match is current, and the editor it highlights in.
+    /// Find on page: what's searched for and which match is current.
     @State private var find = ""
     @State private var findIndex = 0
-    @State private var finder = EditorFinder()
 
     var body: some View {
         if let plan = model.plan(planID) {
@@ -82,7 +81,7 @@ struct PlanDetailView: View {
                                           fontSize: (NSFont.preferredFont(forTextStyle: .body).pointSize + 2) * textScale,
                                           documentId: plan.id.uuidString,
                                           isEditable: !writing)
-                        .background { EditorScrollProbe(scrolled: $scrolled, finder: finder) }
+                        .background { EditorScrollProbe(scrolled: $scrolled) }
                 } else {
                     Spacer()
                 }
@@ -119,9 +118,8 @@ struct PlanDetailView: View {
                 model.savePlanText(planID, text)
                 let count = findMatches.count
                 if findIndex >= count { findIndex = max(count - 1, 0) }
-                showFind(scroll: false)
             }
-            .onChange(of: find) { findIndex = 0; showFind(scroll: true) }
+            .onChange(of: find) { findIndex = 0; showFind() }
             // What the agent has written so far, while it writes, then all of it.
             .task(id: writing) {
                 repeat {
@@ -142,6 +140,10 @@ struct PlanDetailView: View {
 
     private static let editorConfiguration: MarkdownEditorConfiguration = {
         var theme = MarkdownEditorTheme.default
+        // Every match light, the current one vibrant.
+        theme.findCurrentMatchHighlight = .findHighlightColor
+        var services = MarkdownEditorServices.default
+        services.bus.findQuery = findQuery
         // `---` is drawn in this with its opacity set to 40%, so it must be opaque: a quarter of the way from the background
         // to the text, which at 40% is as light as the system's separator lines, in light and dark. Also strikes done
         // checklist items.
@@ -152,7 +154,8 @@ struct PlanDetailView: View {
             }
             return color
         }
-        return MarkdownEditorConfiguration(theme: theme, textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12))
+        return MarkdownEditorConfiguration(theme: theme, services: services,
+                                           markers: MarkerStyle(findMatchHighlightAlpha: 0.3), textInsets: TextInsets(horizontal: TaskDetailView.margin, vertical: 12))
     }()
 
     /// Where `find` is in the document, ignoring case and accents.
@@ -169,17 +172,21 @@ struct PlanDetailView: View {
         }
     }
 
-    private func showFind(scroll: Bool) {
-        let matches = findMatches
-        finder.show(matches, current: matches.isEmpty ? nil : findIndex, scroll: scroll)
+    /// Through the editor's own find: it highlights every match, the current one stronger, and scrolls to it when it's
+    /// out of view. An empty search clears them.
+    private func showFind() {
+        NotificationCenter.default.post(name: Self.findQuery, object: nil,
+                                        userInfo: ["query": find, "currentIndex": findIndex])
     }
+
+    private static let findQuery = Notification.Name("PlanFindQuery")
 
     /// Moves to the next match, or the previous one, wrapping around.
     private func step(_ by: Int) {
         let count = findMatches.count
         guard count > 0 else { return }
         findIndex = (findIndex + by + count) % count
-        showFind(scroll: true)
+        showFind()
     }
 
     private var findControls: some View {
@@ -303,18 +310,15 @@ private struct FormattingShortcuts: ViewModifier {
 /// clip view watched.
 private struct EditorScrollProbe: NSViewRepresentable {
     @Binding var scrolled: Bool
-    let finder: EditorFinder
 
     func makeNSView(context: Context) -> Probe { Probe() }
 
     func updateNSView(_ probe: Probe, context: Context) {
         probe.onChange = { value in if scrolled != value { scrolled = value } }
-        probe.finder = finder
     }
 
     final class Probe: NSView {
         var onChange: (Bool) -> Void = { _ in }
-        var finder: EditorFinder?
         private var observer: NSObjectProtocol?
 
         override func viewDidMoveToWindow() {
@@ -327,7 +331,6 @@ private struct EditorScrollProbe: NSViewRepresentable {
             if let observer { NotificationCenter.default.removeObserver(observer) }
             observer = nil
             guard let root = window?.contentView, let scroll = Self.editorScrollView(in: root) else { return }
-            finder?.textView = scroll.documentView.flatMap(Self.textView)
             let clip = scroll.contentView
             clip.postsBoundsChangedNotifications = true
             observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip,
@@ -341,11 +344,6 @@ private struct EditorScrollProbe: NSViewRepresentable {
             return view.subviews.lazy.compactMap(editorScrollView).first
         }
 
-        private static func textView(in view: NSView) -> NSTextView? {
-            if let text = view as? NSTextView, String(describing: type(of: view)) == "NativeTextView" { return text }
-            return view.subviews.lazy.compactMap(textView).first
-        }
-
         /// The engine's text view, `NativeTextView`, is internal to it: known by name.
         private static func isEditor(_ view: NSView) -> Bool {
             String(describing: type(of: view)) == "NativeTextView" || view.subviews.contains(where: isEditor)
@@ -355,25 +353,3 @@ private struct EditorScrollProbe: NSViewRepresentable {
     }
 }
 
-/// Find on page in the plan's editor: every match is highlighted, the current one in the system's find color, and
-/// scrolled to. Rendering attributes, so the document's text isn't touched.
-@MainActor final class EditorFinder {
-    weak var textView: NSTextView?
-
-    func show(_ matches: [NSRange], current: Int?, scroll: Bool) {
-        guard let view = textView, let layout = view.textLayoutManager, let content = layout.textContentManager else { return }
-        layout.removeRenderingAttribute(.backgroundColor, for: layout.documentRange)
-        let start = content.documentRange.location
-        for (index, range) in matches.enumerated() {
-            guard let from = content.location(start, offsetBy: range.location),
-                  let to = content.location(from, offsetBy: range.length),
-                  let textRange = NSTextRange(location: from, end: to) else { continue }
-            let color = index == current ? NSColor.findHighlightColor : NSColor.findHighlightColor.withAlphaComponent(0.3)
-            layout.addRenderingAttribute(.backgroundColor, value: color, for: textRange)
-        }
-        if scroll, let current, matches.indices.contains(current) {
-            view.scrollRangeToVisible(matches[current])
-            view.showFindIndicator(for: matches[current])
-        }
-    }
-}
