@@ -184,20 +184,21 @@ struct PlanDetailView: View {
 
     private var findControls: some View {
         let count = findMatches.count
+        // The count and arrows only once something's typed, on the field's left so it stays put at the right edge.
         return HStack(spacing: 8) {
-            SearchField(text: $find, placeholder: "Find in Plan") { step($0 ? -1 : 1) }
-                .frame(width: 180)
             if !find.isEmpty {
                 Text(count == 0 ? "No results" : "\(findIndex + 1) of \(count)")
                     .foregroundStyle(.secondary).monospacedDigit()
+                Group {
+                    Button("Previous", systemImage: "chevron.left") { step(-1) }
+                        .help("Previous match (⇧Return)")
+                    Button("Next", systemImage: "chevron.right") { step(1) }
+                        .help("Next match (Return)")
+                }
+                .disabled(count == 0)
             }
-            Group {
-                Button("Previous", systemImage: "chevron.left") { step(-1) }
-                    .help("Previous match (⇧Return)")
-                Button("Next", systemImage: "chevron.right") { step(1) }
-                    .help("Next match (Return)")
-            }
-            .disabled(count == 0)
+            SearchField(text: $find, placeholder: "Find in Plan") { step($0 ? -1 : 1) }
+                .frame(width: 180)
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.glass)
