@@ -452,5 +452,18 @@
 - General settings are regrouped into Preferred apps, Preferences and usage sharing]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.17/Shift-0.2.17.zip" sparkle:edSignature="Cy6n4MaDtcExjqKZhos4rz86iQsNGIIUVS7KN9xBcFWOjy5F76I0iPPmY+ivMuxDrdh7wu2w+7a+jLfz++gYAg==" length="6196773" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.18</title>
+      <pubDate>Wed, 18 Nov 2026 11:45:05 +0000</pubDate>
+      <sparkle:version>35</sparkle:version>
+      <sparkle:shortVersionString>0.2.18</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Ask a chat or task to plan something and it creates a Shift plan
+- Project chat saves later phases as plans and starts them when they're ready
+- Find text in a plan: matches are highlighted, with a count and arrows to step through them
+- Rename a tag on every task at once from its right-click menu
+- Shift now asks before dragging a project turns off sorting by most recent]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.18/Shift-0.2.18.zip" sparkle:edSignature="T90l17WtWrJ6B56u8ftFmtUUWylFYyA6rDT+0k7aNbN2TMzC9+5qA/mZYstnX+iM3TpEJaqVva5jNIWKBmgPBQ==" length="6227267" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
