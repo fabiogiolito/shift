@@ -267,7 +267,9 @@ public struct TranscriptParser: Sendable {
                     waiting.append(event)
                     continue
                 }
-                // A new run: whatever the last one never took in is gone with it.
+                // A new run: what the last one never took in stays where it was sent, unanswered, instead of
+                // showing as still waiting after everything that came later.
+                for sent in waiting { startTurn(sent) }
                 waiting = []
                 owedEchoes = 1
                 endedTurn = false

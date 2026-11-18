@@ -86,6 +86,15 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(turns[1].blocks, [.message("Now the other thing.")])
     }
 
+    func testPromptSentMidRunThatTheStoppedRunNeverTookStaysWhereItWasSent() {
+        let first = UUID(), unread = UUID(), next = UUID()
+        let midRun = RunMarker.line(agent: .claudeCode, promptIDs: [unread], midRun: true).trimmingCharacters(in: .newlines)
+        let turns = turns([marker([first]), claudeInit, bash("t1", "sleep 100"), midRun, marker([next]), claudeInit, text("Next."), result])
+        XCTAssertEqual(turns.map(\.promptIDs), [[first], [unread], [next]])
+        XCTAssertEqual(turns[1].blocks, [])
+        XCTAssertEqual(turns[2].blocks, [.message("Next.")])
+    }
+
     func testInterruptedRunNeverSaidResult() {
         let first = UUID(), second = UUID()
         let turns = turns([marker([first]), claudeInit, text("Halfway."), bash("t1", "sleep 100"), marker([second]), claudeInit, text("Again."), result])
