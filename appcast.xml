@@ -465,5 +465,14 @@
 - Shift now asks before dragging a project turns off sorting by most recent]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.18/Shift-0.2.18.zip" sparkle:edSignature="T90l17WtWrJ6B56u8ftFmtUUWylFYyA6rDT+0k7aNbN2TMzC9+5qA/mZYstnX+iM3TpEJaqVva5jNIWKBmgPBQ==" length="6227267" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.19</title>
+      <pubDate>Fri, 20 Nov 2026 14:38:42 +0000</pubDate>
+      <sparkle:version>36</sparkle:version>
+      <sparkle:shortVersionString>0.2.19</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- A message you send while the agent is working now stays where you sent it in the conversation if the agent stops before reading it, instead of disappearing and showing up at the end.]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.19/Shift-0.2.19.zip" sparkle:edSignature="2Lxz2gKbHTDL0OG51RqayLqwtAQ3S2PXa6+HI1PRxCMfWcuq7ptvUHUpJgMZuYAPXEjjLI+MOAb/fMuR6VejAw==" length="6227297" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
