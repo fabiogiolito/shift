@@ -1015,7 +1015,7 @@ private struct PromptImageViewer: View {
         NavigationStack {
             Group {
                 if let image {
-                    Image(uiImage: image).resizable().scaledToFit()
+                    ZoomableImage(image: image)
                 } else {
                     ContentUnavailableView(name ?? "File", systemImage: "doc")
                 }
@@ -1035,6 +1035,71 @@ private struct PromptImageViewer: View {
                         }
                     }
                 }
+        }
+    }
+}
+
+/// A picture fitted to its space: pinch to zoom and pan, double-tap to zoom in or back out. A scroll view, so
+/// inside a paging view it only pans while zoomed in, and pages otherwise.
+private struct ZoomableImage: UIViewRepresentable {
+    let image: UIImage
+
+    func makeUIView(context: Context) -> ZoomingScrollView { ZoomingScrollView() }
+
+    func updateUIView(_ view: ZoomingScrollView, context: Context) {
+        guard view.imageView.image !== image else { return }
+        view.imageView.image = image
+        view.setNeedsLayout()
+    }
+}
+
+final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
+    let imageView = UIImageView()
+    private var fittedSize = CGSize.zero
+
+    init() {
+        super.init(frame: .zero)
+        delegate = self
+        maximumZoomScale = 6
+        showsHorizontalScrollIndicator = false
+        showsVerticalScrollIndicator = false
+        contentInsetAdjustmentBehavior = .never
+        addSubview(imageView)
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped))
+        doubleTap.numberOfTapsRequired = 2
+        addGestureRecognizer(doubleTap)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let image = imageView.image, image.size.width > 0, image.size.height > 0, bounds.width > 0 else { return }
+        let fit = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        let size = CGSize(width: image.size.width * fit, height: image.size.height * fit)
+        if size != fittedSize { // A new picture, or new room (rotation): start over, fitted.
+            fittedSize = size
+            zoomScale = 1
+            imageView.frame = CGRect(origin: .zero, size: size)
+            contentSize = size
+        }
+        // Centered while smaller than the view.
+        let x = max(0, (bounds.width - contentSize.width) / 2), y = max(0, (bounds.height - contentSize.height) / 2)
+        let inset = UIEdgeInsets(top: y, left: x, bottom: y, right: x)
+        if contentInset != inset { contentInset = inset }
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) { setNeedsLayout() }
+
+    @objc private func doubleTapped(_ tap: UITapGestureRecognizer) {
+        if zoomScale > minimumZoomScale {
+            setZoomScale(minimumZoomScale, animated: true)
+        } else {
+            let point = tap.location(in: imageView), scale: CGFloat = 3
+            let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
+            zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height), animated: true)
         }
     }
 }
@@ -1450,8 +1515,7 @@ private struct ScreenshotImage: View {
     var body: some View {
         Group {
             if let image {
-                let picture = Image(uiImage: image).resizable()
-                if fill { picture.scaledToFill() } else { picture.scaledToFit() }
+                if fill { Image(uiImage: image).resizable().scaledToFill() } else { ZoomableImage(image: image) }
             } else {
                 Color(.secondarySystemBackground)
             }
