@@ -672,7 +672,7 @@ struct TaskDetailView: View {
             Button("New Branch…") { creatingBranch = true }
         }
         .help("The branch this task merges into")
-        Button("Update from \(base)") { Task { syncConflicts = await model.syncBase(taskID: taskID) } }
+        Button("Merge in latest from base branch") { Task { syncConflicts = await model.syncBase(taskID: taskID) } }
             .help("Merge the latest \(base) into this task")
         if let remote = model.pushStates[project.id]?.remote {
             Button("Push Task Branch") { Task { await model.pushBranch(taskID: taskID) } }
