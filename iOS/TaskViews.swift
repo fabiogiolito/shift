@@ -1290,7 +1290,7 @@ private struct TaskActions: View {
                         Button(action.title, systemImage: action.systemImage) { perform(action) }
                     }
                     Divider()
-                    Button("Update from \(base)", systemImage: "arrow.down") {
+                    Button("Merge in latest from base branch", systemImage: "arrow.down") {
                         isBusy = true
                         Task { syncConflicts = await model.syncBase(taskID: task.id); isBusy = false }
                     }
