@@ -252,17 +252,19 @@ public final class AppModel {
     public var sortedProjects: [Project] {
         switch projectSort {
         case .manual: projects
-        // Stable sort: projects without tasks keep their manual order, at the bottom.
+        // Stable sort: projects without tasks or chat keep their manual order, at the bottom.
         case .recent: projects.sorted { lastUpdate(of: $0) > lastUpdate(of: $1) }
         case .alphabetical: projects.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         }
     }
 
-    /// When any of the project's tasks was last created, prompted, started working or closed.
+    /// When any of the project's tasks was last created, prompted, started working or closed,
+    /// or its chat (work on the base branch) was last prompted.
     private func lastUpdate(of project: Project) -> Date {
-        tasks(in: project.id).flatMap { task in
+        let chatDates = chats.filter { $0.projectID == project.id }.compactMap { $0.prompts.last?.date }
+        return (tasks(in: project.id).flatMap { task in
             [task.createdAt, task.workingSince, task.mergedAt, task.prompts.last?.date].compactMap { $0 }
-        }.max() ?? .distantPast
+        } + chatDates).max() ?? .distantPast
     }
 
     /// Usage-limited tasks carry on by themselves once their limit resets.
