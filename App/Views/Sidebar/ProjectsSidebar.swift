@@ -57,8 +57,8 @@ struct ProjectsSidebar: View {
                 }
             }
             .onMove { source, destination in
-                // Dragging keeps the order on screen as the manual one, so recent sorting has to go: ask first.
-                if model.sortProjectsByRecent { pendingMove = (source, destination) }
+                // Dragging keeps the order on screen as the manual one, so automatic sorting has to go: ask first.
+                if model.projectSort != .manual { pendingMove = (source, destination) }
                 else { model.moveProjects(from: source, to: destination) }
             }
         }
@@ -81,12 +81,12 @@ struct ProjectsSidebar: View {
             if !shown, let project = settingsAfterSetup { settingsAfterSetup = nil; settingsProject = project }
         }
         .onReceive(NotificationCenter.default.publisher(for: .addProject)) { _ in addProject() }
-        .alert("Turn off sorting by most recent?",
+        .alert("Turn off automatic sorting?",
                isPresented: Binding(get: { pendingMove != nil }, set: { if !$0 { pendingMove = nil } })) {
             Button("Turn Off") {
                 guard let move = pendingMove else { return }
                 model.moveProjects(from: move.source, to: move.destination, shown: model.sortedProjects)
-                model.sortProjectsByRecent = false
+                model.projectSort = .manual
             }
             Button("Cancel", role: .cancel) {}
         } message: {

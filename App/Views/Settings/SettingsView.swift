@@ -43,9 +43,10 @@ private struct GeneralSettingsView: View {
             }
 
             Section("Preferences") {
-                Picker("Sort projects", selection: $model.sortProjectsByRecent) {
-                    Text("Manually").tag(false)
-                    Text("Recently updated").tag(true)
+                Picker("Sort projects", selection: $model.projectSort) {
+                    Text("Manually").tag(AppModel.ProjectSort.manual)
+                    Text("Recently updated").tag(AppModel.ProjectSort.recent)
+                    Text("Alphabetically").tag(AppModel.ProjectSort.alphabetical)
                 }
                 Picker("Stop idle servers after", selection: $model.serverTTL) {
                     ForEach([1, 5, 15, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
