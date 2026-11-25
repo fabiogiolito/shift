@@ -240,16 +240,22 @@ public final class AppModel {
         return usage[task.agent]?.limitResetsAt
     }
 
-    /// The sidebar sorts projects by their latest task or chat activity instead of the saved order.
-    public var sortProjectsByRecent = UserDefaults.standard.bool(forKey: "sortProjectsByRecent") {
-        didSet { UserDefaults.standard.set(sortProjectsByRecent, forKey: "sortProjectsByRecent") }
+    public enum ProjectSort: String, CaseIterable, Sendable { case manual, recent, alphabetical }
+
+    /// How the sidebar orders projects. Was a Bool, `sortProjectsByRecent`, before alphabetical.
+    public var projectSort = ProjectSort(rawValue: UserDefaults.standard.string(forKey: "projectSort") ?? "")
+        ?? (UserDefaults.standard.bool(forKey: "sortProjectsByRecent") ? .recent : .manual) {
+        didSet { UserDefaults.standard.set(projectSort.rawValue, forKey: "projectSort") }
     }
 
     /// Projects in the order the sidebar shows them, which the phone mirrors.
     public var sortedProjects: [Project] {
-        guard sortProjectsByRecent else { return projects }
+        switch projectSort {
+        case .manual: projects
         // Stable sort: projects without tasks or chat keep their manual order, at the bottom.
-        return projects.sorted { lastUpdate(of: $0) > lastUpdate(of: $1) }
+        case .recent: projects.sorted { lastUpdate(of: $0) > lastUpdate(of: $1) }
+        case .alphabetical: projects.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
     }
 
     /// When any of the project's tasks was last created, prompted, started working or closed,
