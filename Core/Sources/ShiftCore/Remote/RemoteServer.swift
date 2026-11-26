@@ -269,6 +269,10 @@ public final class RemoteServer {
         case .runScheduleNow(let id): return .success(.taskID(model.runScheduleNow(id)))
         case .setSchedulePaused(let id, let paused): model.setSchedulePaused(id, paused)
         case .searchTasks(let id, let query): return .success(.taskIDs(await model.searchTasks(projectID: id, query: query)))
+        case .logBytes(let log, let before, let length):
+            let end = if let before { before } else { await model.logSize(log) }
+            let start = end - min(end, UInt64(max(length, 0)))
+            return .success(.logBytes(offset: start, data: await model.logBytes(log, from: start, length: Int(end - start))))
         case .saveScheduleDraft(let id):
             // Only what the phone was shown: not a draft that changed on the Mac since.
             guard let draft = model.scheduleDraft, draft.id == id else { return .failure(ScheduleDraftGone()) }
@@ -331,4 +335,6 @@ extension AppModel {
     public func logBytes(_ log: AgentLog, from offset: UInt64, length: Int) async -> Data {
         await store?.logBytes(log, from: offset, length: length) ?? Data()
     }
+
+    func logSize(_ log: AgentLog) async -> UInt64 { await store?.logSize(log) ?? 0 }
 }

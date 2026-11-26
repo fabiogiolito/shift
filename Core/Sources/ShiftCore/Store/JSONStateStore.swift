@@ -84,6 +84,10 @@ public actor JSONStateStore: StateStoring {
         return (try? handle.read(upToCount: length)) ?? Data()
     }
 
+    public func logSize(_ log: AgentLog) -> UInt64 {
+        ((try? fm.attributesOfItem(atPath: url(of: log).path))?[.size] as? NSNumber)?.uint64Value ?? 0
+    }
+
     public func deleteLog(taskID: Int) {
         try? fm.removeItem(at: logURL(taskID))
     }

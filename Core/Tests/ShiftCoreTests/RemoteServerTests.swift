@@ -596,6 +596,19 @@ final class RemoteServerTests: XCTestCase {
         XCTAssertEqual(String(decoding: last.1, as: UTF8.self), "z")
     }
 
+    func testLogBytesReadsBackFromTheEnd() async throws {
+        let id = UUID()
+        await store.appendChatLog(chatID: id, text: "0123456789")
+        let tail = await server.perform(.logBytes(log: .chat(id), before: nil, length: 4))
+        XCTAssertEqual(tail.0, .logBytes(offset: 6, data: Data("6789".utf8)))
+        let earlier = await server.perform(.logBytes(log: .chat(id), before: 6, length: 4))
+        XCTAssertEqual(earlier.0, .logBytes(offset: 2, data: Data("2345".utf8)))
+        let first = await server.perform(.logBytes(log: .chat(id), before: 2, length: 4))
+        XCTAssertEqual(first.0, .logBytes(offset: 0, data: Data("01".utf8)))
+        let none = await server.perform(.logBytes(log: .chat(UUID()), before: nil, length: 4))
+        XCTAssertEqual(none.0, .logBytes(offset: 0, data: Data()))
+    }
+
     func testLargeLogArrivesWholeAndParses() async throws {
         let line = #"{"type":"assistant","message":{"content":[{"type":"text","text":"Hello"}]}}"# + "\n"
         await store.appendLog(taskID: 7, text: String(repeating: line, count: 20_000))

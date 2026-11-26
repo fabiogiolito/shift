@@ -274,6 +274,8 @@ public protocol StateStoring: Sendable {
     func deleteChatLog(chatID: UUID) async
     /// Up to `length` bytes of the log from `offset`. Empty past its end or if there is no log.
     func logBytes(_ log: AgentLog, from offset: UInt64, length: Int) async -> Data
+    /// 0 if there is no log.
+    func logSize(_ log: AgentLog) async -> UInt64
 }
 
 public struct Services: Sendable {

@@ -117,6 +117,9 @@ public enum RemoteCommand: Codable, Equatable, Sendable {
     /// Answered with `.taskIDs`: the project's tasks matching `query`, the agent's replies and changed files included.
     /// A Mac from before it doesn't know it.
     case searchTasks(projectID: UUID, query: String)
+    /// Answered with `.logBytes`: up to `length` bytes of the log, ending at `before`, nil: at its end. What the phone
+    /// shows of a long chat first, and more of as it scrolls back. A Mac from before it doesn't know it.
+    case logBytes(log: AgentLog, before: UInt64?, length: Int)
 }
 
 public enum RemoteResult: Codable, Equatable, Sendable {
@@ -129,6 +132,8 @@ public enum RemoteResult: Codable, Equatable, Sendable {
     case diff([FileDiff])
     case data(Data?)
     case taskIDs([Int])
+    /// Where `data` starts in the log.
+    case logBytes(offset: UInt64, data: Data)
 }
 
 public struct AttachmentUploaded: Codable, Equatable, Sendable {

@@ -447,6 +447,7 @@ final class MockStore: StateStoring {
         }
         return Data(Data(text.utf8).dropFirst(Int(offset)).prefix(length))
     }
+    func logSize(_ log: AgentLog) async -> UInt64 { UInt64(await logBytes(log, from: 0, length: .max).count) }
 }
 
 // MARK: - Waiting
