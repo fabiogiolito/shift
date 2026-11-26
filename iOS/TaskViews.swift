@@ -252,6 +252,8 @@ struct ChatView: View {
     @State private var scroll = ScrollPosition(edge: .bottom)
     /// Scrolled back from the newest message: new ones don't pull the view down.
     @State private var scrolledUp = false
+    /// The top is in view, with more of the chat before it to load.
+    @State private var showsTop = false
 
     var body: some View {
         let chat = model.chat(projectID: project.id)
@@ -269,6 +271,14 @@ struct ChatView: View {
         .onChange(of: replying) { if replying { withAnimation { scroll.scrollTo(edge: .bottom) } } }
         // Follows whatever arrives, unless scrolled back to read: the log loading on open too, which can come in
         // pieces and lay out late, so it opens on the newest message.
+        // Back to where the earlier part was loaded: the next part before it, holding still what was at the top.
+        .task(id: showsTop ? stream?.start : nil) {
+            guard showsTop, let stream, let chat else { return }
+            let before = stream.turns.count
+            await model.loadEarlier(.chat(chat.id))
+            let added = stream.turns.count - before
+            if scrolledUp, added > 0 { scroll.scrollTo(id: "turn-\(added)", anchor: .top) }
+        }
         .onScrollGeometryChange(for: [CGFloat].self) { geo in
             [geo.contentSize.height, geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY]
         } action: { old, new in
@@ -305,7 +315,7 @@ struct ChatView: View {
         }
         // A first message and New Chat both change which log this is.
         .task(id: chat?.id) {
-            stream = chat.map { model.openLog(.chat($0.id), agent: $0.agent ?? project.defaultAgent) }
+            stream = chat.map { model.openLog(.chat($0.id), agent: $0.agent ?? project.defaultAgent, fromEnd: true) }
         }
         .onChange(of: chat?.id) { old, _ in
             if let old { model.closeLog(.chat(old)) }
@@ -317,7 +327,16 @@ struct ChatView: View {
 
     private func messages(chat: ProjectChat?, replying: Bool, draft: Schedule?) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            Conversation(prompts: chat?.prompts ?? [], turns: stream?.turns ?? [])
+            if let stream, stream.start > 0 {
+                ProgressView().frame(maxWidth: .infinity)
+                    .onScrollVisibilityChange(threshold: 0.01) { showsTop = $0 }
+            }
+            // Until the newest part of the log arrives, its prompts alone would show, all at the end.
+            if chat != nil, stream?.isLoaded != true {
+                ProgressView().frame(maxWidth: .infinity)
+            } else {
+                Conversation(prompts: chat?.prompts ?? [], turns: stream?.turns ?? [], isWhole: stream?.start ?? 0 == 0)
+            }
             if let request = model.state.chatApprovals[project.id] {
                 Label { Text(.init("Wants to \(request)")) } icon: { Image(systemName: "hand.raised.fill") }
                     .foregroundStyle(.blue)
@@ -1622,14 +1641,21 @@ private struct PromptResponseView: View {
 private struct Conversation: View {
     let prompts: [Prompt]
     let turns: [TranscriptTurn]
+    /// The turns are the whole log, not its last part.
+    var isWhole = true
 
     var body: some View {
         let answered = Set(turns.flatMap(\.promptIDs))
         ForEach(turns) { turn in
-            TurnView(turn: turn, prompts: prompts.filter { turn.promptIDs.contains($0.id) })
+            TurnView(turn: turn, prompts: prompts.filter { turn.promptIDs.contains($0.id) }).id("turn-\(turn.id)")
         }
-        // Not reached the agent yet, or from a log that doesn't say.
-        ForEach(prompts.filter { !answered.contains($0.id) }) { PromptBubble(prompt: $0).opacity($0.isPending ? 0.6 : 1) }
+        // Not reached the agent yet, or from a log that doesn't say. With only the log's last part, the ones before it
+        // are answered further back: only those after the last answered one.
+        let last = prompts.lastIndex { answered.contains($0.id) }
+        let unanswered = prompts.indices.filter { index in
+            !answered.contains(prompts[index].id) && (isWhole || last.map { index > $0 } ?? prompts[index].isPending)
+        }.map { prompts[$0] }
+        ForEach(unanswered) { PromptBubble(prompt: $0).opacity($0.isPending ? 0.6 : 1) }
     }
 }
 

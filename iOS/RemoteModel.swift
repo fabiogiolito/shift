@@ -145,7 +145,7 @@ final class RemoteModel {
                     heard = true
                     link = .online
                     send(.hello(version: Wire.version, device: UIDevice.current.name))
-                    for (log, stream) in streams where stream.isOpen { send(.subscribe(log: log, from: stream.offset)) }
+                    for (log, stream) in streams where stream.isOpen { Task { await follow(log, stream) } }
                 }
                 let data = switch received {
                 case .string(let text): Data(text.utf8)
@@ -431,12 +431,42 @@ final class RemoteModel {
     // MARK: Transcripts
 
     /// Starts following the log, from where the phone last got to. Kept for next time: the parser holds the conversation.
-    func openLog(_ log: AgentLog, agent: AgentKind) -> LogStream {
-        let stream = streams[log] ?? LogStream(agent: agent)
+    /// `fromEnd`: the first time, only its last part (`LogStream.window`), as a long chat's log is tens of megabytes
+    /// the phone would have to fetch and read before showing the newest reply. `loadEarlier` reads back from there.
+    func openLog(_ log: AgentLog, agent: AgentKind, fromEnd: Bool = false) -> LogStream {
+        let stream = streams[log] ?? LogStream(agent: agent, fromEnd: fromEnd)
         streams[log] = stream
         stream.isOpen = true
-        if link == .online { send(.subscribe(log: log, from: stream.offset)) }
+        if link == .online { Task { await follow(log, stream) } }
         return stream
+    }
+
+    private func follow(_ log: AgentLog, _ stream: LogStream) async {
+        if !stream.isLoaded {
+            guard !stream.isFetching else { return } // Its fetch subscribes when done.
+            stream.isFetching = true
+            defer { stream.isFetching = false }
+            let reply = await perform(.logBytes(log: log, before: nil, length: LogStream.window), quietly: true)
+            if case .logBytes(let start, let data)? = reply {
+                await stream.began(at: start, with: data)
+            } else if link == .online {
+                stream.began() // A Mac from before `logBytes`: the whole log, as before.
+            } else {
+                return // Tried again on reconnecting.
+            }
+        }
+        if stream.isOpen, link == .online { send(.subscribe(log: log, from: stream.offset)) }
+    }
+
+    /// The window before what the stream has, if there is one.
+    func loadEarlier(_ log: AgentLog) async {
+        guard let stream = streams[log], stream.isLoaded, stream.start > 0, !stream.isFetching else { return }
+        stream.isFetching = true
+        defer { stream.isFetching = false }
+        if case .logBytes(let start, let data)? = await perform(.logBytes(log: log, before: stream.start, length: LogStream.window),
+                                                                quietly: true) {
+            await stream.prepend(data, at: start)
+        }
     }
 
     func closeLog(_ log: AgentLog) {
@@ -449,25 +479,85 @@ final class RemoteModel {
 @MainActor
 @Observable
 final class LogStream {
+    /// What a chat shows first, and loads more of at a time: a few turns of a Claude Code log.
+    static let window = 1 << 20
+
     private(set) var turns: [TranscriptTurn] = []
+    /// What it has of the log arrived: until then `turns` would show a part of it, or nothing.
+    private(set) var isLoaded: Bool
+    /// Where what it has of the log starts. Above 0: there's more before it.
+    private(set) var start: UInt64 = 0
     @ObservationIgnored fileprivate var isOpen = false
+    @ObservationIgnored fileprivate var isFetching = false
     @ObservationIgnored fileprivate private(set) var offset: UInt64 = 0
+    @ObservationIgnored private var shown = 0
     @ObservationIgnored private let parser: Parser
 
-    /// Off the main thread: a long log is a lot of JSON.
+    /// Off the main thread: a long log is a lot of JSON. Each answer is numbered, so a late one doesn't replace a newer.
     private actor Parser {
+        private let agent: AgentKind
         private var parser: TranscriptParser
-        init(agent: AgentKind) { parser = TranscriptParser(agent: agent) }
-        func feed(_ data: Data) -> [TranscriptTurn]? { parser.feed(data) ? parser.turns : nil }
+        private var count = 0
+        /// The log from where the phone started reading it, to read again with what comes before. nil: from its start.
+        private var kept: Data?
+
+        init(agent: AgentKind) {
+            self.agent = agent
+            parser = TranscriptParser(agent: agent)
+        }
+
+        func feed(_ data: Data) -> (Int, [TranscriptTurn])? {
+            kept?.append(data)
+            guard parser.feed(data) else { return nil }
+            count += 1
+            return (count, parser.turns)
+        }
+
+        /// Reads it all again, `earlier` first, from `start`.
+        /// ponytail: reads everything it has again each time; a parser that can start earlier if scrolling far back is slow.
+        func prepend(_ earlier: Data, at start: UInt64) -> (Int, [TranscriptTurn]) {
+            let all = earlier + (kept ?? Data())
+            kept = all
+            parser = TranscriptParser(agent: agent)
+            // Cut inside a line: what's before the first newline is half of it.
+            let whole = start == 0 ? all : all.firstIndex(of: 0x0A).map { Data(all[($0 + 1)...]) } ?? Data()
+            _ = parser.feed(whole)
+            count += 1
+            return (count, parser.turns)
+        }
     }
 
-    fileprivate init(agent: AgentKind) { parser = Parser(agent: agent) }
+    fileprivate init(agent: AgentKind, fromEnd: Bool) {
+        parser = Parser(agent: agent)
+        isLoaded = !fromEnd
+    }
+
+    /// The log from its start.
+    fileprivate func began() { isLoaded = true }
+
+    /// Its last part, from `start`.
+    fileprivate func began(at start: UInt64, with data: Data) async {
+        offset = start + UInt64(data.count)
+        await prepend(data, at: start)
+        isLoaded = true
+    }
+
+    fileprivate func prepend(_ data: Data, at start: UInt64) async {
+        show(await parser.prepend(data, at: start))
+        self.start = start
+    }
 
     fileprivate func received(_ data: Data, at start: UInt64) async {
         // Left over from before a reconnect, or already seen.
         guard start == offset else { return }
         offset += UInt64(data.count)
-        if let new = await parser.feed(data) { turns = new.filter { !$0.blocks.isEmpty || !$0.promptIDs.isEmpty || $0.text != nil } }
+        if let new = await parser.feed(data) { show(new) }
+    }
+
+    private func show(_ new: (Int, [TranscriptTurn])) {
+        guard new.0 > shown else { return }
+        shown = new.0
+        turns = new.1.filter { !$0.blocks.isEmpty || !$0.promptIDs.isEmpty || $0.text != nil }
     }
 }
 
