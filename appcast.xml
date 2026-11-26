@@ -474,5 +474,16 @@
       <description sparkle:format="markdown"><![CDATA[- A message you send while the agent is working now stays where you sent it in the conversation if the agent stops before reading it, instead of disappearing and showing up at the end.]]></description>
       <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.19/Shift-0.2.19.zip" sparkle:edSignature="2Lxz2gKbHTDL0OG51RqayLqwtAQ3S2PXa6+HI1PRxCMfWcuq7ptvUHUpJgMZuYAPXEjjLI+MOAb/fMuR6VejAw==" length="6227297" type="application/octet-stream"/>
     </item>
+    <item>
+      <title>0.2.20</title>
+      <pubDate>Thu, 26 Nov 2026 20:45:19 +0000</pubDate>
+      <sparkle:version>37</sparkle:version>
+      <sparkle:shortVersionString>0.2.20</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown"><![CDATA[- Sort projects alphabetically, an option in Settings
+- Chatting with a project now moves it to the top when projects are sorted by recent activity
+- "Update from main" is now "Merge in latest from base branch"]]></description>
+      <enclosure url="https://github.com/fabiogiolito/shift/releases/download/v0.2.20/Shift-0.2.20.zip" sparkle:edSignature="UzsBvMeAXpIgJ4/iYrEiraIu0DIKLED9lDub3ltfw+ae1W5WXb1RqwqC1ILvNgxQBmU9I+5P8EA4KpM+P0c7AQ==" length="6239439" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
