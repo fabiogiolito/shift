@@ -1,3 +1,4 @@
+import AVFoundation
 import PhotosUI
 import SafariServices
 import ShiftProtocol
@@ -882,14 +883,20 @@ private struct PromptBar: View {
         .padding(.horizontal, inset ? 16 : 0)
         .padding(.bottom, inset ? 8 : 0)
         .animation(.default, value: images)
-        .photosPicker(isPresented: $showsPhotos, selection: $picked, matching: .images)
+        .photosPicker(isPresented: $showsPhotos, selection: $picked, matching: .any(of: [.images, .videos]))
         .onChange(of: picked) {
             guard !picked.isEmpty else { return }
             let items = picked
             picked = []
             Task {
                 for item in items {
-                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                    if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
+                        if let movie = try? await item.loadTransferable(type: PickedMovie.self), let video = await PromptImage.video(movie.url) {
+                            images.append(video)
+                        } else {
+                            model.lastError = "Couldn't attach that video. Videos have to come to under 50 MB once they're made smaller, so try a shorter one."
+                        }
+                    } else if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
                         images.append(PromptImage(image: image))
                     }
                 }
@@ -1024,6 +1031,37 @@ private struct PromptImage: Identifiable, Equatable {
     var file: (name: String, data: Data)?
 
     static func == (a: Self, b: Self) -> Bool { a.id == b.id }
+
+    /// A video from the library, made 720p MP4 so it fits the Mac's 50 MB limit, with its first frame to show. nil if it can't be, or still doesn't fit.
+    // ponytail: 50 MB cap (RemoteListener.maxUpload) holds about a minute at 720p; raise it there for longer clips.
+    static func video(_ url: URL) async -> PromptImage? {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: out)
+        }
+        let asset = AVURLAsset(url: url)
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720),
+              (try? await export.export(to: out, as: .mp4)) != nil,
+              let data = try? Data(contentsOf: out), data.count <= 50 << 20 else { return nil }
+        let frames = AVAssetImageGenerator(asset: AVURLAsset(url: out))
+        frames.appliesPreferredTrackTransform = true
+        let frame = try? await frames.image(at: .zero).image
+        return PromptImage(image: frame.map(UIImage.init(cgImage:)), file: ("video.mp4", data))
+    }
+}
+
+/// A video picked from the library, copied out of the picker's temporary file.
+private struct PickedMovie: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension(received.file.pathExtension)
+            try FileManager.default.copyItem(at: received.file, to: copy)
+            return Self(url: copy)
+        }
+    }
 }
 
 /// A picture, large: one about to be sent, which can be removed, or one already sent. Swipe down or Close to go back.
