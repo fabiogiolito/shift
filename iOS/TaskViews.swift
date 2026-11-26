@@ -276,8 +276,11 @@ struct ChatView: View {
             guard showsTop, let stream, let chat else { return }
             let before = stream.turns.count
             await model.loadEarlier(.chat(chat.id))
+            // The turn that was first, now after those added. Its id changed: the log was read again from earlier.
             let added = stream.turns.count - before
-            if scrolledUp, added > 0 { scroll.scrollTo(id: "turn-\(added)", anchor: .top) }
+            if scrolledUp, added > 0, added < stream.turns.count {
+                scroll.scrollTo(id: "turn-\(stream.turns[added].id)", anchor: .top)
+            }
         }
         .onScrollGeometryChange(for: [CGFloat].self) { geo in
             [geo.contentSize.height, geo.contentSize.height + geo.contentInsets.bottom - geo.visibleRect.maxY]

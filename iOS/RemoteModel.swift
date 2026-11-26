@@ -491,6 +491,7 @@ final class LogStream {
     @ObservationIgnored fileprivate var isFetching = false
     @ObservationIgnored fileprivate private(set) var offset: UInt64 = 0
     @ObservationIgnored private var shown = 0
+    @ObservationIgnored private var isFromStart = false
     @ObservationIgnored private let parser: Parser
 
     /// Off the main thread: a long log is a lot of JSON. Each answer is numbered, so a late one doesn't replace a newer.
@@ -532,8 +533,20 @@ final class LogStream {
         isLoaded = !fromEnd
     }
 
-    /// The log from its start.
-    fileprivate func began() { isLoaded = true }
+    /// The log from its start, streamed whole by a Mac from before `logBytes`. Loaded once it has caught up: a chunk
+    /// shorter than the Mac's (`received`), or nothing new for a second (an empty log, or one ending on a chunk's end).
+    /// Until then the chat would show its prompts alone, then jump about as the rest arrives.
+    fileprivate func began() {
+        isFromStart = true
+        Task { [weak self] in
+            var last = UInt64.max
+            while let self, !self.isLoaded, self.offset != last {
+                last = self.offset
+                try? await Task.sleep(for: .seconds(1))
+            }
+            self?.isLoaded = true
+        }
+    }
 
     /// Its last part, from `start`.
     fileprivate func began(at start: UInt64, with data: Data) async {
@@ -552,6 +565,8 @@ final class LogStream {
         guard start == offset else { return }
         offset += UInt64(data.count)
         if let new = await parser.feed(data) { show(new) }
+        // The Mac's `RemoteServer.logChunk`: it sends less only at the log's end.
+        if isFromStart, data.count < 256 << 10 { isLoaded = true }
     }
 
     private func show(_ new: (Int, [TranscriptTurn])) {
