@@ -810,7 +810,7 @@ private struct PromptBar: View {
     @State private var isTall = false
     @State private var isExpanded = false
 
-    private static let controlSize: CGFloat = 30
+    static let controlSize: CGFloat = 30
 
     private var canSend: Bool { (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty) && !isSending && model.link == .online }
 
@@ -921,22 +921,7 @@ private struct PromptBar: View {
     }
 
     private var addMenu: some View {
-        Menu {
-            Button("Photos", systemImage: "photo.on.rectangle") { present($showsPhotos) }
-            Button("Files", systemImage: "folder") { present($showsFiles) }
-            if !commands.isEmpty {
-                Section {
-                    ForEach(commands, id: \.name) { command in
-                        Button(command.title, systemImage: command.systemImage) { start(command) }
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: "plus")
-                .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
-                .frame(width: Self.controlSize, height: Self.controlSize)
-                .accessibilityLabel("Add")
-        }
+        AddMenu(commands: commands, text: $text, showsPhotos: $showsPhotos, showsFiles: $showsFiles).equatable()
     }
 
     private var textView: some View {
@@ -967,24 +952,6 @@ private struct PromptBar: View {
         .font(.system(size: Self.controlSize - 2))
         .frame(width: Self.controlSize, height: Self.controlSize)
         .disabled(!canSend)
-    }
-
-    /// After the menu has gone: presenting while it's still closing is dropped, which took several taps.
-    // ponytail: fixed delay, tied to the menu's close animation.
-    private func present(_ shows: Binding<Bool>) {
-        Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            shows.wrappedValue = true
-        }
-    }
-
-    /// `/name ` in front of what's written, in place of any command already there.
-    private func start(_ command: PromptCommand) {
-        var rest = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let other = commands.first(where: { Prompt.command($0.name, rest) != nil }) {
-            rest = Prompt.command(other.name, rest) ?? rest
-        }
-        text = "/\(command.name) " + rest
     }
 
     private func send() {
@@ -1120,6 +1087,54 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
             let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
             zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height), animated: true)
         }
+    }
+}
+
+/// The + menu, in a view of its own that only updates when its commands change: rebuilt while it's open (the chat
+/// streaming in, the keyboard going), a menu's items flash when tapped but do nothing, which took several taps.
+private struct AddMenu: View, Equatable {
+    let commands: [PromptCommand]
+    @Binding var text: String
+    @Binding var showsPhotos: Bool
+    @Binding var showsFiles: Bool
+
+    static func == (a: Self, b: Self) -> Bool { a.commands.map(\.name) == b.commands.map(\.name) }
+
+    var body: some View {
+        Menu {
+            Button("Photos", systemImage: "photo.on.rectangle") { present($showsPhotos) }
+            Button("Files", systemImage: "folder") { present($showsFiles) }
+            if !commands.isEmpty {
+                Section {
+                    ForEach(commands, id: \.name) { command in
+                        Button(command.title, systemImage: command.systemImage) { start(command) }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .foregroundStyle(Color.secondary) // .secondary alone would be a shade of the tint.
+                .frame(width: PromptBar.controlSize, height: PromptBar.controlSize)
+                .accessibilityLabel("Add")
+        }
+    }
+
+    /// After the menu has gone: presenting while it's still closing is dropped, which took several taps.
+    // ponytail: fixed delay, tied to the menu's close animation.
+    private func present(_ shows: Binding<Bool>) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            shows.wrappedValue = true
+        }
+    }
+
+    /// `/name ` in front of what's written, in place of any command already there.
+    private func start(_ command: PromptCommand) {
+        var rest = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let other = commands.first(where: { Prompt.command($0.name, rest) != nil }) {
+            rest = Prompt.command(other.name, rest) ?? rest
+        }
+        text = "/\(command.name) " + rest
     }
 }
 
