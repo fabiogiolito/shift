@@ -43,6 +43,8 @@ public struct Plan: Codable, Identifiable, Hashable, Sendable {
     public var error: String?
     /// The task whose agent created it with `shiftctl plan`. Optional so earlier state still decodes.
     public var createdBy: TaskItem.ID?
+    /// From the project's tags, as a task's. The task approving it starts with them. Optional so earlier state still decodes.
+    public var tags: [String]?
 
     public init(id: UUID = UUID(), projectID: Project.ID, title: String, path: String, createdAt: Date = Date(),
                 prompts: [Prompt] = []) {

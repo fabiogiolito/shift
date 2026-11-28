@@ -25,6 +25,26 @@ extension AppModelTests {
         XCTAssertTrue(task.prompts.first?.text.contains("A dark theme for settings.") == true)
     }
 
+    func testPlanTagsAreSharedWithTasksAndGoToItsTask() async throws {
+        let id = try XCTUnwrap(model.createPlan(projectID: project.id, idea: ""))
+        model.revisePlan(id, text: "/tag Auth, theme")
+        XCTAssertEqual(model.plan(id)?.tags, ["Auth", "theme"])
+        XCTAssertFalse(model.isWriting(planID: id), "a tag command isn't a prompt")
+        let other = try XCTUnwrap(model.createPlan(projectID: project.id, idea: ""))
+        model.addTags(planID: other, "auth")
+        XCTAssertTrue(model.tagIsShared(planID: id, "AUTH"))
+        XCTAssertFalse(model.tagIsShared(planID: id, "theme"))
+        model.renameTag(projectID: project.id, "auth", to: "login")
+        XCTAssertEqual(model.plan(id)?.tags, ["login", "theme"])
+        model.removeTag(planID: other, "login")
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["login", "theme"], "still on the first plan")
+        model.deletePlan(other)
+
+        let taskID = await model.approvePlan(id)
+        XCTAssertEqual(taskID.flatMap(model.task)?.tags, ["login", "theme"])
+        XCTAssertEqual(model.project(project.id)?.tagNames, ["login", "theme"], "the task has them now")
+    }
+
     func testBlankPlanHasNoAgentRun() throws {
         let id = try XCTUnwrap(model.createPlan(projectID: project.id, idea: ""))
         XCTAssertFalse(model.isWriting(planID: id))

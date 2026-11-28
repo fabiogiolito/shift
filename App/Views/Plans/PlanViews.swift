@@ -6,7 +6,9 @@ import ShiftCore
 /// A plan in the task list's Plans group.
 struct PlanRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.holdTaskListLayout) private var holdLayout
     let plan: Plan
+    @State private var editingTags = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -24,20 +26,41 @@ struct PlanRow: View {
             }
             Text(model.planActivity[plan.id] ?? plan.error ?? "Ready to review")
                 .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            if plan.tags?.isEmpty == false { PlanTags(plan: plan).padding(.top, 2) }
         }
         .padding(.vertical, 2)
-        .contextMenu { PlanActionItems(plan: plan) }
+        .contextMenu { PlanActionItems(plan: plan, editingTags: $editingTags) }
+        .popover(isPresented: $editingTags, arrowEdge: .trailing) { TagEditor(planID: plan.id) }
+        .onChange(of: editingTags) { holdLayout(editingTags) }
     }
 }
 
-/// Show in Finder and Delete: the plan's context menu and its page's More menu.
+/// A plan's tags, with the same right-click actions as a task's.
+private struct PlanTags: View {
+    @Environment(AppModel.self) private var model
+    let plan: Plan
+    var large = false
+
+    var body: some View {
+        TaskTags(tags: plan.tags, project: model.project(plan.projectID),
+                 onRemove: { model.removeTag(planID: plan.id, $0) },
+                 onDelete: { model.deleteTag(projectID: plan.projectID, $0) },
+                 isShared: { model.tagIsShared(planID: plan.id, $0) },
+                 onColor: { model.setTagColor(projectID: plan.projectID, $0, $1) },
+                 onRename: { model.renameTag(projectID: plan.projectID, $0, to: $1) }, large: large)
+    }
+}
+
+/// Show in Finder, Tags and Delete: the plan's context menu and its page's More menu.
 struct PlanActionItems: View {
     @Environment(AppModel.self) private var model
     let plan: Plan
+    @Binding var editingTags: Bool
 
     var body: some View {
         Button("Show in Finder", systemImage: "folder") { NSWorkspace.shared.activateFileViewerSelecting([plan.url]) }
         Divider()
+        Button("Tags…", systemImage: "tag") { editingTags = true }
         Button("Delete Plan", systemImage: "trash", role: .destructive) { model.deletePlan(plan.id) }
     }
 }
@@ -52,6 +75,7 @@ struct PlanDetailView: View {
     @State private var text = ""
     @State private var prompting = false
     @State private var approving = false
+    @State private var editingTags = false
     /// The document is scrolled away from its top: the header gets an edge, as the toolbar does.
     @State private var scrolled = false
     /// The editor is made with the document already in it: text set after it's made counts as an edit, and it
@@ -88,7 +112,8 @@ struct PlanDetailView: View {
             }
             .safeAreaBar(edge: .bottom) {
                 if prompting {
-                    PromptField(placeholder: "What should change in the plan?", focusOnAppear: true, draftKey: "plan \(planID)") {
+                    PromptField(placeholder: "What should change in the plan?", focusOnAppear: true, draftKey: "plan \(planID)",
+                                commands: [.tag]) {
                         model.revisePlan(planID, text: $0, attachments: $1)
                         prompting = false
                     }
@@ -104,10 +129,11 @@ struct PlanDetailView: View {
                 ToolbarSpacer(.flexible)
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        PlanActionItems(plan: plan)
+                        PlanActionItems(plan: plan, editingTags: $editingTags)
                     } label: {
                         Label("More", systemImage: "ellipsis.circle")
                     }
+                    .popover(isPresented: $editingTags, arrowEdge: .bottom) { TagEditor(planID: planID) }
                 }
             }
             .onAppear {
@@ -236,6 +262,7 @@ struct PlanDetailView: View {
                 findControls
             }
             .buttonBorderShape(.roundedRectangle)
+            if plan.tags?.isEmpty == false { PlanTags(plan: plan, large: true) }
             if writing {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)

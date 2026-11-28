@@ -60,9 +60,10 @@ extension AppModel {
         refreshPlanTitle(id, from: text)
     }
 
-    /// The Prompt button: the agent changes the document as asked, in the same session.
+    /// The Prompt button: the agent changes the document as asked, in the same session. `/tag a, b` tags the plan instead.
     public func revisePlan(_ id: Plan.ID, text: String, attachments: [String] = []) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let list = Self.command("tag", text) { return addTags(planID: id, list) }
         guard plan(id) != nil, !isWriting(planID: id), !text.isEmpty || !attachments.isEmpty else { return }
         let prompt = Prompt(text: text, attachments: attachments)
         updatePlan(id) {
@@ -85,6 +86,7 @@ extension AppModel {
         try? FileManager.default.trashItem(at: plan.url, resultingItemURL: nil)
         plans.removeAll { $0.id == id }
         changed()
+        pruneTags(projectID: plan.projectID)
     }
 
     /// Starts a task that implements the plan, with the document attached and its summary as the prompt, named after it.
@@ -119,6 +121,7 @@ extension AppModel {
         if let addAs { prompt += " Also add it to the repository as `\(addAs)`, unchanged, as part of your work." }
         guard let taskID = createTask(projectID: project.id, prompt: prompt, attachments: [file.path]) else { return nil }
         rename(taskID: taskID, to: title)
+        if let tags = plan.tags { addTags(taskID: taskID, tags.joined(separator: ",")) }
         plans.removeAll { $0.id == id }
         changed()
         return taskID
@@ -164,7 +167,7 @@ extension AppModel {
         updatePlan(id) { $0.title = title }
     }
 
-    private func updatePlan(_ id: Plan.ID, _ change: (inout Plan) -> Void) {
+    func updatePlan(_ id: Plan.ID, _ change: (inout Plan) -> Void) {
         guard let index = plans.firstIndex(where: { $0.id == id }) else { return }
         change(&plans[index])
         changed()
