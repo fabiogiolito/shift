@@ -729,36 +729,45 @@ public final class AppModel {
     /// See `Prompt.command`.
     public nonisolated static func command(_ name: String, _ text: String) -> String? { Prompt.command(name, text) }
 
-    /// A tag no task has any more leaves the project too, unless `keepUnused`: the tags popover keeps it
+    /// A tag no task or plan has any more leaves the project too, unless `keepUnused`: the tags popover keeps it
     /// listed until it closes, so it can be checked again, and then calls `pruneTags`.
     public func removeTag(taskID: TaskItem.ID, _ tag: String, keepUnused: Bool = false) {
-        update(taskID) { task in
-            task.tags?.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
-            if task.tags?.isEmpty == true { task.tags = nil }
-        }
+        update(taskID) { $0.tags = Self.removing(tag, from: $0.tags) }
         if !keepUnused, let projectID = task(taskID)?.projectID { pruneTags(projectID: projectID) }
     }
 
-    /// Whether a task in the project other than `taskID` has `tag`.
-    public func tagIsShared(taskID: TaskItem.ID, _ tag: String) -> Bool {
-        guard let projectID = task(taskID)?.projectID else { return false }
-        return tasks(in: projectID).contains { other in
-            other.id != taskID && other.tags?.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } == true
-        }
+    /// As `removeTag(taskID:)`, for a plan.
+    public func removeTag(planID: Plan.ID, _ tag: String, keepUnused: Bool = false) {
+        updatePlan(planID) { $0.tags = Self.removing(tag, from: $0.tags) }
+        if !keepUnused, let projectID = plan(planID)?.projectID { pruneTags(projectID: projectID) }
     }
 
-    /// Takes `tag` off every task in the project, and forgets it and its color.
+    /// Whether a task or plan in the project other than task `taskID` has `tag`.
+    public func tagIsShared(taskID: TaskItem.ID, _ tag: String) -> Bool {
+        guard let projectID = task(taskID)?.projectID else { return false }
+        return tasks(in: projectID).contains { $0.id != taskID && Self.has(tag, $0.tags) }
+            || plans(in: projectID).contains { Self.has(tag, $0.tags) }
+    }
+
+    /// Whether a task or plan in the project other than plan `planID` has `tag`.
+    public func tagIsShared(planID: Plan.ID, _ tag: String) -> Bool {
+        guard let projectID = plan(planID)?.projectID else { return false }
+        return tasks(in: projectID).contains { Self.has(tag, $0.tags) }
+            || plans(in: projectID).contains { $0.id != planID && Self.has(tag, $0.tags) }
+    }
+
+    /// Takes `tag` off every task and plan in the project, and forgets it and its color.
     public func deleteTag(projectID: Project.ID, _ tag: String) {
-        for task in tasks(in: projectID) where task.tags?.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) == true {
-            removeTag(taskID: task.id, tag, keepUnused: true)
-        }
+        for task in tasks(in: projectID) where Self.has(tag, task.tags) { removeTag(taskID: task.id, tag, keepUnused: true) }
+        for plan in plans(in: projectID) where Self.has(tag, plan.tags) { removeTag(planID: plan.id, tag, keepUnused: true) }
         pruneTags(projectID: projectID)
     }
 
-    /// Forgets the tags (and their colors) no task in the project has.
+    /// Forgets the tags (and their colors) no task or plan in the project has.
     public func pruneTags(projectID: Project.ID) {
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
-        let used = Set(tasks(in: projectID).flatMap { $0.tags ?? [] }.map { $0.lowercased() })
+        let all = tasks(in: projectID).flatMap { $0.tags ?? [] } + plans(in: projectID).flatMap { $0.tags ?? [] }
+        let used = Set(all.map { $0.lowercased() })
         let unused = projects[index].tagColors.keys.filter { !used.contains($0.lowercased()) }
         guard !unused.isEmpty else { return }
         unused.forEach { projects[index].tagColors[$0] = nil }
@@ -767,23 +776,19 @@ public final class AppModel {
 
     /// Adds comma-separated tags, skipping ones it already has (ignoring case). An empty list clears them.
     public func addTags(taskID: TaskItem.ID, _ list: String) {
-        let new = list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        update(taskID) { task in
-            guard !new.isEmpty else { task.tags = nil; return }
-            var tags = task.tags ?? []
-            for tag in new where !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) { tags.append(tag) }
-            task.tags = tags
-        }
-        // A new name gets a random color; one the project already knows keeps its own.
-        guard let projectID = task(taskID)?.projectID, let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
-        if new.isEmpty { return pruneTags(projectID: projectID) }
-        for tag in new where projects[index].tagKey(tag) == nil {
-            projects[index].tagColors[tag] = TagColor.allCases.filter { $0 != .gray }.randomElement()
-        }
-        changed()
+        let new = Self.tagList(list)
+        update(taskID) { $0.tags = Self.adding(new, to: $0.tags) }
+        if let projectID = task(taskID)?.projectID { register(new, projectID: projectID) }
     }
 
-    /// Renames `tag` on every task in the project that has it, keeping its color. Renaming it to a tag
+    /// As `addTags(taskID:)`, for a plan.
+    public func addTags(planID: Plan.ID, _ list: String) {
+        let new = Self.tagList(list)
+        updatePlan(planID) { $0.tags = Self.adding(new, to: $0.tags) }
+        if let projectID = plan(planID)?.projectID { register(new, projectID: projectID) }
+    }
+
+    /// Renames `tag` on every task and plan in the project that has it, keeping its color. Renaming it to a tag
     /// the project already has merges the two, in that tag's spelling and color.
     public func renameTag(projectID: Project.ID, _ tag: String, to name: String) {
         let name = name.replacingOccurrences(of: ",", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -791,19 +796,50 @@ public final class AppModel {
         let oldKey = projects[index].tagKey(tag)
         let merging = name.caseInsensitiveCompare(tag) != .orderedSame ? projects[index].tagKey(name) : nil
         let newName = merging ?? name
-        for task in tasks(in: projectID) where task.tags?.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) == true {
-            update(task.id) { task in
-                var tags: [String] = []
-                for t in task.tags ?? [] {
-                    let t = t.caseInsensitiveCompare(tag) == .orderedSame ? newName : t
-                    if !tags.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) { tags.append(t) }
-                }
-                task.tags = tags
+        func renamed(_ tags: [String]?) -> [String]? {
+            var result: [String] = []
+            for t in tags ?? [] {
+                let t = t.caseInsensitiveCompare(tag) == .orderedSame ? newName : t
+                if !Self.has(t, result) { result.append(t) }
             }
+            return result
         }
+        for task in tasks(in: projectID) where Self.has(tag, task.tags) { update(task.id) { $0.tags = renamed($0.tags) } }
+        for plan in plans(in: projectID) where Self.has(tag, plan.tags) { updatePlan(plan.id) { $0.tags = renamed($0.tags) } }
         if let oldKey {
             let color = projects[index].tagColors.removeValue(forKey: oldKey)
             if merging == nil { projects[index].tagColors[newName] = color }
+        }
+        changed()
+    }
+
+    private static func has(_ tag: String, _ tags: [String]?) -> Bool {
+        tags?.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } == true
+    }
+
+    private static func tagList(_ list: String) -> [String] {
+        list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    /// Nothing new clears them.
+    private static func adding(_ new: [String], to tags: [String]?) -> [String]? {
+        guard !new.isEmpty else { return nil }
+        var tags = tags ?? []
+        for tag in new where !has(tag, tags) { tags.append(tag) }
+        return tags
+    }
+
+    private static func removing(_ tag: String, from tags: [String]?) -> [String]? {
+        let rest = (tags ?? []).filter { $0.caseInsensitiveCompare(tag) != .orderedSame }
+        return rest.isEmpty ? nil : rest
+    }
+
+    /// A new name gets a random color; one the project already knows keeps its own. Nothing new: prunes, as tags were cleared.
+    private func register(_ new: [String], projectID: Project.ID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        if new.isEmpty { return pruneTags(projectID: projectID) }
+        for tag in new where projects[index].tagKey(tag) == nil {
+            projects[index].tagColors[tag] = TagColor.allCases.filter { $0 != .gray }.randomElement()
         }
         changed()
     }

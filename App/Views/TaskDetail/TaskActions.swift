@@ -95,21 +95,30 @@ private struct TaskActionsPresenter: ViewModifier {
     }
 }
 
-/// The project's tags as checkboxes with their colors, for one task, and a field for new ones.
+/// The project's tags as checkboxes with their colors, for one task or plan, and a field for new ones.
 /// A popover, not a submenu: menus show neither colors nor a checkmark next to an icon.
 struct TagEditor: View {
     @Environment(AppModel.self) private var model
-    let taskID: TaskItem.ID
+    private let taskID: TaskItem.ID?
+    private let planID: Plan.ID?
     @State private var name = ""
 
+    init(taskID: TaskItem.ID) { self.taskID = taskID; planID = nil }
+    init(planID: Plan.ID) { self.planID = planID; taskID = nil }
+
     var body: some View {
-        if let task = model.task(taskID), let project = model.project(task.projectID) {
+        let item: (tags: [String]?, projectID: Project.ID)? = if let taskID {
+            model.task(taskID).map { ($0.tags, $0.projectID) }
+        } else {
+            planID.flatMap(model.plan).map { ($0.tags, $0.projectID) }
+        }
+        if let item, let project = model.project(item.projectID) {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(project.tagNames, id: \.self) { name in
                     Toggle(isOn: Binding {
-                        task.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
+                        item.tags?.contains { $0.caseInsensitiveCompare(name) == .orderedSame } == true
                     } set: {
-                        if $0 { model.addTags(taskID: taskID, name) } else { model.removeTag(taskID: taskID, name, keepUnused: true) }
+                        if $0 { add(name) } else { remove(name) }
                     }) {
                         HStack(spacing: 6) {
                             Circle().fill(project.color(ofTag: name).color).frame(width: 8, height: 8)
@@ -120,7 +129,7 @@ struct TagEditor: View {
                 }
                 if !project.tagNames.isEmpty { Divider() }
                 TextField("New Tag", text: $name)
-                    .onSubmit { model.addTags(taskID: taskID, name); name = "" }
+                    .onSubmit { add(name); name = "" }
                     .help("Separate several tags with commas.")
             }
             .padding(12)
@@ -128,6 +137,15 @@ struct TagEditor: View {
             // Unchecked tags stay listed while it is open, so they can be checked again; then the unused ones go.
             .onDisappear { model.pruneTags(projectID: project.id) }
         }
+    }
+
+    private func add(_ list: String) {
+        if let taskID { model.addTags(taskID: taskID, list) } else if let planID { model.addTags(planID: planID, list) }
+    }
+
+    private func remove(_ tag: String) {
+        if let taskID { model.removeTag(taskID: taskID, tag, keepUnused: true) }
+        else if let planID { model.removeTag(planID: planID, tag, keepUnused: true) }
     }
 }
 

@@ -31,7 +31,9 @@ struct TaskListView: View {
         let tasks = Self.filter(all, tags: tagFilter, search: search, extra: searchText)
         let sections = Self.sections(tasks)
         let schedules = Self.schedules(model.schedules(in: project.id))
-        let plans = model.plans(in: project.id)
+        let plans = model.plans(in: project.id).filter { plan in
+            tagFilter.isEmpty || (plan.tags ?? []).contains { tagFilter.contains($0.lowercased()) }
+        }
         // The list doesn't re-measure rows and headers that are inserted or moved in place (a task moving to a new
         // section came out clipped), so a change in which task sits in which section rebuilds it at the right sizes.
         // In a ZStack so the rebuild stops there: bars attached to the list itself are rebuilt with it, and the
@@ -39,7 +41,7 @@ struct TaskListView: View {
         // A description or tags add lines to a row, so one arriving or going rebuilds it too.
         // Not on what the search leaves: the rebuild would take the search field's focus with every keystroke.
         let key = Self.sections(Self.filter(all, tags: tagFilter)).map { "\($0.0):\($0.1.map { "\($0.id)\($0.description?.isEmpty == false)\($0.tags?.isEmpty == false)" })" }.joined()
-            + "S:\(schedules.map(\.id))P:\(plans.map(\.id))"
+            + "S:\(schedules.map(\.id))P:\(plans.map { "\($0.id)\($0.tags?.isEmpty == false)" })"
         ZStack {
             List(selection: $selection) {
                 searchBar(project.tagNames)
@@ -176,7 +178,7 @@ struct TaskListView: View {
         .popover(isPresented: $showingFilter, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 if names.isEmpty {
-                    Text("**No tags.**\nRight click a task to tag it.").foregroundStyle(.secondary)
+                    Text("**No tags.**\nRight click a task or plan to tag it.").foregroundStyle(.secondary)
                         .frame(width: 200, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(names, id: \.self) { name in
